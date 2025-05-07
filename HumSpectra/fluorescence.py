@@ -16,8 +16,9 @@ plt.rcParams['axes.grid'] = False
 
 def asm_350(data: DataFrame) -> float:
     """
-    :param data: DataFrame, спектр флуоресценции.
+    :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: asm 350, показатель асимметрии спектра при длине возбуждения 350 нм
+    Функция рассчитывает отношение интеграла длины волны испускания от 420 до 460 нм к интегралу от 550 до 600 нм
     """
 
     row = data[350].to_numpy()
@@ -32,8 +33,9 @@ def asm_350(data: DataFrame) -> float:
 
 def asm_280(data: DataFrame) -> float:
     """
-    :param data: DataFrame, спектр флуоресценции.
+    :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: asm 280, показатель асимметрии спектра при длине возбуждения 280 нм
+    Функция рассчитывает отношение интеграла длины волны испускания от 350 до 400 нм к интегралу от 475 до 535 нм
     """
 
     row = data[280].to_numpy()
@@ -51,6 +53,15 @@ def cut_spectra(data: DataFrame,
                 ex_high_limit: int,
                 em_low_limit: int,
                 em_high_limit: int) -> DataFrame:
+    """
+    :param data: DataFrame, спектр флуоресценции.
+    :param ex_low_limit: int, нижний предел значения длины волны возбуждения спектра
+    :param ex_high_limit: int, верхний предел значения длины волны возбуждения спектра
+    :param em_low_limit: int, нижний предел значения длины волны испускания спектра
+    :param em_high_limit: int, верхний предел значения длины волны испускания спектра
+    :return: fluo_param: asm 280, показатель асимметрии спектра при длине возбуждения 280 нм
+    Функция обрезает спектр согласно заданным пределам и возвращает копию спектра
+    """
     cut_data = data.loc[em_low_limit:em_high_limit, ex_low_limit:ex_high_limit]
 
     return cut_data
@@ -62,6 +73,12 @@ def plot_heat_map(data: DataFrame,
                   xlabel: bool = True,
                   ylabel: bool = True,
                   title: bool = True) -> Axes:
+    """
+    :param data: DataFrame, спектр флуоресценции
+    :param q: float, квантиль, определяющий экстремальные выбросы
+    :return: ax: Axes, ось графика matplotlib.pyplot
+    Функция маскирует экстремальные выбросы нулями, и рисует 2D тепловой график флуоресценции
+    """
     filtered_data = data.copy()
     filtered_array = filtered_data.to_numpy()
     filtered_array[filtered_array > np.quantile(filtered_array, q)] = 0
@@ -91,6 +108,13 @@ def plot_2d(data: DataFrame,
             title: bool = True,
             ax: Optional[plt.axes] = None,
             norm: bool = False) -> Axes:
+    """
+    :param data: DataFrame, спектр флуоресценции
+    :param ex_wave: int, длина волны возбуждения, при котором строится график
+    :param norm: bool, если установлен True, то нормирует график на максимум
+    :return: ax: Axes, ось графика matplotlib.pyplot
+    Функция возвращает график 2D флуоресценции при одной длине волны возбуждения
+    """
     row = data[ex_wave]
     if norm:
         row = (row - row.min()) / (row.max() - row.min())

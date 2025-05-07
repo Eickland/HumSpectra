@@ -7,6 +7,12 @@ from matplotlib.axes import Axes
 
 
 def check_recall_flag(data: DataFrame) -> bool:
+    """
+    :param data: DataFrame, уф спектр
+    :return: флаг, опредеяющий, что спектр рекалиброван или нет
+    Функция проверяет наличие в метаданных спектра атрибута "recall" и  значение как True.
+    Также есть возможность проигноировать проверки, добавив атрибут "debug" и установив значение "True"
+    """
     if 'debug' not in data.attrs:
         if not data.attrs['recall']:
             raise ValueError("Спектр должен быть откалиброван")
@@ -18,14 +24,25 @@ def check_recall_flag(data: DataFrame) -> bool:
 
 
 def base_recall_uv(data: DataFrame) -> DataFrame:
+    """
+    :param data: DataFrame, уф спектр
+    :return: data_copy: DataFrame, рекалиброванный уф спектр
+    Функция добавляет базовую линию: рассчитывает минимальное значение и добвляет модуль ко всему спектру.
+    Также функция добавляет флаг в метаданные спектра - "recall", и устанавливает значение как True
+    """
     data_copy = data.copy()
     min_value = data_copy.min()
     data_copy.attrs['recall'] = True
 
-    return data_copy + 1.001 * abs(data_copy)
+    return data_copy + 1.001 * abs(min_value)
 
 
 def e2_e3(data: DataFrame) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :return: uv_param: float, значение параметра E2/E3
+    Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 265 к 365 нм.
+    """
     if not check_recall_flag(data):
         raise ValueError("Ошибка проверки статуса калибровки")
     series = pd.Series(data.index, index=data.index)
@@ -37,9 +54,13 @@ def e2_e3(data: DataFrame) -> float:
 
 
 def e4_e6(data: DataFrame) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :return: uv_param: float, значение параметра E4/E6
+    Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 465 к 665 нм.
+    """
     if not check_recall_flag(data):
         raise ValueError("Ошибка проверки статуса калибровки")
-
     series = pd.Series(data.index, index=data.index)
     index_465 = series.sub(465).abs().idxmin()
     index_665 = series.sub(665).abs().idxmin()
@@ -50,16 +71,27 @@ def e4_e6(data: DataFrame) -> float:
 
 def epsilon(data: DataFrame,
             wave: int = 254) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :param wave: int, длина волны, по которой ищется оптическая плотность
+    :return: uv_param: float, значение оптической плотности
+    Функция проверяет наличие рекалибровки и рассчитывает оптическую плотность при заданной длине волны
+    """
     if not check_recall_flag(data):
         raise ValueError("Ошибка проверки статуса калибровки")
     series = pd.Series(data.index, index=data.index)
-    index_254 = series.sub(254).abs().idxmin()
+    index_254 = series.sub(wave).abs().idxmin()
     uv_param = data.loc[index_254].iloc[0]
 
     return uv_param
 
 
 def suva(data: DataFrame) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :return: uv_param: float, значение параметра SUVA 254
+    Функция проверяет наличие рекалибровки и рассчитывает параметр SUVA 254, для функции необходимо наличие в метаданных таблицы значение TOC
+    """
     if not check_recall_flag(data):
         raise ValueError("Ошибка проверки статуса калибровки")
 
@@ -75,6 +107,13 @@ def suva(data: DataFrame) -> float:
 def lambda_UV(data: DataFrame,
               short_wave: int = 450,
               long_wave: int = 550) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :param short_wave: int, длина волны, с которого будет производится аппроксимация
+    :param long_wave: int, длина волны, до которой будет производится аппроксимация
+    :return: uv_param: float, значение дескриптора лямбда
+    Функция проверяет наличие рекалибровки и рассчитывает параметр лямбда при длине волны от 450 до 550 нм
+    """
     if not check_recall_flag(data):
         raise ValueError("Ошибка проверки статуса калибровки")
     series = pd.Series(data.index, index=data.index)
@@ -93,6 +132,11 @@ def plot_uv(data: DataFrame,
             ylabel: bool = True,
             title: bool = True,
             ax: Optional[plt.axes] = None) -> Axes:
+    """
+    :param data: DataFrame, уф спектр
+    :return: ax: Axes, ось графика matplotlib.pyplot
+    Функция возвращает график 2D уф-спетра
+    """
     data_copy = data.copy()
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
