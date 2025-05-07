@@ -121,7 +121,8 @@ def read_fluo_3d(path: str,
     """
 
     data = pd.read_csv(path, sep=sep, index_col=index_col)
-    data.drop("nm", inplace=True)
+    if "nm" in data.index:
+        data.drop("nm", inplace=True)
     data = data.astype("float64")
     name = extract_name_from_path(path)
     data.columns = data.columns.astype(int)
