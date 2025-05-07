@@ -114,14 +114,21 @@ def check_sep(path: str) -> str:
     :return: sep: разделитель в строчном виде (example: ",")
     Функция определяет разделитель столбцов в исходном спектре - запятая или точка с запятой
     """
-    data = pd.read_csv(path)
-    if data[data.columns[0]].iloc[0].count(';') != 0:
+    try:
+        with open(path, 'r') as f:
+            first_line = f.readline()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    except Exception as e:
+        raise Exception(f"Ошибка при чтении файла: {e}")
+
+    if first_line.count(';') > first_line.count(','):
         return ';'
     else:
         return ','
 
 def read_fluo_3d(path: str,
-                 sep: str = ",",
+                 sep: str = None,
                  index_col: int = 0) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
@@ -131,9 +138,16 @@ def read_fluo_3d(path: str,
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, а именами столбцов - длины волн
             возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
     """
-    if not sep:
+    if sep is None:
         sep = check_sep(path)
-    data = pd.read_csv(path, sep=sep, index_col=index_col)
+    try:
+        data = pd.read_csv(path, sep=sep, index_col=index_col)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    except pd.errors.EmptyDataError:
+        raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
+    except Exception as e:
+        raise Exception(f"Ошибка при чтении файла: {e}")
     if "nm" in data.index:
         data.drop("nm", inplace=True)
     data = data.astype("float64")
@@ -148,7 +162,7 @@ def read_fluo_3d(path: str,
 
 
 def read_uv(path: str,
-            sep: str = "None",
+            sep: str = None,
             index_col: int = 0) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
@@ -157,9 +171,16 @@ def read_uv(path: str,
     :param index_col: номер столбца, который считается индексом таблицы.
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
     """
-    if not sep:
+    if sep is None:
         sep = check_sep(path)
-    data = pd.read_csv(path, sep=sep, index_col=index_col)
+    try:
+        data = pd.read_csv(path, sep=sep, index_col=index_col)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    except pd.errors.EmptyDataError:
+        raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
+    except Exception as e:
+        raise Exception(f"Ошибка при чтении файла: {e}")
     data = data.astype("float64")
     name = extract_name_from_path(path)
     data.index = data.index.astype(float)
