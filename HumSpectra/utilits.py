@@ -116,10 +116,9 @@ def check_sep(path: str) -> str:
     """
     data = pd.read_csv(path)
     if data[data.columns[0]].iloc[0].count(';') != 0:
-        sep = ";"
+        return ';'
     else:
-        sep = ","
-    return sep
+        return ','
 
 def read_fluo_3d(path: str,
                  sep: str = ",",
