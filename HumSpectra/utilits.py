@@ -60,6 +60,8 @@ def extract_class_from_name(file_name: str) -> str:
        :param file_name: Имя образца.
 
        :return: sample_class: Класс образца.
+       Функция определяет класс по образца по имени. Определяемые классы: Coal(угольные), Soil(почвенные), Peat(торфяные), L(лигногуматы и лигносульфонаты)
+       , ADOM(надшламовые воды) 
        """
     sample_class = "SampleClassError"
     str_name = file_name.replace(" ", "-")
@@ -87,12 +89,19 @@ def extract_subclass_from_name(file_name: str) -> str:
        :param file_name: Имя образца.
 
        :return: sample_subclass: Класс образца.
+       Функция определяет подкласс по образца по имени. Определяемые подклассы: номера карты накопителя для надшламовых вод, 
+       Lg(лигногуматы), Lst(лигносульфонаты), HA (гуминовые кислоты), HA (фульвокислоты), HF (нефракционированные гуминовые вещества)
        """
     sample_subclass = "SampleSubClassError"
     str_name = file_name.replace(" ", "-")
     if "ADOM" in str_name:
         str_subclass = str_name.split(sep="-")[1]
         sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
+    elif "L" == str_name[0]:
+        if "G" == str_name[1]:
+            sample_subclass = "Lg"
+        else:
+            sample_subclass = "Lst"
     else:
         sample_subclass = str_name.split(sep="-")[0]
 
@@ -108,9 +117,7 @@ def read_fluo_3d(path: str,
     :param sep: разделитель в строчном виде (example: ",").
     :param index_col: номер столбца, который считается индексом таблицы.
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, а именами столбцов - длины волн
-            возбуждения. Таблица имеет метаданные - имя образца
-    Ошибки:
-
+            возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
     """
 
     data = pd.read_csv(path, sep=sep, index_col=index_col)
@@ -129,6 +136,13 @@ def read_fluo_3d(path: str,
 def read_uv(path: str,
             sep: str = ",",
             index_col: int = 0) -> DataFrame:
+    """
+    :param path: путь к файлу в строчном виде,
+            (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
+    :param sep: разделитель в строчном виде (example: ",").
+    :param index_col: номер столбца, который считается индексом таблицы.
+    :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
+    """
     data = pd.read_csv(path, sep=sep, index_col=index_col)
     data = data.astype("float64")
     name = extract_name_from_path(path)
