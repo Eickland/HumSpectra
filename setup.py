@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="",  # Замените на имя вашего пакета
+    name="humus-spectra",  # Замените на имя вашего пакета
     version="0.0.1",  # Начальная версия
     author="Kirill",  # Ваше имя
     author_email="mnbv21228@mail.ru",  # Ваш email
