@@ -108,6 +108,19 @@ def extract_subclass_from_name(file_name: str) -> str:
     return sample_subclass
 
 
+def check_sep(path: str) -> str:
+    """
+    :param path: путь к файлу в строчном виде
+    :return: sep: разделитель в строчном виде (example: ",")
+    Функция определяет разделитель столбцов в исходном спектре - запятая или точка с запятой
+    """
+    data = pd.read_csv(path)
+    if data[data.columns[0]].iloc[0].count(';') != 0:
+        sep = ";"
+    else:
+        sep = ","
+    return sep
+
 def read_fluo_3d(path: str,
                  sep: str = ",",
                  index_col: int = 0) -> DataFrame:
@@ -119,7 +132,8 @@ def read_fluo_3d(path: str,
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, а именами столбцов - длины волн
             возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
     """
-
+    if not sep:
+        sep = check_sep(path)
     data = pd.read_csv(path, sep=sep, index_col=index_col)
     if "nm" in data.index:
         data.drop("nm", inplace=True)
@@ -135,7 +149,7 @@ def read_fluo_3d(path: str,
 
 
 def read_uv(path: str,
-            sep: str = ",",
+            sep: str = "None",
             index_col: int = 0) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
@@ -144,6 +158,8 @@ def read_uv(path: str,
     :param index_col: номер столбца, который считается индексом таблицы.
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
     """
+    if not sep:
+        sep = check_sep(path)
     data = pd.read_csv(path, sep=sep, index_col=index_col)
     data = data.astype("float64")
     name = extract_name_from_path(path)
