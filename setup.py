@@ -23,7 +23,5 @@ setuptools.setup(
         "pandas",
         "matplotlib",
         "seaborn",
-        "os",
-        "re"
     ],
 )
