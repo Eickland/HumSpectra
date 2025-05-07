@@ -25,9 +25,9 @@ def asm_350(data: DataFrame) -> float:
 
     row = data[350].to_numpy()
     EM_wavelengths = data.index.to_numpy(dtype="int")
-    spline = cut_raman_spline(EM_wavelengths, row, 350)
-    high = np.trapz(spline[np.where(EM_wavelengths == 420)[0][0]:np.where(EM_wavelengths == 460)[0][0]])
-    low = np.trapz(spline[np.where(EM_wavelengths == 550)[0][0]:np.where(EM_wavelengths == 600)[0][0]])
+    spline = ut.cut_raman_spline(EM_wavelengths, row, 350)
+    high = np.trapezoid(spline[np.where(EM_wavelengths == 420)[0][0]:np.where(EM_wavelengths == 460)[0][0]])
+    low = np.trapezoid(spline[np.where(EM_wavelengths == 550)[0][0]:np.where(EM_wavelengths == 600)[0][0]])
     fluo_param = high / low
 
     return fluo_param
@@ -41,9 +41,9 @@ def asm_280(data: DataFrame) -> float:
 
     row = data[280].to_numpy()
     EM_wavelengths = data.index.to_numpy(dtype="int")
-    spline = cut_raman_spline(EM_wavelengths, row, 280)
-    high = np.trapz(spline[np.where(EM_wavelengths == 350)[0][0]:np.where(EM_wavelengths == 400)[0][0]])
-    low = np.trapz(spline[np.where(EM_wavelengths == 475)[0][0]:np.where(EM_wavelengths == 535)[0][0]])
+    spline = ut.cut_raman_spline(EM_wavelengths, row, 280)
+    high = np.trapezoid(spline[np.where(EM_wavelengths == 350)[0][0]:np.where(EM_wavelengths == 400)[0][0]])
+    low = np.trapezoid(spline[np.where(EM_wavelengths == 475)[0][0]:np.where(EM_wavelengths == 535)[0][0]])
     fluo_param = high / low
 
     return fluo_param

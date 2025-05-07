@@ -1,13 +1,8 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
-import os
-import glob
-import csv
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-from numpy import ndarray
-from typing import Optional, Sequence, Tuple, Callable, Union
+from typing import Optional
 from matplotlib.axes import Axes
 
 
