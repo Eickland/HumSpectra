@@ -1,8 +1,5 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
-import glob
-import csv
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
