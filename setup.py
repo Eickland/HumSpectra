@@ -21,7 +21,7 @@ setuptools.setup(
         "numpy",
         "scipy",
         "pandas",
-        "matplotlib.pyplot",
+        "matplotlib",
         "seaborn",
         "os",
         "re"
