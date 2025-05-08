@@ -267,18 +267,14 @@ def get_common_list(list1, list2):
 
     return list_sorted
 
-def calculate_entropy(data):
-    """Вычисляет энтропию спектра."""
-    # Нормализуем спектр, чтобы он представлял собой распределение вероятностей
-    array = np.array(data)
-    total = np.sum(array)
-    if total == 0:
-        return 0  
-    probabilities = array / total
-    return entropy(probabilities)
+def calculate_derivative_variation(spectrum):
+    """Вычисляет вариацию первой производной спектра."""
+    derivative = np.diff(spectrum)
+    variation = np.std(derivative)  # Используем стандартное отклонение как меру вариации
+    return variation
 
-def check_uv_spectrum(spectrum, threshold):
-    entropy_value = calculate_entropy(spectrum)
+def check_uv_spectrum(data, threshold):
+    entropy_value = calculate_derivative_variation(data)
     if entropy_value > threshold:
         return False
     else:
