@@ -106,6 +106,8 @@ def remove_outliers_and_interpolate(data_ini: DataFrame,
 
     # Применяем интерполяцию ко всей сетке
     interpolated_data = rbfi(X, Y)
+    max_value = np.max(interpolated_data)
+    interpolated_data = interpolated_data/max_value
     interpolated_data = pd.DataFrame(data=interpolated_data,index=index,columns=columns)
     return interpolated_data
 
