@@ -120,7 +120,7 @@ def plot_2d(data: DataFrame,
         row = (row - row.min()) / (row.max() - row.min())
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-    ax.plot(data.index, row)
+    ax.plot(data.index, row, label = data.attrs['name'])
     if title:
         ax.set_title(f"{data.attrs['name']}, λ возбуждения: {ex_wave} нм")
     if xlabel:

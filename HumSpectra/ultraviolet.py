@@ -141,7 +141,7 @@ def plot_uv(data: DataFrame,
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-    ax.plot(data_copy.index, data_copy["intensity"])
+    ax.plot(data_copy.index, data_copy["intensity"], label = data_copy.attrs['name'])
     if title:
         ax.set_title(f"{data_copy.attrs['name']}")
     if xlabel:
