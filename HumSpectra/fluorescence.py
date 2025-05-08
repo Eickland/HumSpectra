@@ -90,7 +90,7 @@ def plot_heat_map(data: DataFrame,
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(5.7, 4.8))
     plt.pcolormesh(EM_wavelengths, EX_wavelengths, normalized_data.T, shading="gouraud", vmin=0, vmax=1,
-                  cmap=plt.get_cmap('rainbow'))
+                  cmap=plt.get_cmap('rainbow'), ax=ax)
     if xlabel:
         ax.set_xlabel("λ испускания, нм")
     if ylabel:
@@ -120,7 +120,7 @@ def plot_2d(data: DataFrame,
         row = (row - row.min()) / (row.max() - row.min())
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-    ax.plot(data.index, row, label = data.attrs['name'])
+    ax.plot(data.index, row, label = data.attrs['name'], ax=ax)
     if title:
         ax.set_title(f"{data.attrs['name']}, λ возбуждения: {ex_wave} нм")
     if xlabel:
