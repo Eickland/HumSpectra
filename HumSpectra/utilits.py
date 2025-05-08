@@ -267,17 +267,16 @@ def get_common_list(list1, list2):
 
     return list_sorted
 
-def calculate_baseline_deviation(spectrum):
-    """Вычисляет среднее отклонение спектра от базовой линии (сплайн)."""
-    x = np.linspace(0, 1, len(spectrum))
-    spl = UnivariateSpline(x, spectrum, s=0.1)  # Подберите параметр сглаживания s
-    baseline = spl(x)
-    deviation = np.mean(np.abs(spectrum - baseline)) # abs для учета отклонений в обе стороны
-    return deviation
+def calculate_zero_crossings(spectrum):
+    """Вычисляет количество пересечений нуля первой производной спектра."""
+    derivative = np.diff(spectrum)
+    zero_crossings = np.sum(np.diff(np.sign(derivative)) != 0)
+    return zero_crossings
+
 
 
 def check_uv_spectrum(data, threshold):
-    entropy_value = calculate_baseline_deviation(data)
+    entropy_value = calculate_zero_crossings(data)
     if entropy_value > threshold:
         return False
     else:
