@@ -71,8 +71,7 @@ def cut_spectra(data: DataFrame,
 
 
 def remove_outliers_and_interpolate(data_ini: DataFrame,
-                                    outlier_threshold=5,
-                                    median_filter_size=3) -> DataFrame:
+                                    q=0.995) -> DataFrame:
     
     """
     Удаляет экстремальные выбросы из 3D матрицы флуоресценции и интерполирует удаленные значения
@@ -90,16 +89,7 @@ def remove_outliers_and_interpolate(data_ini: DataFrame,
     index = data_ini.index
     columns = data_ini.columns
     # 1. Медианная фильтрация для обнаружения выбросов
-    data_filtered = medfilt2d(data, kernel_size=median_filter_size)
-
-    # 2. Определение выбросов на основе отклонения от медианного фильтра
-    difference = np.abs(data - data_filtered)
-    median_absolute_deviation = np.median(difference)
-    outlier_mask = difference > outlier_threshold * median_absolute_deviation
-
-    # 3. Замена выбросов на NaN
-    data_with_nan = data.astype(float).copy()
-    data_with_nan[outlier_mask] = np.nan
+    data[data > np.quantile(data,q)] = np.nan
 
     # 4. Интерполяция NaN значений с использованием Rbf
     x = np.arange(data.shape[1])
@@ -107,9 +97,9 @@ def remove_outliers_and_interpolate(data_ini: DataFrame,
     X, Y = np.meshgrid(x, y)  # Создаем сетку координат
 
     # Извлекаем координаты известных точек (не NaN)
-    valid_x = X[~np.isnan(data_with_nan)].ravel()
-    valid_y = Y[~np.isnan(data_with_nan)].ravel()
-    valid_z = data_with_nan[~np.isnan(data_with_nan)].ravel()
+    valid_x = X[~np.isnan(data)].ravel()
+    valid_y = Y[~np.isnan(data)].ravel()
+    valid_z = data[~np.isnan(data)].ravel()
 
     # Создаем функцию Rbf
     rbfi = Rbf(valid_x, valid_y, valid_z, function='linear') # ('linear', 'gaussian', 'multiquadric')
