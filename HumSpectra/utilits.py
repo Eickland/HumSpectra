@@ -266,18 +266,3 @@ def get_common_list(list1, list2):
     list_sorted = sorted(list_filtered)
 
     return list_sorted
-
-# def calculate_zero_crossings(spectrum):
-#     """Вычисляет количество пересечений нуля первой производной спектра."""
-#     derivative = np.diff(spectrum.to_numpy())
-#     zero_crossings = np.sum(np.diff(np.sign(derivative)) != 0)
-#     return zero_crossings
-
-
-
-# def check_uv_spectrum(data, threshold):
-#     entropy_value = calculate_zero_crossings(data)
-#     if entropy_value > threshold:
-#         return False
-#     else:
-#         return True

@@ -11,6 +11,9 @@ from scipy import integrate
 from typing import Optional, Sequence, Tuple, Callable, Union
 from matplotlib.axes import Axes
 import utilits as ut
+from scipy.interpolate import interp2d
+from scipy.signal import medfilt2d
+from matplotlib.colors import LogNorm
 plt.rcParams['axes.grid'] = False
 
 
@@ -67,8 +70,49 @@ def cut_spectra(data: DataFrame,
     return cut_data
 
 
+def remove_outliers_and_interpolate(data_ini: DataFrame,
+                                    outlier_threshold=5,
+                                    median_filter_size=3) -> DataFrame:
+    
+    """
+    Удаляет экстремальные выбросы из 3D матрицы флуоресценции и интерполирует удаленные значения
+    по ближайшим соседям.  Использует медианный фильтр для обнаружения выбросов.
+
+    Args:
+        data (np.ndarray): 2D NumPy массив, представляющий матрицу флуоресценции.
+        outlier_threshold (float): Порог для определения выбросов (в единицах стандартного отклонения).
+        median_filter_size (int): Размер ядра медианного фильтра (должен быть нечетным).
+
+    Returns:
+        np.ndarray: Матрица с удаленными выбросами и интерполированными значениями.
+    """
+    data = data_ini.to_numpy()
+    index = data_ini.index
+    columns = data_ini.columns
+    # 1. Медианная фильтрация для обнаружения выбросов
+    data_filtered = medfilt2d(data, kernel_size=median_filter_size)
+
+    # 2. Определение выбросов на основе отклонения от медианного фильтра
+    difference = np.abs(data - data_filtered)
+    median_absolute_deviation = np.median(difference)
+    outlier_mask = difference > outlier_threshold * median_absolute_deviation
+
+    # 3.  Замена выбросов на NaN
+    data_with_nan = data.astype(float).copy()  # Важно: создаем копию и приводим к float, чтобы NaN работали
+    data_with_nan[outlier_mask] = np.nan
+
+    # 4. Интерполяция NaN значений с использованием interp2d
+    x = np.arange(data.shape[1])
+    y = np.arange(data.shape[0])
+    mask = ~np.isnan(data_with_nan)
+    interp_func = interp2d(x[mask.any(axis=0)], y[mask.any(axis=1)], data_with_nan[mask], kind='linear') # kind = 'linear' or 'cubic'
+    interpolated_data = interp_func(x, y)
+    interpolated_data = pd.DataFrame(data=interpolated_data,index=index,columns=columns)
+    return interpolated_data
+
+
+
 def plot_heat_map(data: DataFrame,
-                  q: float = 0.9995,
                   ax: Optional[plt.axes] = None,
                   xlabel: bool = True,
                   ylabel: bool = True,
@@ -79,17 +123,13 @@ def plot_heat_map(data: DataFrame,
     :return: ax: Axes, ось графика matplotlib.pyplot
     Функция маскирует экстремальные выбросы нулями, и рисует 2D тепловой график флуоресценции
     """
-    filtered_data = data.copy()
-    filtered_array = filtered_data.to_numpy()
-    filtered_array[filtered_array > np.quantile(filtered_array, q)] = 0
-    max_value = np.max(filtered_array)
-    normalized_data = filtered_array / max_value
-    EM_wavelengths = filtered_data.index.to_numpy(dtype="int")
-    EX_wavelengths = filtered_data.columns.to_numpy(dtype="int")
+    
+    EM_wavelengths = data.index.to_numpy(dtype="int")
+    EX_wavelengths = data.columns.to_numpy(dtype="int")
 
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(5.7, 4.8))
-    ax.pcolormesh(EM_wavelengths, EX_wavelengths, normalized_data.T, shading="gouraud", vmin=0, vmax=1,
+    ax.pcolormesh(EM_wavelengths, EX_wavelengths, data.T, shading="gouraud", vmin=0, vmax=1,
                   cmap=plt.get_cmap('rainbow'))
     if xlabel:
         ax.set_xlabel("λ испускания, нм")
