@@ -131,6 +131,7 @@ def plot_uv(data: DataFrame,
             xlabel: bool = True,
             ylabel: bool = True,
             title: bool = True,
+            norm_by_TOC: bool = False,
             ax: Optional[plt.axes] = None) -> Axes:
     """
     :param data: DataFrame, уф спектр
@@ -138,6 +139,10 @@ def plot_uv(data: DataFrame,
     Функция возвращает график 2D уф-спетра
     """
     data_copy = data.copy()
+    if norm_by_TOC:
+        if "TOC" not in data.attrs:
+            raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
+        data_copy = data_copy/data_copy.attrs['TOC']
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
