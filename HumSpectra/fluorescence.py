@@ -89,8 +89,8 @@ def plot_heat_map(data: DataFrame,
 
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(5.7, 4.8))
-    plt.pcolormesh(EM_wavelengths, EX_wavelengths, normalized_data.T, shading="gouraud", vmin=0, vmax=1,
-                  cmap=plt.get_cmap('rainbow'), ax=ax)
+    ax.pcolormesh(EM_wavelengths, EX_wavelengths, normalized_data.T, shading="gouraud", vmin=0, vmax=1,
+                  cmap=plt.get_cmap('rainbow'))
     if xlabel:
         ax.set_xlabel("λ испускания, нм")
     if ylabel:
