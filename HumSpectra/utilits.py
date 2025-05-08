@@ -6,6 +6,7 @@ from pandas import DataFrame
 from numpy import ndarray
 import re
 import scipy.interpolate
+from scipy.stats import entropy
 plt.rcParams['axes.grid'] = False
 
 
@@ -265,3 +266,20 @@ def get_common_list(list1, list2):
     list_sorted = sorted(list_filtered)
 
     return list_sorted
+
+def calculate_entropy(data):
+    """Вычисляет энтропию спектра."""
+    # Нормализуем спектр, чтобы он представлял собой распределение вероятностей
+    array = np.array(data)
+    total = np.sum(array)
+    if total == 0:
+        return 0  
+    probabilities = array / total
+    return entropy(probabilities)
+
+def check_uv_spectrum(spectrum, threshold):
+    entropy_value = calculate_entropy(spectrum)
+    if entropy_value > threshold:
+        return False
+    else:
+        return True

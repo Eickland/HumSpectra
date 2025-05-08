@@ -15,7 +15,7 @@ plt.rcParams['axes.grid'] = False
 
 
 class Sample:
-    def __init__(self, fluo_spectra, uv_spectra, name, mainclass, subclass, debug=False, TOC=None, uv_recall=False):
+    def __init__(self, fluo_spectra, uv_spectra, name, mainclass, subclass, debug=False, TOC=None, uv_recall=False, is_uv_bad_spectrum=True):
         self.fluo_spectra = fluo_spectra
         self.uv_spectra = uv_spectra
         self.name = name
@@ -24,3 +24,4 @@ class Sample:
         self.debug = debug
         self.TOC = TOC
         self.uv_recall = uv_recall
+        self.is_uv_bad_spectrum = is_uv_bad_spectrum
