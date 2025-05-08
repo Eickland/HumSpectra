@@ -6,7 +6,7 @@ from pandas import DataFrame
 from numpy import ndarray
 import re
 import scipy.interpolate
-from scipy.stats import entropy
+from scipy.interpolate import UnivariateSpline
 plt.rcParams['axes.grid'] = False
 
 
@@ -267,14 +267,17 @@ def get_common_list(list1, list2):
 
     return list_sorted
 
-def calculate_derivative_variation(spectrum):
-    """Вычисляет вариацию первой производной спектра."""
-    derivative = np.diff(spectrum)
-    variation = np.std(derivative)  # Используем стандартное отклонение как меру вариации
-    return variation
+def calculate_baseline_deviation(spectrum):
+    """Вычисляет среднее отклонение спектра от базовой линии (сплайн)."""
+    x = np.linspace(0, 1, len(spectrum))
+    spl = UnivariateSpline(x, spectrum, s=0.1)  # Подберите параметр сглаживания s
+    baseline = spl(x)
+    deviation = np.mean(np.abs(spectrum - baseline)) # abs для учета отклонений в обе стороны
+    return deviation
+
 
 def check_uv_spectrum(data, threshold):
-    entropy_value = calculate_derivative_variation(data)
+    entropy_value = calculate_baseline_deviation(data)
     if entropy_value > threshold:
         return False
     else:
