@@ -11,7 +11,7 @@ from scipy import integrate
 from typing import Optional, Sequence, Tuple, Callable, Union
 from matplotlib.axes import Axes
 import utilits as ut
-from scipy.interpolate import interp2d
+from scipy.interpolate import Rbf
 from scipy.signal import medfilt2d
 from matplotlib.colors import LogNorm
 plt.rcParams['axes.grid'] = False
@@ -97,16 +97,25 @@ def remove_outliers_and_interpolate(data_ini: DataFrame,
     median_absolute_deviation = np.median(difference)
     outlier_mask = difference > outlier_threshold * median_absolute_deviation
 
-    # 3.  Замена выбросов на NaN
-    data_with_nan = data.astype(float).copy()  # Важно: создаем копию и приводим к float, чтобы NaN работали
+    # 3. Замена выбросов на NaN
+    data_with_nan = data.astype(float).copy()
     data_with_nan[outlier_mask] = np.nan
 
-    # 4. Интерполяция NaN значений с использованием interp2d
+    # 4. Интерполяция NaN значений с использованием Rbf
     x = np.arange(data.shape[1])
     y = np.arange(data.shape[0])
-    mask = ~np.isnan(data_with_nan)
-    interp_func = interp2d(x[mask.any(axis=0)], y[mask.any(axis=1)], data_with_nan[mask], kind='linear') # kind = 'linear' or 'cubic'
-    interpolated_data = interp_func(x, y)
+    X, Y = np.meshgrid(x, y)  # Создаем сетку координат
+
+    # Извлекаем координаты известных точек (не NaN)
+    valid_x = X[~np.isnan(data_with_nan)].ravel()
+    valid_y = Y[~np.isnan(data_with_nan)].ravel()
+    valid_z = data_with_nan[~np.isnan(data_with_nan)].ravel()
+
+    # Создаем функцию Rbf
+    rbfi = Rbf(valid_x, valid_y, valid_z, function='linear') # ('linear', 'gaussian', 'multiquadric')
+
+    # Применяем интерполяцию ко всей сетке
+    interpolated_data = rbfi(X, Y)
     interpolated_data = pd.DataFrame(data=interpolated_data,index=index,columns=columns)
     return interpolated_data
 
