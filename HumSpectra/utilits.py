@@ -269,7 +269,7 @@ def get_common_list(list1, list2):
 
 def calculate_zero_crossings(spectrum):
     """Вычисляет количество пересечений нуля первой производной спектра."""
-    derivative = np.diff(spectrum)
+    derivative = np.diff(spectrum.to_numpy())
     zero_crossings = np.sum(np.diff(np.sign(derivative)) != 0)
     return zero_crossings
 
