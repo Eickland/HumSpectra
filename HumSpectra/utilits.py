@@ -238,3 +238,30 @@ def cut_raman_spline(em_wvs: ndarray,
                           peak_position=where_is_raman(exc_wv, omega=raman_freq),
                           peak_half_width=raman_hwhm, points_in_spline=points_in_spline)
     return res[-1](em_wvs)
+
+def get_common_list(list1, list2):
+    """
+    Находит общие элементы в двух списках, удаляет лишние элементы
+    и возвращает список в отсортированном виде.
+
+    Args:
+        list1: Первый список.
+        list2: Второй список.
+
+    Returns:
+        Кортеж: list_sorted, где спискок содержит только
+                 общие элементы и отсортирован.
+                 Если общих элементов нет, возвращает [].
+    """
+
+    # Находим общие элементы, используя пересечение множеств
+    common_elements = list(set(list1) & set(list2))
+
+    if not common_elements:
+        return []
+
+    list_filtered = [x for x in list1 if x in common_elements]
+
+    list_sorted = sorted(list_filtered)
+
+    return list_sorted
