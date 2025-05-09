@@ -152,5 +152,9 @@ def plot_uv(data: DataFrame,
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
-        ax.set_ylabel("Интенсивность")
+        if norm_by_TOC:
+            ax.set_ylabel("SUVA, $см^{-1}*мг^{-1}*л$")
+        else:
+            ax.set_ylabel("Интенсивность")
+
     return ax
