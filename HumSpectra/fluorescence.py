@@ -31,7 +31,7 @@ def asm_350(data: DataFrame) -> float:
     low = np.trapezoid(spline[np.where(EM_wavelengths == 550)[0][0]:np.where(EM_wavelengths == 600)[0][0]])
     fluo_param = high / low
 
-    return high
+    return float(fluo_param)
 
 
 def asm_280(data: DataFrame) -> float:
@@ -48,7 +48,7 @@ def asm_280(data: DataFrame) -> float:
     low = np.trapezoid(spline[np.where(EM_wavelengths == 475)[0][0]:np.where(EM_wavelengths == 535)[0][0]])
     fluo_param = high / low
 
-    return fluo_param
+    return float(fluo_param)
 
 
 def cut_spectra(data: DataFrame,
