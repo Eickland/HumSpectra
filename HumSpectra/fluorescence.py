@@ -50,6 +50,17 @@ def asm_280(data: DataFrame) -> float:
 
     return float(fluo_param)
 
+def fluo_index(data: DataFrame)-> float:
+    """
+    :param data: DataFrame, спектр флуоресценции
+    :return: fluo_param: fluo_index, отношение интенсивности при длине волны испускания 450 нм к 500 нм при длине волны возбуждения 370 нм
+    Функция рассчитывает отношение интеграла длины волны испускания от 350 до 400 нм к интегралу от 475 до 535 нм
+    """
+    row = data[370].to_numpy()
+    fluo_param = np.where(row == 450)[0][0]/np.where(row == 500)[0][0]
+
+    return float(fluo_param)
+
 
 def cut_spectra(data: DataFrame,
                 ex_low_limit: int,
