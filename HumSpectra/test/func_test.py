@@ -1,2 +1,1 @@
-import HumSpectra.utilits as ut
-print(1)
+import HumSpectra.optic.utilits as ut
