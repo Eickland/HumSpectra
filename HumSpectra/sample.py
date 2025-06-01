@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 from scipy import integrate
 from typing import Optional, Sequence, Tuple, Callable, Union
 from matplotlib.axes import Axes
-import optic.utilits as ut
+import utilits as ut
 plt.rcParams['axes.grid'] = False
 
 
