@@ -16,7 +16,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 
 
-import HumSpectra.utilits as ut
+import HumSpectra.optic.utilits as ut
 from .brutto import brutto_gen, elements_table, get_elements_masses
 
 def read_mass_list(path: str,
