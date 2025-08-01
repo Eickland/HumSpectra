@@ -215,7 +215,6 @@ def read_uv(path: str,
             data.index = data.index.str.replace(',','.')
             data.index = data.index.astype(float)
             
-            name = extract_name_from_path(path)
 
             if not ignore_name:
                 data.sort_index(inplace=True)
