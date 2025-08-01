@@ -204,7 +204,7 @@ def read_uv(path: str,
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
     data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
-    data[data.columns[1]]=data[data.columns[1]].str.replace(',','.')
+    data["intensity"]=data["intensity"].str.replace(',','.')
     data = data.astype("float64")
     name = extract_name_from_path(path)
     data.index = data.index.astype(float)
