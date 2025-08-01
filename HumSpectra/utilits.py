@@ -220,7 +220,8 @@ def read_uv(path: str,
         data.attrs['class'] = extract_class_from_name(name)
         data.attrs['subclass'] = extract_subclass_from_name(name)
         data.attrs['recall'] = False
-
+    else:
+        data.attrs['name'] = name
     return data
 
 
