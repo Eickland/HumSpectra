@@ -132,7 +132,8 @@ def plot_uv(data: DataFrame,
             ylabel: bool = True,
             title: bool = True,
             norm_by_TOC: bool = False,
-            ax: Optional[plt.axes] = None) -> Axes:
+            ax: Optional[plt.axes] = None,
+            ignore_name: bool = False) -> Axes:
     """
     :param data: DataFrame, уф спектр
     :return: ax: Axes, ось графика matplotlib.pyplot
@@ -148,7 +149,10 @@ def plot_uv(data: DataFrame,
 
     ax.plot(data_copy.index, data_copy["intensity"], label = data_copy.attrs['name'])
     if title:
-        ax.set_title(f"{data_copy.attrs['name']}")
+        if not ignore_name:
+            ax.set_title(f"{data_copy.attrs['name']}")
+        else:
+            ax.set_title(f"{data_copy.attrs['uv spectra']}")
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
