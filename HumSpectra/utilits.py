@@ -176,7 +176,8 @@ def read_fluo_3d(path: str,
 
 def read_uv(path: str,
             sep: str = None,
-            index_col: int = 0) -> DataFrame:
+            index_col: int = 0,
+            ignore_name: bool = False) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -207,16 +208,18 @@ def read_uv(path: str,
     data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
     data["intensity"]=data["intensity"].str.replace(',','.')
     data = data.astype("float64")
-    
+
     data.index = data.index.str.replace(',','.')
     data.index = data.index.astype(float)
     
-    name = extract_name_from_path(path)
-    data.sort_index(inplace=True)
-    data.attrs['name'] = name
-    data.attrs['class'] = extract_class_from_name(name)
-    data.attrs['subclass'] = extract_subclass_from_name(name)
-    data.attrs['recall'] = False
+    if not ignore_name:
+
+        name = extract_name_from_path(path)
+        data.sort_index(inplace=True)
+        data.attrs['name'] = name
+        data.attrs['class'] = extract_class_from_name(name)
+        data.attrs['subclass'] = extract_subclass_from_name(name)
+        data.attrs['recall'] = False
 
     return data
 
