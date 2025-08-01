@@ -133,26 +133,31 @@ def plot_uv(data: DataFrame,
             title: bool = True,
             norm_by_TOC: bool = False,
             ax: Optional[plt.axes] = None,
-            ignore_name: bool = False) -> Axes:
+            name:str = None) -> Axes:
     """
     :param data: DataFrame, уф спектр
     :return: ax: Axes, ось графика matplotlib.pyplot
     Функция возвращает график 2D уф-спетра
     """
+
+    
+
     data_copy = data.copy()
+
+    if "name" in data_copy.attrs:
+        name = data_copy.attrs["name"]
+    else:
+        name = "uv_spectra"
     if norm_by_TOC:
-        if "TOC" not in data.attrs:
+        if "TOC" not in data_copy.attrs:
             raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
         data_copy = data_copy/data_copy.attrs['TOC']
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-    ax.plot(data_copy.index, data_copy["intensity"], label = data_copy.attrs['name'])
+    ax.plot(data_copy.index, data_copy["intensity"], label = name)
     if title:
-        if not ignore_name:
-            ax.set_title(f"{data_copy.attrs['name']}")
-        else:
-            ax.set_title(f"{data_copy.attrs['uv spectra']}")
+            ax.set_title(name)
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
