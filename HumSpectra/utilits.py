@@ -115,6 +115,7 @@ def check_sep(path: str) -> str:
     :return: sep: разделитель в строчном виде (example: ",")
     Функция определяет разделитель столбцов в исходном спектре - запятая или точка с запятой
     """
+
     try:
         with open(path, 'r') as f:
             first_line = f.readline()
@@ -142,9 +143,9 @@ def read_fluo_3d(path: str,
 
     extension = path.split(sep=".")[-1]
 
-    if sep is None:
+    if sep is None and (extension == "csv" or extension == "txt"):
         sep = check_sep(path)
-        
+
     try:
 
         if extension == "xlsx":
@@ -186,7 +187,7 @@ def read_uv(path: str,
 
     extension = path.split(sep=".")[-1]
 
-    if sep is None:
+    if sep is None and (extension == "csv" or extension == "txt"):
         sep = check_sep(path)
     try:
 
