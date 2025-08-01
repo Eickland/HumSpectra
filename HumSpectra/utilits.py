@@ -227,6 +227,7 @@ def read_uv(path: str,
             else:
                 data.attrs['name'] = name
             data_list.append(data)
+        return data_list
     if extension == "csv" or extension == "txt":
 
         data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
