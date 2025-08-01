@@ -193,7 +193,7 @@ def read_uv(path: str,
     try:
 
         if extension == "xlsx":
-            data = pd.read_excel(path, index_col=index_col)
+            dict_data = pd.read_excel(path, index_col=index_col, sheet_name=None)
 
         if extension == "csv" or extension == "txt":
             data = pd.read_csv(path, sep=sep, index_col=index_col)
@@ -205,25 +205,49 @@ def read_uv(path: str,
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
     
-    data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
-    data["intensity"]=data["intensity"].str.replace(',','.')
-    data = data.astype("float64")
+    if extension == "xlsx":
+        data_list = []
+        for name, data in dict_data.items():
+            data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
+            data["intensity"]=data["intensity"].str.replace(',','.')
+            data = data.astype("float64")
 
-    data.index = data.index.str.replace(',','.')
-    data.index = data.index.astype(float)
-    
-    name = extract_name_from_path(path)
+            data.index = data.index.str.replace(',','.')
+            data.index = data.index.astype(float)
+            
+            name = extract_name_from_path(path)
 
-    if not ignore_name:
-        data.sort_index(inplace=True)
-        data.attrs['name'] = name
-        data.attrs['class'] = extract_class_from_name(name)
-        data.attrs['subclass'] = extract_subclass_from_name(name)
-        data.attrs['recall'] = False
+            if not ignore_name:
+                data.sort_index(inplace=True)
+                data.attrs['name'] = name
+                data.attrs['class'] = extract_class_from_name(name)
+                data.attrs['subclass'] = extract_subclass_from_name(name)
+                data.attrs['recall'] = False
+
+            else:
+                data.attrs['name'] = name
+            data_list.append(data)
+    if extension == "csv" or extension == "txt":
+
+        data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
+        data["intensity"]=data["intensity"].str.replace(',','.')
+        data = data.astype("float64")
+
+        data.index = data.index.str.replace(',','.')
+        data.index = data.index.astype(float)
         
-    else:
-        data.attrs['name'] = name
-    return data
+        name = extract_name_from_path(path)
+
+        if not ignore_name:
+            data.sort_index(inplace=True)
+            data.attrs['name'] = name
+            data.attrs['class'] = extract_class_from_name(name)
+            data.attrs['subclass'] = extract_subclass_from_name(name)
+            data.attrs['recall'] = False
+
+        else:
+            data.attrs['name'] = name
+        return data
 
 
 def where_is_raman(exc_wv: float,
