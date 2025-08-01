@@ -139,10 +139,21 @@ def read_fluo_3d(path: str,
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, имена столбцов - длины волн
             возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
     """
+
+    extension = path.split(sep=".")[-1]
+
     if sep is None:
         sep = check_sep(path)
+        
     try:
-        data = pd.read_csv(path, sep=sep, index_col=index_col)
+
+        if extension == "xlsx":
+            data = pd.read_excel(path, sep=sep, index_col=index_col)
+
+        if extension == "csv" or extension == "txt":
+            data = pd.read_csv(path, sep=sep, index_col=index_col)
+
+
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
     except pd.errors.EmptyDataError:
@@ -172,10 +183,19 @@ def read_uv(path: str,
     :param index_col: номер столбца, который считается индексом таблицы.
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
     """
+
+    extension = path.split(sep=".")[-1]
+
     if sep is None:
         sep = check_sep(path)
     try:
-        data = pd.read_csv(path, sep=sep, index_col=index_col)
+
+        if extension == "xlsx":
+            data = pd.read_excel(path, sep=sep, index_col=index_col)
+
+        if extension == "csv" or extension == "txt":
+            data = pd.read_csv(path, sep=sep, index_col=index_col)
+
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
     except pd.errors.EmptyDataError:
