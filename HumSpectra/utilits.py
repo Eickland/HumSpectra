@@ -212,14 +212,15 @@ def read_uv(path: str,
     data.index = data.index.str.replace(',','.')
     data.index = data.index.astype(float)
     
-    if not ignore_name:
+    name = extract_name_from_path(path)
 
-        name = extract_name_from_path(path)
+    if not ignore_name:
         data.sort_index(inplace=True)
         data.attrs['name'] = name
         data.attrs['class'] = extract_class_from_name(name)
         data.attrs['subclass'] = extract_subclass_from_name(name)
         data.attrs['recall'] = False
+        
     else:
         data.attrs['name'] = name
     return data
