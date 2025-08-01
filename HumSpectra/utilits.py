@@ -192,7 +192,7 @@ def read_uv(path: str,
     try:
 
         if extension == "xlsx":
-            data = pd.read_excel(path, sep=sep, index_col=index_col)
+            data = pd.read_excel(path, index_col=index_col)
 
         if extension == "csv" or extension == "txt":
             data = pd.read_csv(path, sep=sep, index_col=index_col)
