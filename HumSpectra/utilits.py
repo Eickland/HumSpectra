@@ -203,11 +203,15 @@ def read_uv(path: str,
         raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
+    
     data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
     data["intensity"]=data["intensity"].str.replace(',','.')
     data = data.astype("float64")
-    name = extract_name_from_path(path)
+    
+    data.index = data.index.str.replace(',','.')
     data.index = data.index.astype(float)
+    
+    name = extract_name_from_path(path)
     data.sort_index(inplace=True)
     data.attrs['name'] = name
     data.attrs['class'] = extract_class_from_name(name)
