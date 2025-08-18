@@ -218,7 +218,7 @@ def read_csv_uv(path: str,
         raise Exception(f"Ошибка при чтении файла: {e}")
     
 
-    data = ut.standart_uv_formatting(data)
+    data = standart_uv_formatting(data)
     data.sort_index(inplace=True)
 
     name = ut.extract_name_from_path(path)
@@ -257,7 +257,7 @@ def read_excel_uv(path: str,
 
     if file_type == "excel_single":
 
-        data = ut.standart_uv_formatting(data)
+        data = standart_uv_formatting(data)
         data.sort_index(inplace=True)
 
         name = ut.extract_name_from_path(path)
@@ -274,7 +274,7 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
 
-            data = ut.standart_uv_formatting(data)
+            data = standart_uv_formatting(data)
             data.sort_index(inplace=True)
 
             name = ut.extract_name_from_path(path)
@@ -286,3 +286,39 @@ def read_excel_uv(path: str,
             data_list.append(data)
 
         return data_list
+
+def standart_uv_formatting(data: DataFrame)-> DataFrame:
+    """
+    :param data: DataFrame, сырой уф спектр
+    :return: Отформатированный уф спектр
+    Функция заменяет строковые данные на числовые в уф спектре
+    """
+    data_copy = data.copy()
+
+    spectra_type = check_uv_spectra_type(data_copy)
+    data_copy.attrs['spectra_type'] = spectra_type
+
+    data_copy.rename(columns={data_copy.columns[0]: spectra_type}, inplace=True)
+    data_copy[spectra_type]=data_copy[spectra_type].str.replace(',','.')
+    data_copy = data_copy.astype("float64")
+
+    data_copy.index = data_copy.index.str.replace(',','.')
+    data_copy.index = data_copy.index.astype(float)
+
+    return data_copy
+
+def check_uv_spectra_type(data: DataFrame)-> str:
+    """
+    :param data: DataFrame, уф спектр
+    :return: Тип уф спектра
+    Функция определяет тип уф спектра - поглощение, зеркальное отражение
+    """
+    column_name = data.columns[0]
+
+    if column_name == "Abs":
+        uv_spectra_type = "absorption"
+
+    elif column_name == "R%":
+        uv_spectra_type = "reflection"
+
+    return uv_spectra_type

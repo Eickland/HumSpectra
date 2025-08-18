@@ -167,23 +167,6 @@ def check_file_type(path: str) -> str:
     
     return file_type
 
-def standart_uv_formatting(data: DataFrame,)-> DataFrame:
-    """
-    :param data: DataFrame, сырой уф спектр
-    :return: Отформатированный уф спектр
-    Функция заменяет строковые данные на числовые
-    """
-    data_copy = data.copy()
-
-    data_copy.rename(columns={data_copy.columns[0]: "intensity"}, inplace=True)
-    data_copy["intensity"]=data_copy["intensity"].str.replace(',','.')
-    data_copy = data_copy.astype("float64")
-
-    data_copy.index = data_copy.index.str.replace(',','.')
-    data_copy.index = data_copy.index.astype(float)
-
-    return data_copy
-
 def attributting_order(data: DataFrame,
                        ignore_name: bool,
                        name: str)-> DataFrame:
