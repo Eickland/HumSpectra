@@ -272,12 +272,15 @@ def read_excel_uv(path: str,
  
         data_list = []
 
-        for name, data in raw_data.items():
+        xlsx = pd.ExcelFile(path)
+        list_sheet_names = xlsx.sheet_names
+
+        for name, data, i in enumerate(raw_data.items()):
 
             data = standart_uv_formatting(data)
             data.sort_index(inplace=True)
 
-            name = ut.extract_name_from_path(path)
+            name = list_sheet_names[i]
             data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
             if baseline and (data.attrs['spectra_type'] == "absorption"):
