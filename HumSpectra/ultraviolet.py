@@ -39,13 +39,14 @@ def base_recall_uv(data: DataFrame) -> DataFrame:
     return data_copy + 1.001 * abs(min_value)
 
 
-def e2_e3(data: DataFrame) -> float:
+def e2_e3(data: DataFrame,
+          debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
     :return: uv_param: float, значение параметра E2/E3
     Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 265 к 365 нм.
     """
-    if not check_recall_flag(data):
+    if not check_recall_flag(data) and debug == False:
         raise ValueError("Ошибка проверки статуса калибровки")
     series = pd.Series(data.index, index=data.index)
     index_265 = series.sub(265).abs().idxmin()
