@@ -116,6 +116,7 @@ def check_sep(path: str) -> str:
     try:
         with open(path, 'r') as f:
             first_line = f.readline()
+
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
     except Exception as e:
@@ -123,14 +124,87 @@ def check_sep(path: str) -> str:
 
     if first_line.count(';') > first_line.count(','):
         return ';'
+    
     else:
         return ','
 
+def check_file_extension(path: str) -> str:
+    """
+    :param path: путь к файлу в строчном виде
+    :return: file_extension: строка в котором расширение файла
+    Функция определяет расширение файла - csv, txt, excel файл и возвращает расширение.
+    """
 
+    extension = path.split(sep=".")[-1] 
 
+    return extension   
 
+def check_file_type(path: str) -> str:
+    """
+    :param path: путь к файлу в строчном виде
+    :return: file_type: строка-кодировка типа файла
+    Функция определяет тип файла - csv, txt, excel файл и возвращает кодировку
+    """
 
+    ext = check_file_extension(path)
 
+    if ext in ["txt","csv"]:
+        file_type = "csv_type"
+    
+    elif ext == "xlsx":
+        
+        xlsx = pd.ExcelFile(path)
+        sheet_num = len(xlsx.sheet_names)
 
+        if sheet_num == 1:
+            file_type = "excel_single"
 
+        elif sheet_num > 1:
+            file_type = "excel_many"
+    
+    else:
+        raise ValueError("Тип файла не поддерживается")
+    
+    return file_type
 
+def standart_uv_formatting(data: DataFrame,)-> DataFrame:
+    """
+    :param data: DataFrame, сырой уф спектр
+    :return: Отформатированный уф спектр
+    Функция заменяет строковые данные на числовые
+    """
+    data_copy = data.copy()
+
+    data_copy.rename(columns={data_copy.columns[0]: "intensity"}, inplace=True)
+    data_copy["intensity"]=data_copy["intensity"].str.replace(',','.')
+    data_copy = data_copy.astype("float64")
+
+    data_copy.index = data_copy.index.str.replace(',','.')
+    data_copy.index = data_copy.index.astype(float)
+
+    return data_copy
+
+def attributting_order(data: DataFrame,
+                       ignore_name: bool,
+                       name: str)-> DataFrame:
+    """
+    :param data: DataFrame, сырой уф спектр
+    :param ignore_name: параметр, при включении которого игнорируются встроенные классы и подклассы
+    :param name: имя спектра
+    :return: Отформатированный уф спектр
+    Функция приписывает имя, класс и подкласс (если не игнорируется) спектру
+    """
+
+    data_copy = data.copy()
+
+    if not ignore_name:
+
+        data_copy.attrs['name'] = name
+        data_copy.attrs['class'] = extract_class_from_name(name)
+        data_copy.attrs['subclass'] = extract_subclass_from_name(name)
+
+    else:
+
+        data_copy.attrs['name'] = name
+
+    return data_copy

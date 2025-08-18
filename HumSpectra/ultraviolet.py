@@ -59,32 +59,39 @@ def e2_e3(data: DataFrame,
     return uv_param
 
 
-def e4_e6(data: DataFrame) -> float:
+def e4_e6(data: DataFrame,
+          debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
     :return: uv_param: float, значение параметра E4/E6
     Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 465 к 665 нм.
     """
-    if not check_recall_flag(data):
-        raise ValueError("Ошибка проверки статуса калибровки")
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
     series = pd.Series(data.index, index=data.index)
     index_465 = series.sub(465).abs().idxmin()
     index_665 = series.sub(665).abs().idxmin()
     uv_param = data.loc[index_465] / data.loc[index_665]
+    uv_param = float(uv_param.iloc[0])
 
-    return uv_param.iloc[0]
+    return uv_param
 
 
 def epsilon(data: DataFrame,
-            wave: int = 254) -> float:
+            wave: int = 254,
+            debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
     :param wave: int, длина волны, по которой ищется оптическая плотность
     :return: uv_param: float, значение оптической плотности
     Функция проверяет наличие рекалибровки и рассчитывает оптическую плотность при заданной длине волны
     """
-    if not check_recall_flag(data):
-        raise ValueError("Ошибка проверки статуса калибровки")
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
     series = pd.Series(data.index, index=data.index)
     index_254 = series.sub(wave).abs().idxmin()
     uv_param = data.loc[index_254].iloc[0]
@@ -92,14 +99,17 @@ def epsilon(data: DataFrame,
     return uv_param
 
 
-def suva(data: DataFrame) -> float:
+def suva(data: DataFrame,
+         debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
     :return: uv_param: float, значение параметра SUVA 254
     Функция проверяет наличие рекалибровки и рассчитывает параметр SUVA 254, для функции необходимо наличие в метаданных таблицы значение TOC
     """
-    if not check_recall_flag(data):
-        raise ValueError("Ошибка проверки статуса калибровки")
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
 
     if "TOC" not in data.attrs:
         raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
@@ -112,7 +122,8 @@ def suva(data: DataFrame) -> float:
 
 def lambda_UV(data: DataFrame,
               short_wave: int = 450,
-              long_wave: int = 550) -> float:
+              long_wave: int = 550,
+              debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
     :param short_wave: int, длина волны, с которого будет производится аппроксимация
@@ -120,8 +131,10 @@ def lambda_UV(data: DataFrame,
     :return: uv_param: float, значение дескриптора лямбда
     Функция проверяет наличие рекалибровки и рассчитывает параметр лямбда при длине волны от 450 до 550 нм
     """
-    if not check_recall_flag(data):
-        raise ValueError("Ошибка проверки статуса калибровки")
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
     series = pd.Series(data.index, index=data.index)
     index_short = series.sub(short_wave).abs().idxmin()
     index_long = series.sub(long_wave).abs().idxmin()
@@ -146,22 +159,23 @@ def plot_uv(data: DataFrame,
     Функция возвращает график 2D уф-спетра
     """
 
-    
-
     data_copy = data.copy()
 
     if "name" in data_copy.attrs:
         name = data_copy.attrs["name"]
     else:
         name = "uv_spectra"
+
     if norm_by_TOC:
         if "TOC" not in data_copy.attrs:
             raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
         data_copy = data_copy/data_copy.attrs['TOC']
+
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
     ax.plot(data_copy.index, data_copy["intensity"], label = name)
+
     if title:
             ax.set_title(name)
     if xlabel:
@@ -174,29 +188,27 @@ def plot_uv(data: DataFrame,
 
     return ax
 
-def read_uv(path: str,
+def read_csv_uv(path: str,
             sep: str = None,
             index_col: int = 0,
-            ignore_name: bool = False) -> DataFrame:
+            ignore_name: bool = False,
+            baseline: bool = True) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
     :param sep: разделитель в строчном виде (example: ",").
     :param index_col: номер столбца, который считается индексом таблицы.
+    :param ignore_name: параметр, при включении которого игнорируются встроенные классы и подклассы
+    :param baseline: параметр, при включении которого производится базовая рекалибровка
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
     """
+    file_type = ut.check_file_type(path)
 
-    extension = path.split(sep=".")[-1]
+    if sep is None and file_type == "csv_type" :
+        sep = ut.check_sep(path)
 
-    if sep is None and (extension == "csv" or extension == "txt"):
-        sep = check_sep(path)
     try:
-
-        if extension == "xlsx":
-            dict_data = pd.read_excel(path, index_col=index_col, sheet_name=None)
-
-        if extension == "csv" or extension == "txt":
-            data = pd.read_csv(path, sep=sep, index_col=index_col)
+        data = pd.read_csv(path, sep=sep, index_col=index_col)
 
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
@@ -205,46 +217,72 @@ def read_uv(path: str,
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
     
-    if extension == "xlsx":
-        data_list = []
-        for name, data in dict_data.items():
-            data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
-            data["intensity"]=data["intensity"].str.replace(',','.')
-            data = data.astype("float64")
 
-            data.index = data.index.str.replace(',','.')
-            data.index = data.index.astype(float)
-            
+    data = ut.standart_uv_formatting(data)
+    data.sort_index(inplace=True)
 
-            if not ignore_name:
-                data.sort_index(inplace=True)
-                data.attrs['name'] = name
-                data.attrs['class'] = ut.extract_class_from_name(name)
-                data.attrs['subclass'] = ut.extract_subclass_from_name(name)
-                data.attrs['recall'] = False
+    name = ut.extract_name_from_path(path)
+    data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
-            else:
-                data.attrs['name'] = name
-            data_list.append(data)
-        return data_list
-    if extension == "csv" or extension == "txt":
+    if baseline:
+        data = base_recall_uv(data)
 
-        data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
-        data["intensity"]=data["intensity"].str.replace(',','.')
-        data = data.astype("float64")
+    return data
+    
+def read_excel_uv(path: str,
+        sep: str = None,
+        index_col: int = 0,
+        ignore_name: bool = False,
+        baseline: bool = True) -> DataFrame | list:
+    """
+    :param path: путь к файлу в строчном виде,
+            (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.xlsx").
+    :param sep: разделитель в строчном виде (example: ",").
+    :param index_col: номер столбца, который считается индексом таблицы.
+    :param ignore_name: параметр, при включении которого игнорируются встроенные классы и подклассы
+    :param baseline: параметр, при включении которого производится базовая рекалибровка
+    :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
+    """
+    file_type = ut.check_file_type(path)
 
-        data.index = data.index.str.replace(',','.')
-        data.index = data.index.astype(float)
-        
+    try:
+        raw_data = pd.read_excel(path, sep=sep, index_col=index_col)
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    except pd.errors.EmptyDataError:
+        raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
+    except Exception as e:
+        raise Exception(f"Ошибка при чтении файла: {e}")
+
+    if file_type == "excel_single":
+
+        data = ut.standart_uv_formatting(data)
+        data.sort_index(inplace=True)
+
         name = ut.extract_name_from_path(path)
+        data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
-        if not ignore_name:
-            data.sort_index(inplace=True)
-            data.attrs['name'] = name
-            data.attrs['class'] = ut.extract_class_from_name(name)
-            data.attrs['subclass'] = ut.extract_subclass_from_name(name)
-            data.attrs['recall'] = False
+        if baseline:
+            data = base_recall_uv(data)
 
-        else:
-            data.attrs['name'] = name
         return data
+    
+    elif file_type == "excel_many":
+ 
+        data_list = []
+
+        for name, data in raw_data.items():
+
+            data = ut.standart_uv_formatting(data)
+            data.sort_index(inplace=True)
+
+            name = ut.extract_name_from_path(path)
+            data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
+
+            if baseline:
+                data = base_recall_uv(data)
+
+            data_list.append(data)
+            
+        return data_list
