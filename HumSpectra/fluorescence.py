@@ -1,20 +1,13 @@
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
 from numpy import ndarray
-import re
 import scipy.interpolate
-from scipy.optimize import curve_fit
-from scipy import integrate
-from typing import Optional, Sequence, Tuple, Callable, Union
+from typing import Optional
 from matplotlib.axes import Axes
 import HumSpectra.utilits as ut
 from scipy.interpolate import Rbf
-from scipy.signal import medfilt2d
-from matplotlib.colors import LogNorm
-plt.rcParams['axes.grid'] = False
 
 
 def asm_350(data: DataFrame) -> float:
@@ -26,7 +19,7 @@ def asm_350(data: DataFrame) -> float:
 
     row = data[350].to_numpy()
     EM_wavelengths = data.index.to_numpy(dtype="int")
-    spline = ut.cut_raman_spline(EM_wavelengths, row, 350)
+    spline = cut_raman_spline(EM_wavelengths, row, 350)
     high = np.trapezoid(spline[np.where(EM_wavelengths == 420)[0][0]:np.where(EM_wavelengths == 460)[0][0]])
     low = np.trapezoid(spline[np.where(EM_wavelengths == 550)[0][0]:np.where(EM_wavelengths == 600)[0][0]])
     fluo_param = high / low
@@ -43,7 +36,7 @@ def asm_280(data: DataFrame) -> float:
 
     row = data[280].to_numpy()
     EM_wavelengths = data.index.to_numpy(dtype="int")
-    spline = ut.cut_raman_spline(EM_wavelengths, row, 280)
+    spline = cut_raman_spline(EM_wavelengths, row, 280)
     high = np.trapezoid(spline[np.where(EM_wavelengths == 350)[0][0]:np.where(EM_wavelengths == 400)[0][0]])
     low = np.trapezoid(spline[np.where(EM_wavelengths == 475)[0][0]:np.where(EM_wavelengths == 535)[0][0]])
     fluo_param = high / low
@@ -181,3 +174,94 @@ def plot_2d(data: DataFrame,
         ax.set_ylabel("Интенсивность")
 
     return ax
+
+def where_is_raman(exc_wv: float,
+                   omega: float = 3430.):
+    """
+    return the central wavelength of solvent raman scattering band (stokes mode)
+    for given excitation wavelength (exc_wv) in nm
+    exc_wv(float) - excitation wavelength in nm
+    Omega(float) - molecular oscillations frequency in cm^-1
+    return(float) central wavelength of raman stokes mode peak
+    """
+    return 1e7 / (1e7 / exc_wv - omega)
+
+
+def cut_peak_spline(em_wvs, fl, peak_position, peak_half_width=15., points_in_spline=10):
+    """
+    em_wvs - 1d numpy array of emission wavelength
+    fl - 1d numpy array of fluorescence
+    peak_position (float) - position of peak in nanometers
+    peak_half_width - half-width at half-maximum of peak to cut
+    """
+    mask = ((em_wvs < peak_position - peak_half_width) | (em_wvs > peak_position + peak_half_width)) & (~np.isnan(fl))
+    knots = em_wvs[mask][1:-1][::points_in_spline]
+    spline = scipy.interpolate.LSQUnivariateSpline(em_wvs[mask], fl[mask], knots, k=2, ext=1)
+    spline_wvs = em_wvs[mask]
+    return knots, mask, spline_wvs, spline
+
+
+def cut_raman_spline(em_wvs: ndarray,
+                     fl: ndarray,
+                     exc_wv: int,
+                     raman_freq: float = 3430.,
+                     raman_hwhm: int = 15,
+                     points_in_spline: int = 10) -> ndarray:
+    """
+    em_wvs - 1d numpy array of emission wavelength
+    fl - 1d numpy array of fluorescence
+    raman_freq (float) = 3430. - frequency of raman scattering in cm^-1
+    raman_hwhm (float) - raman band half width at half maximum to cut in nm
+    points_in_spline(int) - number of points in interpolating spline
+
+    return 1d numpy array of fluorescence intensity with cut emission
+    """
+    res = cut_peak_spline(em_wvs, fl,
+                          peak_position=where_is_raman(exc_wv, omega=raman_freq),
+                          peak_half_width=raman_hwhm, points_in_spline=points_in_spline)
+    return res[-1](em_wvs)
+
+
+def read_fluo_3d(path: str,
+                 sep: str = None,
+                 index_col: int = 0) -> DataFrame:
+    """
+    :param path: путь к файлу в строчном виде,
+            (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
+    :param sep: разделитель в строчном виде (example: ",").
+    :param index_col: номер столбца, который считается индексом таблицы.
+    :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, имена столбцов - длины волн
+            возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
+    """
+
+    extension = path.split(sep=".")[-1]
+
+    if sep is None and (extension == "csv" or extension == "txt"):
+        sep = check_sep(path)
+
+    try:
+
+        if extension == "xlsx":
+            data = pd.read_excel(path, sep=sep, index_col=index_col)
+
+        if extension == "csv" or extension == "txt":
+            data = pd.read_csv(path, sep=sep, index_col=index_col)
+
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    except pd.errors.EmptyDataError:
+        raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
+    except Exception as e:
+        raise Exception(f"Ошибка при чтении файла: {e}")
+    if "nm" in data.index:
+        data.drop("nm", inplace=True)
+    data = data.astype("float64")
+    name = ut.extract_name_from_path(path)
+    data.columns = data.columns.astype(int)
+    data.index = data.index.astype(int)
+    data.attrs['name'] = name
+    data.attrs['class'] = ut.extract_class_from_name(name)
+    data.attrs['subclass'] = ut.extract_subclass_from_name(name)
+
+    return data

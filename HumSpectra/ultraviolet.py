@@ -5,6 +5,8 @@ from pandas import DataFrame
 from typing import Optional
 from matplotlib.axes import Axes
 
+from HumSpectra import utilits as ut
+
 
 def check_recall_flag(data: DataFrame) -> bool:
     """
@@ -167,3 +169,78 @@ def plot_uv(data: DataFrame,
             ax.set_ylabel("Интенсивность")
 
     return ax
+
+def read_uv(path: str,
+            sep: str = None,
+            index_col: int = 0,
+            ignore_name: bool = False) -> DataFrame:
+    """
+    :param path: путь к файлу в строчном виде,
+            (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
+    :param sep: разделитель в строчном виде (example: ",").
+    :param index_col: номер столбца, который считается индексом таблицы.
+    :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
+    """
+
+    extension = path.split(sep=".")[-1]
+
+    if sep is None and (extension == "csv" or extension == "txt"):
+        sep = check_sep(path)
+    try:
+
+        if extension == "xlsx":
+            dict_data = pd.read_excel(path, index_col=index_col, sheet_name=None)
+
+        if extension == "csv" or extension == "txt":
+            data = pd.read_csv(path, sep=sep, index_col=index_col)
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Файл не найден: {path}")
+    except pd.errors.EmptyDataError:
+        raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
+    except Exception as e:
+        raise Exception(f"Ошибка при чтении файла: {e}")
+    
+    if extension == "xlsx":
+        data_list = []
+        for name, data in dict_data.items():
+            data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
+            data["intensity"]=data["intensity"].str.replace(',','.')
+            data = data.astype("float64")
+
+            data.index = data.index.str.replace(',','.')
+            data.index = data.index.astype(float)
+            
+
+            if not ignore_name:
+                data.sort_index(inplace=True)
+                data.attrs['name'] = name
+                data.attrs['class'] = ut.extract_class_from_name(name)
+                data.attrs['subclass'] = ut.extract_subclass_from_name(name)
+                data.attrs['recall'] = False
+
+            else:
+                data.attrs['name'] = name
+            data_list.append(data)
+        return data_list
+    if extension == "csv" or extension == "txt":
+
+        data.rename(columns={data.columns[0]: "intensity"}, inplace=True)
+        data["intensity"]=data["intensity"].str.replace(',','.')
+        data = data.astype("float64")
+
+        data.index = data.index.str.replace(',','.')
+        data.index = data.index.astype(float)
+        
+        name = ut.extract_name_from_path(path)
+
+        if not ignore_name:
+            data.sort_index(inplace=True)
+            data.attrs['name'] = name
+            data.attrs['class'] = ut.extract_class_from_name(name)
+            data.attrs['subclass'] = ut.extract_subclass_from_name(name)
+            data.attrs['recall'] = False
+
+        else:
+            data.attrs['name'] = name
+        return data
