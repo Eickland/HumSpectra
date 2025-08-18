@@ -224,7 +224,7 @@ def read_csv_uv(path: str,
     name = ut.extract_name_from_path(path)
     data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
-    if baseline:
+    if baseline and (data.attrs['spectra_type'] == "absorption"):
         data = base_recall_uv(data)
 
     return data
@@ -263,7 +263,7 @@ def read_excel_uv(path: str,
         name = ut.extract_name_from_path(path)
         data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
-        if baseline:
+        if baseline and (data.attrs['spectra_type'] == "absorption"):
             data = base_recall_uv(data)
 
         return data
@@ -280,7 +280,7 @@ def read_excel_uv(path: str,
             name = ut.extract_name_from_path(path)
             data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
-            if baseline:
+            if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
 
             data_list.append(data)
