@@ -274,9 +274,10 @@ def read_excel_uv(path: str,
 
         xlsx = pd.ExcelFile(path)
         list_sheet_names = xlsx.sheet_names
+        i = 0
 
-        for name, data, i in enumerate(raw_data.items()):
-
+        for name, data in raw_data.items():
+            
             data = standart_uv_formatting(data)
             data.sort_index(inplace=True)
 
@@ -287,6 +288,8 @@ def read_excel_uv(path: str,
                 data = base_recall_uv(data)
 
             data_list.append(data)
+
+            i += 1
 
         return data_list
 
