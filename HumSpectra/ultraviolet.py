@@ -138,7 +138,7 @@ def lambda_UV(data: DataFrame,
     series = pd.Series(data.index, index=data.index)
     index_short = series.sub(short_wave).abs().idxmin()
     index_long = series.sub(long_wave).abs().idxmin()
-    lambda_array = data.loc[index_short:index_long]["intensity"].to_numpy()
+    lambda_array = data.loc[index_short:index_long][data.columns[0]].to_numpy()
     p, *rest = np.polyfit(lambda_array, np.log(lambda_array), 1, full=True)
     a, b = p
     uv_param = 1 / abs(a)
@@ -174,7 +174,7 @@ def plot_uv(data: DataFrame,
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-    ax.plot(data_copy.index, data_copy["intensity"], label = name)
+    ax.plot(data_copy.index, data_copy[data_copy.columns[0]], label = name)
 
     if title:
             ax.set_title(name)
