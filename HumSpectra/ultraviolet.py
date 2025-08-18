@@ -54,8 +54,9 @@ def e2_e3(data: DataFrame,
     index_265 = series.sub(265).abs().idxmin()
     index_365 = series.sub(365).abs().idxmin()
     uv_param = data.loc[index_265] / data.loc[index_365]
+    uv_param = float(uv_param.iloc[0])
 
-    return uv_param.iloc[0]
+    return uv_param
 
 
 def e4_e6(data: DataFrame) -> float:
