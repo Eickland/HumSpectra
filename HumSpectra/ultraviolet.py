@@ -246,7 +246,7 @@ def read_excel_uv(path: str,
     file_type = ut.check_file_type(path)
 
     try:
-        raw_data = pd.read_excel(path, decimal=sep, index_col=index_col)
+        raw_data = pd.read_excel(path, index_col=index_col)
 
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
