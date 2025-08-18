@@ -315,10 +315,10 @@ def check_uv_spectra_type(data: DataFrame)-> str:
     """
     column_name = data.columns[0]
 
-    if column_name == "Abs":
+    if "Abs" in column_name:
         uv_spectra_type = "absorption"
 
-    elif column_name == "R%":
+    elif "R%" in column_name:
         uv_spectra_type = "reflection"
 
     return uv_spectra_type
