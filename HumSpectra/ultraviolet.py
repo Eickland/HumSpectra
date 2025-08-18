@@ -274,6 +274,7 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
 
+            return data
             data = ut.standart_uv_formatting(data)
             data.sort_index(inplace=True)
 
