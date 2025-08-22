@@ -226,6 +226,9 @@ def read_csv_uv(path: str,
 
     if baseline and (data.attrs['spectra_type'] == "absorption"):
         data = base_recall_uv(data)
+    
+    elif baseline and (data.attrs['spectra_type'] == "reflection"):
+                data.drop(data[data < 0].index, inplace=True)
 
     return data
     
@@ -266,6 +269,9 @@ def read_excel_uv(path: str,
         if baseline and (data.attrs['spectra_type'] == "absorption"):
             data = base_recall_uv(data)
 
+        elif baseline and (data.attrs['spectra_type'] == "reflection"):
+                data.drop(data[data < 0].index, inplace=True)
+
         return data
     
     elif file_type == "excel_many":
@@ -286,6 +292,9 @@ def read_excel_uv(path: str,
 
             if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
+
+            elif baseline and (data.attrs['spectra_type'] == "reflection"):
+                data.drop(data[data < 0].index, inplace=True)
 
             data_list.append(data)
 
