@@ -228,7 +228,7 @@ def read_csv_uv(path: str,
         data = base_recall_uv(data)
     
     elif baseline and (data.attrs['spectra_type'] == "reflection"):
-                data.drop(data[data["reflection"] < 0], inplace=True)
+                data.drop(data[data["reflection"] < 0], inplace=True,axis=1)
 
     return data
     
@@ -270,7 +270,7 @@ def read_excel_uv(path: str,
             data = base_recall_uv(data)
 
         elif baseline and (data.attrs['spectra_type'] == "reflection"):
-                data.drop(data[data["reflection"] < 0], inplace=True)
+                data.drop(data[data["reflection"] < 0], inplace=True,axis=1)
 
         return data
     
@@ -294,7 +294,7 @@ def read_excel_uv(path: str,
                 data = base_recall_uv(data)
 
             elif baseline and (data.attrs['spectra_type'] == "reflection"):
-                data.drop(data[data["reflection"] < 0], inplace=True)
+                data.drop(data[data["reflection"] < 0], inplace=True,axis=1)
 
             data_list.append(data)
 
