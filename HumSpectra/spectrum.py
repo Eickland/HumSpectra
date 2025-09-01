@@ -38,6 +38,7 @@ def read_mass_list(path: str,
         raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
+    data.dropna(inplace=True, axis=1)
     data = data.astype("float64")
     name = ut.extract_name_from_path(path)
     data.attrs['name'] = name
