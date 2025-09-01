@@ -29,7 +29,7 @@ def read_mass_list(path: str,
     :return: DataFrame: 
     """
     if sep is None:
-        sep = check_sep(path)
+        sep = ut.check_sep(path)
     try:
         data = pd.read_csv(path, sep=sep, **kwargs)
     except FileNotFoundError:
