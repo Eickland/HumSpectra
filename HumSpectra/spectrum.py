@@ -556,7 +556,7 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
         if 'sign' in self.attrs:
             sign = self.attrs['sign']
         else:
-            sign = self._calc_sign()
+            sign = _calc_sign(self)
 
     if sign == '-':
         self["abs_error"] = ((self["mass"] + (- 0.00054858 + 1.007825)) * self["charge"]) - self["calc_mass"] #-electron + proton
