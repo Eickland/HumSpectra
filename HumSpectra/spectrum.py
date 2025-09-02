@@ -105,13 +105,13 @@ def assign(data: pd.DataFrame,
             generated_bruttos_table = brutto_gen(brutto_dict)
 
         if mass_min is None:
-            mass_min = data.table['mass'].min()
+            mass_min = data['mass'].min()
         if mass_max is None:
-            mass_max = data.table['mass'].max()
+            mass_max = data['mass'].max()
         if intensity_min is None:
-            intensity_min = data.table['intensity'].min()
+            intensity_min = data['intensity'].min()
         if intensity_max is None:
-            intensity_max = data.table['intensity'].max()
+            intensity_max = data['intensity'].max()
         
         if sign == '-':
             mass_shift = - 0.00054858 + 1.007825  # electron and hydrogen mass
@@ -134,8 +134,8 @@ def assign(data: pd.DataFrame,
             rel = True
             rel_error = 0.5
 
-        data.table = data.table.loc[:,['mass', 'intensity']].reset_index(drop=True)
-        table = data.table.copy()
+        data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
+        table = data.copy()
 
         masses = generated_bruttos_table["mass"].values
 
@@ -172,8 +172,8 @@ def assign(data: pd.DataFrame,
         res = pd.DataFrame(res)
 
         table = table.join(res)
-        data.table = data.table.merge(table, how='outer', on=list(data.table.columns))
-        data.table['assign'] = data.table['assign'].fillna(False)
-        data.table['charge'] = data.table['charge'].fillna(1)
+        data = data.merge(table, how='outer', on=list(data.columns))
+        data['assign'] = data['assign'].fillna(False)
+        data['charge'] = data['charge'].fillna(1)
 
         return data
