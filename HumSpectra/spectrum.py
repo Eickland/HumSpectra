@@ -510,6 +510,12 @@ def _calc_sign(self) -> str:
 
     self = drop_unassigned(self)
 
+    if "calc_mass" not in self:
+        self = self.calc_mass()
+
+    if "charge" not in self.columns:
+        self["charge"] = 1
+
     value = (self["calc_mass"]/self["charge"] - self["mass"]).mean()
     value = np.round(value,4)
     if value > 1:
@@ -547,8 +553,8 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
         self["charge"] = 1
 
     if sign is None:
-        if 'sign' in self.metadata:
-            sign = self.metadata['sign']
+        if 'sign' in self.attrs:
+            sign = self.attrs['sign']
         else:
             sign = self._calc_sign()
 
@@ -559,7 +565,7 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
     elif sign == '0':
         self["abs_error"] = (self["mass"] * self["charge"]) - self["calc_mass"]
     else:
-        raise ValueError('Sended sign or sign in metadata is not correct. May be "+","-","0"')
+        raise ValueError('Sended sign or sign in attrs is not correct. May be "+","-","0"')
     
     self["rel_error"] = self["abs_error"] / self["mass"] * 1e6
     
