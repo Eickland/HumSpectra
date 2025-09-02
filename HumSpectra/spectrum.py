@@ -85,7 +85,7 @@ def _mark_assigned_by_brutto(self) -> None:
     """
 
     assign = []
-    elems = self.find_elements()
+    elems = find_elements(self)
     for i, row in self.iterrows():
         flag = False
         for el in elems:
@@ -482,7 +482,7 @@ def calc_mass(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
     
-    elems = self.find_elements()
+    elems = find_elements(self)
     
     table = self.loc[:,elems].copy()
     
@@ -567,7 +567,7 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
 
 
 @_copy
-def brutto(self) -> 'Spectrum':
+def brutto(self) -> pd.DataFrame:
     """
     Calculate string with brutto from assign table
 
@@ -581,7 +581,7 @@ def brutto(self) -> 'Spectrum':
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    elems = self.find_elements()
+    elems = find_elements(self)
     out = []
     for i, row in self.iterrows():
         s = ''
@@ -639,7 +639,7 @@ def cram(self) -> pd.DataFrame:
     return self
 
 @_copy
-def ai(self) -> 'Spectrum':
+def ai(self) -> pd.DataFrame:
     """
     Calculate AI (aromaticity index)
 
@@ -672,7 +672,7 @@ def ai(self) -> 'Spectrum':
     return self
 
 @_copy
-def cai(self) -> 'Spectrum':
+def cai(self) -> pd.DataFrame:
     """
     Calculate CAI (C - O - N - S - P)
 
@@ -697,7 +697,7 @@ def cai(self) -> 'Spectrum':
     return self
 
 @_copy
-def dbe_ai(self) -> 'Spectrum':
+def dbe_ai(self) -> pd.DataFrame:
     """
     Calculate DBE_AI (1 + C - O - S - 0.5 * (H + N + P))
 
@@ -722,7 +722,7 @@ def dbe_ai(self) -> 'Spectrum':
     return self
 
 @_copy
-def dbe(self) -> 'Spectrum':
+def dbe(self) -> pd.DataFrame:
     """
     Calculate DBE (1 + C - 0.5 * (H + N))
 
@@ -747,7 +747,7 @@ def dbe(self) -> 'Spectrum':
     return self
 
 @_copy
-def dbe_o(self) -> 'Spectrum':
+def dbe_o(self) -> pd.DataFrame:
     """
     Calculate DBE - O
 
@@ -767,7 +767,7 @@ def dbe_o(self) -> 'Spectrum':
     return self
 
 @_copy
-def dbe_oc(self) -> 'Spectrum':
+def dbe_oc(self) -> pd.DataFrame:
     """
     Calculate (DBE - O) / C
 
@@ -787,7 +787,7 @@ def dbe_oc(self) -> 'Spectrum':
     return self
 
 @_copy
-def hc_oc(self) -> 'Spectrum':
+def hc_oc(self) -> pd.DataFrame:
     """
     Calculate H/C and O/C
 
@@ -808,7 +808,7 @@ def hc_oc(self) -> 'Spectrum':
     return self
 
 @_copy
-def kendrick(self) -> 'Spectrum':
+def kendrick(self) -> pd.DataFrame:
     """
     Calculate Kendrick mass and Kendrick mass defect
 
@@ -829,7 +829,7 @@ def kendrick(self) -> 'Spectrum':
     return self
 
 @_copy
-def nosc(self) -> 'Spectrum':
+def nosc(self) -> pd.DataFrame:
     """
     Calculate Normal oxidation state of carbon (NOSC)
 
