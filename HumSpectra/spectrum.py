@@ -177,3 +177,244 @@ def assign(data: pd.DataFrame,
         data['charge'] = data['charge'].fillna(1)
 
         return data
+
+
+def _copy(func):
+    """
+    Decorator for deep copy pd.DataFrame before apllying methods
+    
+    Parameters
+    ----------
+    func: method
+        function for decoarate
+    
+    Return
+    ------
+    function with deepcopyed pd.DataFrame
+    """
+
+    @wraps(func)
+    def wrapper(dataframe, *args, **kwargs):
+        # Создаем глубокую копию DataFrame
+        dataframe_copy = copy.deepcopy(dataframe)
+        
+        # Вызываем оригинальную функцию с копией
+        result = func(dataframe_copy, *args, **kwargs)
+        
+        return result
+    
+    return wrapper
+
+@_copy
+def noise_filter(self,
+                    force: float = 1.5,
+                    intensity: Optional[float] = None,
+                    quantile: Optional[float] = None 
+                    ) -> pd.DataFrame:
+    """
+    Remove noise from spectrum
+
+    Parameters
+    ----------
+    intensity: float
+        Cut by min intensity. 
+        Default None and dont apply.
+    quantile: float
+        Cut by quantile. For example 0.1 mean that 10% 
+        of peaks with minimal intensity will be cutted. 
+        Default None and dont aplly
+    force: float
+        How many peaks should cut when auto-search noise level.
+        Default 1.5 means that peaks with intensity more 
+        than noise level*1.5 will be cutted
+    
+    Return
+    ------
+    pd.DataFrame
+
+    Caution
+    -------
+    There is risk of loosing data. Do it cautiously.
+    Level of noise may be determenided wrong. 
+    Draw and watch spectrum.
+    """
+    
+    if intensity is not None:
+        self = self.loc[self['intensity'] > intensity].reset_index(drop=True)
+        self.attrs['noise filter (intensity)'] = intensity
+    
+    elif quantile is not None:
+        tresh = self['intensity'].quantile(quantile)
+        self = self.loc[self['intensity'] > tresh].reset_index(drop=True)
+        self.attrs['noise filter (quantile)'] = quantile
+        
+    
+    else:
+
+        intens = self['intensity'].values
+        cut_diapasone=np.linspace(0, np.mean(intens),100)
+
+        d = []
+        for i in cut_diapasone:
+            d.append(len(intens[intens > i]))
+
+        dx = np.gradient(d, 1)
+        tresh = np.where(dx==np.min(dx))
+        cut = cut_diapasone[tresh[0][0]] * force
+        self = self.loc[self['intensity'] > cut].reset_index(drop=True)
+
+        self.attrs['noise filter (force)'] = force
+
+    return self
+
+@_copy
+def drop_unassigned(self) -> "pd.DataFrame":
+    """
+    Drop unassigned by brutto rows
+
+    Return
+    ------
+    pd.DataFrame
+
+    Caution
+    -------
+    Danger of lose data - with these operation we exclude data that can be usefull
+    """
+
+    if "assign" not in self:
+        raise Exception("Spectrum is not assigned")
+
+    self = self.loc[self["assign"] == True].reset_index(drop=True)
+    self.attrs['drop_unassigned'] = True
+
+    return self
+
+@_copy
+def merge_duplicates(self) -> "pd.DataFrame":
+    """
+    merge duplicataes with the same calculated mass with sum intensity
+
+    Return
+    ------
+    pd.DataFrame
+    """
+    if 'calc_mass' not in self.columns:
+        self = self.calc_mass()
+
+    cols = {col: ('sum' if col=='intensity' else 'max') for col in self.columns}
+    self = self.groupby(['calc_mass'],as_index = False).agg(cols)
+    return self
+
+@_copy
+def filter_by_C13(
+    self, 
+    rel_error: float = 0.5,
+    remove: bool = False,
+) -> pd.DataFrame:
+    """ 
+    Check if peaks have the same brutto with C13 isotope
+
+    Parameters
+    ----------
+    rel_error: float
+        Optional. Default 0.5.
+        Allowable ppm error when checking c13 isotope peak
+    remove: bool
+        Optional, default False. 
+        Drop unassigned peaks and peaks without C13 isotope
+    
+    Return
+    ------
+    pd.DataFrame
+    """
+    
+    self = self.sort_values(by='mass').reset_index(drop=True)
+    
+    flags = np.zeros(self.shape[0], dtype=bool)
+    masses = self["mass"].values
+    
+    C13_C12 = 1.003355  # C13 - C12 mass difference
+
+    
+    for index, row in self.iterrows():
+        mass = row["mass"] + C13_C12
+        error = mass * rel_error * 0.000001
+
+        idx = np.searchsorted(masses, mass, side='left')
+        
+        if idx > 0 and (idx == len(masses) or np.fabs(mass - masses[idx - 1]) < np.fabs(mass - masses[idx])):
+            idx -= 1
+        
+        if np.fabs(masses[idx] - mass)  <= error:
+            flags[index] = True
+    
+    self['C13_peak'] = flags
+
+    if remove:
+        self = self.loc[(self['C13_peak'] == True) & (self['assign'] == True)].reset_index(drop=True)
+        self.attrs['filter_C13'] = True
+        
+
+    return self
+
+@_copy
+def normalize(self, how:str='sum') -> pd.DataFrame:
+    """
+    Intensity normalize by intensity
+
+    Parameters
+    ----------
+    how: {'sum', 'max', 'median', 'mean'}
+        'sum' for normilize by sum of intensity of all peaks. (default)
+        'max' for normilize by higher intensity peak.
+        'median' for normilize by median of peaks intensity.
+        'mean' for normilize by mean of peaks intensity.
+
+    Return
+    ------
+    pd.DataFrame
+    """
+
+    if how=='max':
+        self['intensity'] /= self['intensity'].max()
+    elif how=='sum':
+        self['intensity'] /= self['intensity'].sum()
+    elif how=='median':
+        self['intensity'] /= self['intensity'].median()
+    elif how=='mean':
+        self['intensity'] /= self['intensity'].mean()
+    else:
+        raise Exception(f"There is no such mode: {how}")
+    
+    self.attrs['normilize'] = how
+
+    return self
+
+@_copy
+def merge_isotopes(self) -> "pd.DataFrame":
+    """
+    Merge isotopes.
+
+    For example if specrum list have 'C' and 'C_13' they will be summed in 'C' column.
+
+    Return
+    ------
+    pd.DataFrame
+
+    Caution
+    -------
+    Danger of lose data - with these operation we exclude data that can be usefull       
+    """
+
+    elems = self.find_elements()
+    for el in elems:
+        res = el.split('_')
+        if len(res) == 2:
+            if res[0] not in self:
+                self[res[0]] = 0
+            self[res[0]] = self[res[0]] + self[el]
+            self = self.drop(columns=[el])
+    
+    self.attrs['merge_isotopes'] = True
+
+    return self
