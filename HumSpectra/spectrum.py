@@ -511,7 +511,7 @@ def _calc_sign(self) -> str:
     self = drop_unassigned(self)
 
     if "calc_mass" not in self:
-        self = self.calc_mass()
+        self = calc_mass(self)
 
     if "charge" not in self.columns:
         self["charge"] = 1
@@ -547,7 +547,7 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
     """
 
     if "calc_mass" not in self:
-        self = self.calc_mass()
+        self = calc_mass(self)
 
     if "charge" not in self.columns:
         self["charge"] = 1
@@ -626,7 +626,7 @@ def cram(self) -> pd.DataFrame:
     """
 
     if "DBE" not in self:
-        self = self.dbe()        
+        self = dbe(self)        
 
     def check(row):
         if row['DBE']/row['C'] < 0.3 or row['DBE']/row['C'] > 0.68:
@@ -639,7 +639,7 @@ def cram(self) -> pd.DataFrame:
             return False
         return True
 
-    table = self.copy().merge_isotopes()
+    table = merge_isotopes(self.copy())
     self['CRAM'] = table.apply(check, axis=1)
 
     return self
@@ -663,10 +663,10 @@ def ai(self) -> pd.DataFrame:
     """
 
     if "DBE_AI" not in self:
-        self = self.dbe_ai()
+        self = dbe_ai(self)
 
     if "CAI" not in self:
-        self = self.cai()
+        self = cai(self)
 
     self["AI"] = self["DBE_AI"] / self["CAI"]
 
@@ -692,7 +692,7 @@ def cai(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
 
     for element in "CONSP":
         if element not in table:
@@ -717,7 +717,7 @@ def dbe_ai(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
 
     for element in "CHONPS":
         if element not in table:
@@ -742,7 +742,7 @@ def dbe(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
 
     for element in "CHON":
         if element not in table:
@@ -765,9 +765,9 @@ def dbe_o(self) -> pd.DataFrame:
     """
 
     if "DBE" not in self:
-        self = self.dbe()
+        self = dbe(self)
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
     self['DBE-O'] = table['DBE'] - table['O']
 
     return self
@@ -785,9 +785,9 @@ def dbe_oc(self) -> pd.DataFrame:
     """
 
     if "DBE" not in self:
-        self = self.dbe()
+        self = dbe(self)
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
     self['DBE-OC'] = (table['DBE'] - table['O'])/table['C']
 
     return self
@@ -807,7 +807,7 @@ def hc_oc(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
     self['H/C'] = table['H']/table['C']
     self['O/C'] = table['O']/table['C']
 
@@ -826,7 +826,7 @@ def kendrick(self) -> pd.DataFrame:
     """
 
     if 'calc_mass' not in self:
-        self = self.calc_mass()
+        self = calc_mass(self)
 
     self['Ke'] = self['calc_mass'] * 14/14.01565
     self['KMD'] = np.floor(self['calc_mass'].values) - np.array(self['Ke'].values)
@@ -862,7 +862,7 @@ def nosc(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
 
     for element in "CHONS":
         if element not in table:
@@ -896,11 +896,11 @@ def mol_class(self, how: Optional[str] = None) -> pd.DataFrame:
     """
 
     if 'AI' not in self:
-        self = self.ai()
+        self = ai(self)
     if 'H/C' not in self or 'O/C' not in self:
-        self = self.hc_oc()
+        self = hc_oc(self)
 
-    table = self.merge_isotopes()
+    table = merge_isotopes(self)
 
     for element in "CHON":
         if element not in table:
@@ -1008,7 +1008,7 @@ def get_mol_class(self, how_average: str = "weight", how: Optional[str] = None) 
     Perminova I. V. Pure and Applied Chemistry. 2019. Vol. 91, № 5. P. 851-864
     """
 
-    self = drop_unassigned(self).mol_class(how=how)
+    self = mol_class(drop_unassigned(self),how=how)
     count_density = len(self)
     sum_density = self["intensity"].sum()
 
@@ -1091,7 +1091,7 @@ def get_dbe_vs_o(self,
     """
 
     if 'DBE' not in self:
-        self = self.dbe()
+        self = dbe(self)
     
     self = drop_unassigned(self)
     if olim is None:
@@ -1171,7 +1171,7 @@ def get_squares_vk(self,
     """
 
     if 'H/C' not in self or 'O/C' not in self:
-        self = self.hc_oc().drop_unassigned()
+        self = drop_unassigned(hc_oc(self))
 
     d_table = []
     sq = []
@@ -1179,7 +1179,7 @@ def get_squares_vk(self,
     for y in [ (1.8, 2.2), (1.4, 1.8), (1, 1.4), (0.6, 1), (0, 0.6)]:
         hc = []
         for x in  [(0, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1)]:
-            temp = copy.deepcopy(self)
+            temp = self.copy(deep=True)
             temp = temp.loc[(temp['O/C'] >= x[0]) & (temp['O/C'] < x[1]) & (temp['H/C'] >= y[0]) & (temp['H/C'] < y[1])]
 
             if how_average == 'count':
@@ -1233,7 +1233,12 @@ def get_mol_metrics(self,
     pandas DataFrame
     """
 
-    self = self.calc_all_metrics().drop_unassigned().normalize()
+    #self = self.calc_all_metrics().drop_unassigned().normalize()
+    self = normalize(
+        drop_unassigned(
+            calc_all_metrics(self)
+            )
+            )
 
     if metrics is None:
         metrics = set(self.columns) - set(['intensity', 'calc_mass', 'rel_error','abs_error',
@@ -1274,19 +1279,19 @@ def calc_all_metrics(self) -> pd.DataFrame:
     Spectrum
     """
 
-    self = self.calc_mass()
-    self = self.calc_error()
-    self = self.dbe()
-    self = self.dbe_o()
-    self = self.ai()
-    self = self.dbe_oc()
-    self = self.dbe_ai()
-    self = self.mol_class()
-    self = self.hc_oc()
-    self = self.cai()
-    self = self.cram()
-    self = self.nosc()
-    self = self.brutto()
-    self = self.kendrick()
+    self = calc_mass(self)
+    self = calc_error(self)
+    self = dbe(self)
+    self = dbe_o(self)
+    self = ai(self)
+    self = dbe_oc(self)
+    self = dbe_ai(self)
+    self = mol_class(self)
+    self = hc_oc(self)
+    self = cai(self)
+    self = cram(self)
+    self = nosc(self)
+    self = brutto(self)
+    self = kendrick(self)
 
     return self
