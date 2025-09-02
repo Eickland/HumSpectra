@@ -105,13 +105,13 @@ def assign(data: pd.DataFrame,
             generated_bruttos_table = brutto_gen(brutto_dict)
 
         if mass_min is None:
-            mass_min = data['mass'].min()
+            mass_min = data.table['mass'].min()
         if mass_max is None:
-            mass_max = data['mass'].max()
+            mass_max = data.table['mass'].max()
         if intensity_min is None:
-            intensity_min = data['intensity'].min()
+            intensity_min = data.table['intensity'].min()
         if intensity_max is None:
-            intensity_max = data['intensity'].max()
+            intensity_max = data.table['intensity'].max()
         
         if sign == '-':
             mass_shift = - 0.00054858 + 1.007825  # electron and hydrogen mass
@@ -122,6 +122,7 @@ def assign(data: pd.DataFrame,
         else:
             raise Exception('Sended sign to assign method is not correct. May be "+","-","0"')
 
+        data.metadata.add({'sign':sign})
 
         if rel_error is not None:
             rel = True
@@ -133,79 +134,46 @@ def assign(data: pd.DataFrame,
             rel = True
             rel_error = 0.5
 
-        data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
-        table = data.copy()
+        data.table = data.table.loc[:,['mass', 'intensity']].reset_index(drop=True)
+        table = data.table.copy()
 
         masses = generated_bruttos_table["mass"].values
 
         elems = list(generated_bruttos_table.drop(columns=["mass"]))
         bruttos = generated_bruttos_table[elems].values.tolist()
 
-        # 1. Подготовка данных и KD-дерева
-        masses_np = np.array(masses)
-        kdtree = cKDTree(masses_np[:, np.newaxis])  # KD-дерево для быстрого поиска
-        
-        # Преобразуем mass_shifts в массив
-        mass_shifts = np.array([mass_shifts] if isinstance(mass_shifts, (int, float)) else mass_shifts)
-        
-        # 2. Векторизованная фильтрация
-        mask = ((table["mass"] >= mass_min) & (table["mass"] <= mass_max) &
-            (table["intensity"] >= intensity_min) & (table["intensity"] <= intensity_max))
-        filtered_table = table[mask].copy()
-        
-        # 3. Кэшируемая функция для поиска лучшей формулы
-        @lru_cache(maxsize=10000)
-        def find_best_formula_cached(mass, intensity):
-            best = None
-            min_error = float('inf')
+        res = []
+        for index, row in table.iterrows():
+
+            if (row["mass"] < mass_min or 
+                row["mass"] > mass_max or
+                row["intensity"] < intensity_min or 
+                row["intensity"] > intensity_max):
+                res.append({"assign": False})
+                continue 
             
             for charge in range(1, charge_max + 1):
-                for shift in mass_shifts:
-                    adjusted_mass = (mass + shift) * charge
-                    dist, idx = kdtree.query([adjusted_mass], k=3)  # Ищем 3 ближайших
-                    
-                    for i, d in zip(idx[0], dist[0]):
-                        current_error = (d / adjusted_mass * 1e6 / charge) if rel_error else (d * charge)
-                        
-                        if current_error < min_error:
-                            min_error = current_error
-                            best = {
-                                **dict(zip(elems, bruttos[i])),
-                                "assign": True,
-                                "charge": charge,
-                                "mass_shift": shift,
-                                "error": min_error
-                            }
-            
-            if best and ((rel_error and min_error <= rel_error) or (abs_error and min_error <= abs_error)):
-                return best
-            return {"assign": False}
+                mass = (row["mass"] + mass_shift) * charge
+                idx = np.searchsorted(masses, mass, side='left')
+                if idx > 0 and (idx == len(masses) or np.fabs(mass - masses[idx - 1]) < np.fabs(mass - masses[idx])):
+                    idx -= 1
 
-        # 4. Параллельная обработка
-        def process_row(row):
-            # Используем округление для улучшения кэширования
-            rounded_mass = round(row["mass"], 6)
-            rounded_intensity = round(row["intensity"], 2)
-            return find_best_formula_cached(rounded_mass, rounded_intensity)
-        
-        # Прогресс-бар для больших datasets
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(process_row)(row) for _, row in tqdm(filtered_table.iterrows(), total=len(filtered_table)))
-        
-        # 5. Сбор результатов
-        res = []
-        res_idx = 0
-        for _, row in table.iterrows():
-            if mask[_[0]]:  # Проверяем, был ли пик в фильтрованной таблице
-                res.append(results[res_idx])
-                res_idx += 1
+                if rel:
+                    if np.fabs(masses[idx] - mass) / mass * 1e6 <= rel_error/charge:
+                        res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
+                        break
+                else:
+                    if np.fabs(masses[idx] - mass) <= abs_error/charge:
+                        res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
+                        break
             else:
-                res.append({"assign": False})
-        
+                res.append({"assign": False, "charge": 1})
+
+        res = pd.DataFrame(res)
 
         table = table.join(res)
-        data = data.merge(table, how='outer', on=list(data.columns))
-        data['assign'] = data['assign'].fillna(False)
-        data['charge'] = data['charge'].fillna(1)
+        data.table = data.table.merge(table, how='outer', on=list(data.table.columns))
+        data.table['assign'] = data.table['assign'].fillna(False)
+        data.table['charge'] = data.table['charge'].fillna(1)
 
         return data
