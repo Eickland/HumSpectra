@@ -122,7 +122,7 @@ def assign(data: pd.DataFrame,
         else:
             raise Exception('Sended sign to assign method is not correct. May be "+","-","0"')
 
-        data.metadata.add({'sign':sign})
+        data.attrs['sign'] = sign
 
         if rel_error is not None:
             rel = True
