@@ -508,7 +508,7 @@ def _calc_sign(self) -> str:
     str            
     """
 
-    self = self.drop_unassigned()
+    self = drop_unassigned(self)
 
     value = (self["calc_mass"]/self["charge"] - self["mass"]).mean()
     value = np.round(value,4)
@@ -1002,7 +1002,7 @@ def get_mol_class(self, how_average: str = "weight", how: Optional[str] = None) 
     Perminova I. V. Pure and Applied Chemistry. 2019. Vol. 91, № 5. P. 851-864
     """
 
-    self = self.drop_unassigned().mol_class(how=how)
+    self = drop_unassigned(self).mol_class(how=how)
     count_density = len(self)
     sum_density = self["intensity"].sum()
 
@@ -1087,7 +1087,7 @@ def get_dbe_vs_o(self,
     if 'DBE' not in self:
         self = self.dbe()
     
-    self = self.drop_unassigned()
+    self = drop_unassigned(self)
     if olim is None:
         no = list(range(int(self['O'].min())+5, int(self['O'].max())-5))
     else:
