@@ -74,48 +74,28 @@ def cut_spectra(data: DataFrame,
     return cut_data
 
 
-def remove_outliers_and_interpolate(data_ini: DataFrame,
-                                    q=0.995) -> DataFrame:
-    
+def remove_extreme_outliers(data: DataFrame,
+                            quant: float=0.995)-> DataFrame:
+
     """
-    Удаляет экстремальные выбросы из 3D матрицы флуоресценции и интерполирует удаленные значения
-    по ближайшим соседям.  Использует медианный фильтр для обнаружения выбросов.
+    Удаляет экстремальные выбросы из 3D матрицы флуоресценции.
 
     Args:
-        data (np.ndarray): 2D NumPy массив, представляющий матрицу флуоресценции.
-        outlier_threshold (float): Порог для определения выбросов (в единицах стандартного отклонения).
-        median_filter_size (int): Размер ядра медианного фильтра (должен быть нечетным).
+        data (pd.DataFrame): 3D спектр флуоресценции.
+        quant (float): Квантиль для определения выбросов.
 
     Returns:
-        np.ndarray: Матрица с удаленными выбросами и интерполированными значениями.
+        pd.DataFrame: Спектр с удаленными выбросами
     """
-    data = data_ini.to_numpy()
-    index = data_ini.index
-    columns = data_ini.columns
-    # 1. Медианная фильтрация для обнаружения выбросов
-    data[data > np.quantile(data,q)] = np.nan
+    data = data.copy()
 
-    # 4. Интерполяция NaN значений с использованием Rbf
-    x = np.arange(data.shape[1])
-    y = np.arange(data.shape[0])
-    X, Y = np.meshgrid(x, y)  # Создаем сетку координат
+    array = data.to_numpy()
+    index = data.index
+    columns = data.columns
 
-    # Извлекаем координаты известных точек (не NaN)
-    valid_x = X[~np.isnan(data)].ravel()
-    valid_y = Y[~np.isnan(data)].ravel()
-    valid_z = data[~np.isnan(data)].ravel()
+    data[data > np.quantile(data,quant)] = np.nan
 
-    # Создаем функцию Rbf
-    rbfi = Rbf(valid_x, valid_y, valid_z, function='linear') # ('linear', 'gaussian', 'multiquadric')
-
-    # Применяем интерполяцию ко всей сетке
-    interpolated_data = rbfi(X, Y)
-    max_value = np.max(interpolated_data)
-    interpolated_data = interpolated_data/max_value
-    interpolated_data = pd.DataFrame(data=interpolated_data,index=index,columns=columns)
-    return interpolated_data
-
-
+    return data
 
 def plot_heat_map(data: DataFrame,
                   ax: Optional[plt.axes] = None,
