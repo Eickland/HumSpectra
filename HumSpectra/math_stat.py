@@ -61,6 +61,7 @@ def delete_eject_quantile(data: DataFrame,
     return data
 
 def normilize_by_max(data: DataFrame)-> DataFrame:
+
     """
     Нормирует спектр от 0 до 1
 
@@ -70,3 +71,11 @@ def normilize_by_max(data: DataFrame)-> DataFrame:
     Returns:
         pd.DataFrame: Отнормированый спектр
     """
+
+    data = data.copy()
+
+    data = (data-data.min(axis=None))/(data.max()-data.min(axis=None))
+
+    return data
+
+
