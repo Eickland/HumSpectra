@@ -65,7 +65,7 @@ def assign_by_tmds(
 
     #calculstae tmds table
     if tmds_spec is None:
-        tmds_spec = Tmds(spec=spec).calc(p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
+        tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
         tmds_spec = tmds_spec.assign(max_num=max_num, brutto_dict=tmds_brutto_dict)
         tmds_spec = tmds_spec.calc_mass()
 
@@ -114,8 +114,7 @@ def assign_by_tmds(
 
     assign_true = pd.concat([assign_true, assign_false], ignore_index=True).sort_values(by='mass').reset_index(drop=True)
     
-    out = Spectrum(assign_true)
-    out = out.calc_mass()
+    out = spm.calc_mass(out)
 
     out=out[out['calc_mass'].isnull() | ~out[out['calc_mass'].notnull()].duplicated(subset='calc_mass',keep='first')] 
     spec = out.sort_values(by='mass').reset_index(drop=True)
