@@ -1,7 +1,8 @@
 import pandas as pd
 from pandas import DataFrame
+import numpy as np
 
-def delete_eject(data: DataFrame,
+def delete_eject_iqr(data: DataFrame,
                  iqr_param: int = 1.5,
                  level_index: int = 0) -> DataFrame:
     """
@@ -39,3 +40,33 @@ def delete_eject(data: DataFrame,
             data_copy.dropna(inplace=True)
 
     return data_copy
+
+def delete_eject_quantile(data: DataFrame,
+                            quant: float=0.995)-> DataFrame:
+
+    """
+    Удаляет экстремальные выбросы из 3D матрицы флуоресценции.
+
+    Args:
+        data (pd.DataFrame): 3D спектр флуоресценции.
+        quant (float): Квантиль для определения выбросов.
+
+    Returns:
+        pd.DataFrame: Спектр с удаленными выбросами
+    """
+    data = data.copy()
+
+    data[data > np.quantile(data,quant)] = 0
+
+    return data
+
+def normilize_by_max(data: DataFrame)-> DataFrame:
+    """
+    Нормирует спектр от 0 до 1
+
+    Args:
+        data (pd.DataFrame): 3D спектр флуоресценции.
+
+    Returns:
+        pd.DataFrame: Отнормированый спектр
+    """

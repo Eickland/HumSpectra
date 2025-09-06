@@ -74,29 +74,6 @@ def cut_spectra(data: DataFrame,
     return cut_data
 
 
-def remove_extreme_outliers(data: DataFrame,
-                            quant: float=0.995)-> DataFrame:
-
-    """
-    Удаляет экстремальные выбросы из 3D матрицы флуоресценции.
-
-    Args:
-        data (pd.DataFrame): 3D спектр флуоресценции.
-        quant (float): Квантиль для определения выбросов.
-
-    Returns:
-        pd.DataFrame: Спектр с удаленными выбросами
-    """
-    data = data.copy()
-
-    array = data.to_numpy()
-    index = data.index
-    columns = data.columns
-
-    data[data > np.quantile(data,quant)] = np.nan
-
-    return data
-
 def plot_heat_map(data: DataFrame,
                   ax: Optional[plt.axes] = None,
                   xlabel: bool = True,
