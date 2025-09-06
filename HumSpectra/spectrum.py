@@ -46,7 +46,6 @@ def read_mass_list(path: str,
 
     return data
 
-
 def find_elements(self) -> Sequence[str]:
     """ 
     Find elements from columns of mass spectrum table.
@@ -224,7 +223,6 @@ def assign(data: pd.DataFrame,
         data['charge'] = data['charge'].fillna(1)
 
         return data
-
 
 def _copy(func):
     """
@@ -570,7 +568,6 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
     self["rel_error"] = self["abs_error"] / self["mass"] * 1e6
     
     return self
-
 
 @_copy
 def brutto(self) -> pd.DataFrame:
