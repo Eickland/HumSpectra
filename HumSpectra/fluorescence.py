@@ -56,10 +56,10 @@ def fluo_index(data: DataFrame)-> float:
 
 
 def cut_spectra(data: DataFrame,
-                ex_low_limit: int,
-                ex_high_limit: int,
-                em_low_limit: int,
-                em_high_limit: int) -> DataFrame:
+                ex_low_limit: int=None,
+                ex_high_limit: int=None,
+                em_low_limit: int=None,
+                em_high_limit: int=None) -> DataFrame:
     """
     :param data: DataFrame, спектр флуоресценции.
     :param ex_low_limit: int, нижний предел значения длины волны возбуждения спектра
