@@ -74,7 +74,7 @@ def normilize_by_max(data: DataFrame)-> DataFrame:
 
     data = data.copy()
 
-    data = (data-data.min(axis=None))/(data.max()-data.min(axis=None))
+    data = (data-data.min(axis=None))/(data.max(axis=None)-data.min(axis=None))
 
     return data
 
