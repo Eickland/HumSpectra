@@ -66,7 +66,7 @@ def cut_spectra(data: DataFrame,
     :param ex_high_limit: int, верхний предел значения длины волны возбуждения спектра
     :param em_low_limit: int, нижний предел значения длины волны испускания спектра
     :param em_high_limit: int, верхний предел значения длины волны испускания спектра
-    :return: fluo_param: asm 280, показатель асимметрии спектра при длине возбуждения 280 нм
+    :return: cut_data
     Функция обрезает спектр согласно заданным пределам и возвращает копию спектра
     """
     data = data.copy()
@@ -83,7 +83,7 @@ def cut_spectra(data: DataFrame,
     if em_high_limit is None:
         em_high_limit = data.columns.max()
     
-    cut_data = data.loc[em_low_limit:em_high_limit, ex_low_limit:ex_high_limit]
+    cut_data = data.loc[ex_low_limit:ex_high_limit, em_low_limit:em_high_limit]
 
     return cut_data
 
