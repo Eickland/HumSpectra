@@ -6,9 +6,9 @@ from numpy import ndarray
 import scipy.interpolate
 from typing import Optional
 from matplotlib.axes import Axes
-import HumSpectra.utilits as ut
 from scipy.interpolate import Rbf
 
+import HumSpectra.utilits as ut
 
 def asm_350(data: DataFrame) -> float:
     """
@@ -237,7 +237,7 @@ def read_fluo_3d(path: str,
     extension = path.split(sep=".")[-1]
 
     if sep is None and (extension == "csv" or extension == "txt"):
-        sep = check_sep(path)
+        sep = ut.check_sep(path)
 
     try:
 
