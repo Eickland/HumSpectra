@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="HumSpectra",
-    version="0.0.92",
+    version="0.0.93",
     author="Kirill",
     author_email="mnbv21228@mail.ru",
     description="Обработка спектров уф и флуоресценции",
