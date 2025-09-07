@@ -20,8 +20,10 @@ import HumSpectra.utilits as ut
 from HumSpectra.brutto import brutto_gen, elements_table, get_elements_masses
 
 def read_mass_list(path: str,
-                 sep: str = None,
-                 **kwargs) -> pd.DataFrame:
+                map_columns: dict = None,
+                custom_columns_name: bool = False,
+                sep: str = None,
+                **kwargs) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -38,6 +40,10 @@ def read_mass_list(path: str,
         raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
+    
+    if custom_columns_name:
+        data.rename(columns=map_columns,inplace=True)
+
     data.dropna(inplace=True, axis=1)
     data = data.astype("float64")
     name = ut.extract_name_from_path(path)
