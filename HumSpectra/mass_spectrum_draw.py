@@ -42,9 +42,9 @@ def draw_vk(spec: pd.DataFrame,
 
         fig, ax = plt.subplots(1,1,figsize=(6,6))
 
-        ax.xlim([0,1])
-        ax.ylim([0,2.2])
-        ax.title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
+        ax.set_xlim([0,1])
+        ax.set_ylim([0,2.2])
+        ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
 
         sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=(4, 40))
     
