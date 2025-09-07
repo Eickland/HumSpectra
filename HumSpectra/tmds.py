@@ -66,7 +66,7 @@ def assign_by_tmds(
     #calculstae tmds table
     if tmds_spec is None:
         tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
-        tmds_spec = spm.assign(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
+        tmds_spec = assign(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
         tmds_spec = spm.calc_mass(tmds_spec)
 
     #prepare tmds table
@@ -279,7 +279,7 @@ def assign(
         generated_bruttos_table = brutto_gen(brutto_dict, rules=False)
         generated_bruttos_table = generated_bruttos_table.loc[generated_bruttos_table['mass'] > 0]
 
-    res = super().assign(generated_bruttos_table=generated_bruttos_table, abs_error=error, sign='0').drop_unassigned().table
+    res = super().assign(generated_bruttos_table=generated_bruttos_table, abs_error=error, sign='0').drop_unassigned()
 
     if max_num is not None and len(res) > max_num:
         res = res.sort_values(by='intensity', ascending=False).reset_index(drop=True)
