@@ -122,9 +122,6 @@ def assign_by_tmds(
     
     return spec
 
-
-
-
 def calc(
     self: pd.DataFrame,
     other: Optional["pd.DataFrame"] = None,
@@ -288,7 +285,6 @@ def assign(
     
 
     return res
-
 
 if __name__ == '__main__':
     pass
