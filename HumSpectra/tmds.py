@@ -279,7 +279,7 @@ def assign(
         generated_bruttos_table = brutto_gen(brutto_dict, rules=False)
         generated_bruttos_table = generated_bruttos_table.loc[generated_bruttos_table['mass'] > 0]
 
-    res = super().assign(generated_bruttos_table=generated_bruttos_table, abs_error=error, sign='0').drop_unassigned()
+    res = assign(generated_bruttos_table=generated_bruttos_table, abs_error=error, sign='0').drop_unassigned()
 
     if max_num is not None and len(res) > max_num:
         res = res.sort_values(by='intensity', ascending=False).reset_index(drop=True)
