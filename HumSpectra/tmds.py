@@ -65,20 +65,20 @@ def assign_by_tmds(
 
     #calculstae tmds table
     if tmds_spec is None:
-        tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
-        tmds_spec = tmds_spec.assign(max_num=max_num, brutto_dict=tmds_brutto_dict)
-        tmds_spec = tmds_spec.calc_mass()
+        tmds_spec = spm.calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
+        tmds_spec = spm.assign(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
+        tmds_spec = spm.calc_mass(tmds_spec)
 
     #prepare tmds table
     tmds = tmds_spec.sort_values(by='intensity', ascending=False).reset_index(drop=True)
     tmds = tmds.loc[tmds['intensity'] > p].sort_values(by='mass', ascending=True).reset_index(drop=True)
-    elem_tmds = tmds_spec.find_elements()
+    elem_tmds = spm.find_elements(tmds_spec)
 
     #prepare spec table
     assign_false = copy.deepcopy(spec.loc[spec['assign'] == False]).reset_index(drop=True)
     assign_true = copy.deepcopy(spec.loc[spec['assign'] == True]).reset_index(drop=True)
     masses = assign_true['mass'].values
-    elem_spec = spec.find_elements()
+    elem_spec = spm.find_elements(spec)
     
     
     #Check that all elements in tmds also in spec
@@ -119,7 +119,6 @@ def assign_by_tmds(
     out=out[out['calc_mass'].isnull() | ~out[out['calc_mass'].notnull()].duplicated(subset='calc_mass',keep='first')] 
     spec = out.sort_values(by='mass').reset_index(drop=True)
 
-    spec.metadata.add({'assigned_by_tmds':True})
     
     return spec
 
