@@ -65,7 +65,7 @@ def assign_by_tmds(
 
     #calculstae tmds table
     if tmds_spec is None:
-        tmds_spec = spm.calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
+        tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
         tmds_spec = spm.assign(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
         tmds_spec = spm.calc_mass(tmds_spec)
 
