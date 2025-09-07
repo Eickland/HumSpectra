@@ -114,7 +114,7 @@ def assign_by_tmds(
 
     assign_true = pd.concat([assign_true, assign_false], ignore_index=True).sort_values(by='mass').reset_index(drop=True)
     
-    out = spm.calc_mass(out)
+    out = spm.calc_mass(assign_true)
 
     out=out[out['calc_mass'].isnull() | ~out[out['calc_mass'].notnull()].duplicated(subset='calc_mass',keep='first')] 
     spec = out.sort_values(by='mass').reset_index(drop=True)
