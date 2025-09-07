@@ -17,9 +17,6 @@ def ChooseColor(row):
     elif row["N"] != 0:
         return "orange"
     
-    elif row["P"] != 0:
-        return "purple"
-    
     else:
         return "blue"
     
