@@ -44,6 +44,8 @@ def read_mass_list(path: str,
     if custom_columns_name:
         data.rename(columns=map_columns,inplace=True)
 
+        data = data[["mass","intensity"]]
+
     data.dropna(inplace=True, axis=1)
     data = data.astype("float64")
     name = ut.extract_name_from_path(path)
