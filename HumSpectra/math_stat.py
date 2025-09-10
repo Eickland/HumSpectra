@@ -3,14 +3,13 @@ from pandas import DataFrame
 import numpy as np
 
 def delete_eject_iqr(data: DataFrame,
-                 iqr_param: int = 1.5,
+                 iqr_param: float = 1.5,
                  level_index: int = 0) -> DataFrame:
     """
     :param data: DataFrame
     :param iqr_param: Межквартильный множитель
     :param level_index: Уровень индекса, по которому данные группируются и удаляются выбросы
     :return: Отфильтргованная таблица
-    Функция приписывает имя, класс и подкласс (если не игнорируется) спектру
     """
     data_copy = data.copy()
 
