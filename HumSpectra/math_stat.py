@@ -4,7 +4,8 @@ import numpy as np
 
 def delete_eject_iqr(data: DataFrame,
                  iqr_param: float = 1.5,
-                 level_index: int = 0) -> DataFrame:
+                 level_index: int = 0,
+                 multi_index: bool = False) -> DataFrame:
     """
     :param data: DataFrame
     :param iqr_param: Межквартильный множитель
@@ -14,31 +15,55 @@ def delete_eject_iqr(data: DataFrame,
     data_copy = data.copy()
 
     descriptor_list = data_copy.columns
-    class_list = data_copy.index.unique(level=level_index)
 
-    for descriptor in descriptor_list:
+    if multi_index:
 
-        for gen_class in class_list:
+        class_list = data_copy.index.unique(level=level_index)
 
-            data_iqr = data_copy.loc[gen_class]
+        for descriptor in descriptor_list:
 
-            if data_iqr.shape[0] < 5:
-                continue
+            for gen_class in class_list:
 
-            q1 = data_iqr[descriptor].quantile(0.25)
-            q3 = data_iqr[descriptor].quantile(0.75)
-            iqr = q3 - q1
+                data_iqr = data_copy.loc[gen_class]
 
-            data_iqr = data_iqr[(data_iqr[descriptor] < q3 + iqr_param * iqr)]
-            data_iqr = data_iqr[(data_iqr[descriptor] > q1 - iqr_param * iqr)]
+                if data_iqr.shape[0] < 5:
+                    continue
 
-            data_iqr = pd.concat({gen_class: data_iqr}, names=['Класс'])
+                q1 = data_iqr[descriptor].quantile(0.25)
+                q3 = data_iqr[descriptor].quantile(0.75)
+                iqr = q3 - q1
 
-            data_copy.loc[gen_class] = data_iqr
-            
-            data_copy.dropna(inplace=True)
+                data_iqr = data_iqr[(data_iqr[descriptor] < q3 + iqr_param * iqr)]
+                data_iqr = data_iqr[(data_iqr[descriptor] > q1 - iqr_param * iqr)]
 
-    return data_copy
+                data_iqr = pd.concat({gen_class: data_iqr}, names=['Класс'])
+
+                data_copy.loc[gen_class] = data_iqr
+                
+                data_copy.dropna(inplace=True)
+
+        return data_copy
+    
+    else:
+
+        for descriptor in descriptor_list:
+
+                data_iqr = data_copy
+
+                if data_iqr.shape[0] < 5:
+                    continue
+
+                q1 = data_iqr[descriptor].quantile(0.25)
+                q3 = data_iqr[descriptor].quantile(0.75)
+                iqr = q3 - q1
+
+                data_iqr = data_iqr[(data_iqr[descriptor] < q3 + iqr_param * iqr)]
+                data_iqr = data_iqr[(data_iqr[descriptor] > q1 - iqr_param * iqr)]
+                
+                data_copy.dropna(inplace=True)
+
+        return data_copy
+
 
 def delete_eject_quantile(data: DataFrame,
                             quant: float=0.995)-> DataFrame:
