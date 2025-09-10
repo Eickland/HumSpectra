@@ -107,7 +107,7 @@ def _merge_isotopes(gdf: pd.DataFrame) -> pd.DataFrame:
     pandas Dataframe    
     """
 
-    for el in gdf:
+    for el in gdf.columns:
         res = el.split('_')
         if len(res) == 2:
             if res[0] not in gdf:
@@ -117,7 +117,7 @@ def _merge_isotopes(gdf: pd.DataFrame) -> pd.DataFrame:
 
     return gdf
 
-def get_elements_masses(elems: Sequence[str]) -> np.array :
+def get_elements_masses(elems: Sequence[str]) -> np.ndarray :
     """
     Get elements masses from list
 
@@ -158,11 +158,11 @@ def gen_from_brutto(table: pd.DataFrame) -> pd.DataFrame:
     pandas DataFrame
         Dataframe with elements and masses
     """
-    masses = get_elements_masses(table.columns)
+    masses = get_elements_masses(table.columns.to_list())
 
     table["calc_mass"] = table.multiply(masses).sum(axis=1)
     table["calc_mass"] = np.round(table["calc_mass"], 6)
-    table.loc[table["calc_mass"] == 0, "calc_mass"] = np.NaN
+    table.loc[table["calc_mass"] == 0, "calc_mass"] = np.nan
 
     return table
 

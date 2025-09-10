@@ -4,6 +4,8 @@ import pandas as pd
 from pandas import DataFrame
 from typing import Optional
 from matplotlib.axes import Axes
+from matplotlib.artist import Artist
+from typing import Union
 
 from HumSpectra import utilits as ut
 
@@ -54,7 +56,7 @@ def e2_e3(data: DataFrame,
     index_265 = series.sub(265).abs().idxmin()
     index_365 = series.sub(365).abs().idxmin()
     uv_param = data.loc[index_265] / data.loc[index_365]
-    uv_param = float(uv_param.iloc[0])
+    uv_param = float(uv_param.iloc[0].item())
 
     return uv_param
 
@@ -74,7 +76,7 @@ def e4_e6(data: DataFrame,
     index_465 = series.sub(465).abs().idxmin()
     index_665 = series.sub(665).abs().idxmin()
     uv_param = data.loc[index_465] / data.loc[index_665]
-    uv_param = float(uv_param.iloc[0])
+    uv_param = float(uv_param.iloc[0].item())
 
     return uv_param
 
@@ -94,7 +96,7 @@ def epsilon(data: DataFrame,
     
     series = pd.Series(data.index, index=data.index)
     index_254 = series.sub(wave).abs().idxmin()
-    uv_param = data.loc[index_254].iloc[0]
+    uv_param = data.loc[index_254].iloc[0].item()
 
     return uv_param
 
@@ -151,8 +153,8 @@ def plot_uv(data: DataFrame,
             ylabel: bool = True,
             title: bool = True,
             norm_by_TOC: bool = False,
-            ax: Optional[plt.axes] = None,
-            name:str = None) -> Axes:
+            ax: Union[Axes, None] = None,
+            name:Optional[str] = None) -> Axes:
     """
     :param data: DataFrame, уф спектр
     :return: ax: Axes, ось графика matplotlib.pyplot
@@ -177,7 +179,7 @@ def plot_uv(data: DataFrame,
     ax.plot(data_copy.index, data_copy[data_copy.columns[0]], label = name)
 
     if title:
-            ax.set_title(name)
+            ax.set_title(str(name))
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
@@ -189,7 +191,7 @@ def plot_uv(data: DataFrame,
     return ax
 
 def read_csv_uv(path: str,
-            sep: str = None,
+            sep: str = "",
             index_col: int = 0,
             ignore_name: bool = False,
             baseline: bool = True) -> DataFrame:
@@ -204,7 +206,7 @@ def read_csv_uv(path: str,
     """
     file_type = ut.check_file_type(path)
 
-    if sep is None and file_type == "csv_type" :
+    if sep == "" and file_type == "csv_type" :
         sep = ut.check_sep(path)
 
     try:
@@ -231,7 +233,7 @@ def read_csv_uv(path: str,
     return data
     
 def read_excel_uv(path: str,
-        sep: str = None,
+        sep: str = "",
         index_col: int = 0,
         ignore_name: bool = False,
         baseline: bool = True) -> DataFrame | list:
@@ -258,6 +260,8 @@ def read_excel_uv(path: str,
 
     if file_type == "excel_single":
 
+        data = pd.read_excel(path, index_col= index_col)
+
         data = standart_uv_formatting(data)
         data.sort_index(inplace=True)
 
@@ -283,7 +287,7 @@ def read_excel_uv(path: str,
             data = standart_uv_formatting(data)
             data.sort_index(inplace=True)
 
-            name = list_sheet_names[i]
+            name = str(list_sheet_names[i])
             data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
             if baseline and (data.attrs['spectra_type'] == "absorption"):
@@ -294,6 +298,9 @@ def read_excel_uv(path: str,
             i += 1
 
         return data_list
+    
+    else:
+        return pd.DataFrame()
 
 def standart_uv_formatting(data: DataFrame)-> DataFrame:
     """
@@ -328,5 +335,8 @@ def check_uv_spectra_type(data: DataFrame)-> str:
 
     elif "R%" in column_name:
         uv_spectra_type = "reflection"
+
+    else:
+        raise KeyError("Недопустимый тип спектра")
 
     return uv_spectra_type

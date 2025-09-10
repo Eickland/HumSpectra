@@ -158,6 +158,9 @@ def check_file_type(path: str) -> str:
 
         elif sheet_num > 1:
             file_type = "excel_many"
+
+        else:
+            raise ValueError("Неизвестная ошибка")
     
     else:
         raise ValueError("Тип файла не поддерживается")

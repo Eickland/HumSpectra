@@ -88,6 +88,7 @@ def assign_by_tmds(
         tmds[i] = 0
 
     mass_dif_num = len(tmds)
+    masses = np.array(masses)
     min_mass = np.min(masses)
 
     for i, row_tmds in tqdm(tmds.iterrows(), total=mass_dif_num):
@@ -95,6 +96,7 @@ def assign_by_tmds(
         mass_shift = - row_tmds['calc_mass']
         
         for index, row in assign_false.iterrows():
+
             if row['assign'] == True:
                 continue
                     
@@ -107,10 +109,10 @@ def assign_by_tmds(
                 idx -= 1
                 
             if np.fabs(masses[idx] - mass) / mass * 1e6 <= rel_error:
-                assign_false.loc[index,'assign'] = True
+                assign_false.loc[pd.Index([index]),'assign'] = True
 
                 for el in elem_spec:
-                    assign_false.loc[index,el] = row_tmds[el] + assign_true.loc[idx,el]
+                    assign_false.loc[pd.Index([index]),el] = row_tmds[el] + assign_true.loc[idx,el]
 
     assign_true = pd.concat([assign_true, assign_false], ignore_index=True).sort_values(by='mass').reset_index(drop=True)
     
@@ -273,7 +275,7 @@ def assign(
         brutto_dict = {'C':(-1,20),'H':(-4,40), 'O':(-1,20),'N':(-1,2)}
 
     if generated_bruttos_table is None:
-        generated_bruttos_table = brutto_gen(brutto_dict, rules=False)
+        generated_bruttos_table = brutto_gen(brutto_dict, rules=False) # type: ignore
         generated_bruttos_table = generated_bruttos_table.loc[generated_bruttos_table['mass'] > 0]
 
     res = spm.drop_unassigned(spm.assign(self,generated_bruttos_table=generated_bruttos_table, abs_error=error, sign='0'))
