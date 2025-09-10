@@ -59,9 +59,9 @@ def humin_index(data: DataFrame)-> float:
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: humin_index, Функция рассчитывает отношение интеграла длины волны испускания от 435 до 480 нм к интегралу от 300 до 345 нм при длине возбуждения 254 нм.
     """
-    row = data[254].to_numpy()
+    row = data[255].to_numpy()
     EM_wavelengths = data.index.to_numpy(dtype="int")
-    spline = cut_raman_spline(EM_wavelengths, row, 254)
+    spline = cut_raman_spline(EM_wavelengths, row, 255)
     high = np.trapezoid(spline[np.where(EM_wavelengths == 435)[0][0]:np.where(EM_wavelengths == 480)[0][0]])
     low = np.trapezoid(spline[np.where(EM_wavelengths == 300)[0][0]:np.where(EM_wavelengths == 345)[0][0]])
     fluo_param = high / low
