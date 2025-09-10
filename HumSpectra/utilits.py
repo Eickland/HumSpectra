@@ -23,7 +23,7 @@ def extract_and_combine_digits_re(text: str) -> int:
 
 
 def extract_name_from_path(file_path: str) -> str:
-    """Извлекает имя файла (без расширения) из пути.
+    r"""Извлекает имя файла (без расширения) из пути.
 
     Поддерживает разные разделители каталогов (/, \, //).
 
