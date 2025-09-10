@@ -6,7 +6,7 @@ from numpy import ndarray
 import scipy.interpolate
 from typing import Optional
 from matplotlib.axes import Axes
-from scipy.interpolate import Rbf
+from typing import Union
 
 import HumSpectra.utilits as ut
 
@@ -56,10 +56,10 @@ def fluo_index(data: DataFrame)-> float:
 
 
 def cut_spectra(data: DataFrame,
-                ex_low_limit: int=None,
-                ex_high_limit: int=None,
-                em_low_limit: int=None,
-                em_high_limit: int=None) -> DataFrame:
+                ex_low_limit: int | None=None,
+                ex_high_limit: int | None = None,
+                em_low_limit: int | None = None,
+                em_high_limit: int | None = None) -> DataFrame:
     """
     :param data: DataFrame, спектр флуоресценции.
     :param ex_low_limit: int, нижний предел значения длины волны возбуждения спектра
@@ -89,7 +89,7 @@ def cut_spectra(data: DataFrame,
 
 
 def plot_heat_map(data: DataFrame,
-                  ax: Optional[plt.axes] = None,
+                  ax: Union[Axes, None] = None,
                   xlabel: bool = True,
                   ylabel: bool = True,
                   title: bool = True) -> Axes:
@@ -122,7 +122,7 @@ def plot_2d(data: DataFrame,
             xlabel: bool = True,
             ylabel: bool = True,
             title: bool = True,
-            ax: Optional[plt.axes] = None,
+            ax: Union[Axes, None] = None,
             norm: bool = False) -> Axes:
     """
     :param data: DataFrame, спектр флуоресценции
@@ -190,11 +190,11 @@ def cut_raman_spline(em_wvs: ndarray,
     res = cut_peak_spline(em_wvs, fl,
                           peak_position=where_is_raman(exc_wv, omega=raman_freq),
                           peak_half_width=raman_hwhm, points_in_spline=points_in_spline)
-    return res[-1](em_wvs)
+    return np.array(res[-1](em_wvs))
 
 
 def read_fluo_3d(path: str,
-                 sep: str = None,
+                 sep: str | None = None,
                  index_col: int = 0) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
@@ -213,10 +213,13 @@ def read_fluo_3d(path: str,
     try:
 
         if extension == "xlsx":
-            data = pd.read_excel(path, sep=sep, index_col=index_col)
+            data = pd.read_excel(path, index_col=index_col)
 
-        if extension == "csv" or extension == "txt":
+        elif extension == "csv" or extension == "txt":
             data = pd.read_csv(path, sep=sep, index_col=index_col)
+
+        else:
+            raise KeyError("Тип данных не поддерживается")
 
 
     except FileNotFoundError:

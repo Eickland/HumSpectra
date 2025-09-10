@@ -4,7 +4,6 @@ import pandas as pd
 from pandas import DataFrame
 from typing import Optional
 from matplotlib.axes import Axes
-from matplotlib.artist import Artist
 from typing import Union
 
 from HumSpectra import utilits as ut
