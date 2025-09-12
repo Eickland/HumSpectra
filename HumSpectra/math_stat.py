@@ -1,6 +1,8 @@
 import pandas as pd
 from pandas import DataFrame
 import numpy as np
+from scipy import stats
+
 
 def delete_eject_iqr(data: DataFrame,
                  iqr_param: float = 1.5,
@@ -102,4 +104,161 @@ def normilize_by_max(data: DataFrame)-> DataFrame:
 
     return data
 
+def get_strong_correlations(corr_matrix: pd.DataFrame, 
+                            threshold: float = 0.8, 
+                            include_negative: bool = True,
+                            exclude_diagonal: bool = True):
+    """
+    Извлекает самые сильные корреляции из матрицы корреляций (DataFrame.corr()).
+    
+    Parameters:
+    -----------
+    corr_matrix : pandas.DataFrame
+        Матрица корреляций, полученная методом .corr()
+    threshold : float, default=0.7
+        Пороговое значение для отбора сильных корреляций
+    include_negative : bool, default=True
+        Включать ли отрицательные корреляции
+    exclude_diagonal : bool, default=True
+        Исключать ли диагональные элементы (корреляция переменной с самой собой)
+    
+    Returns:
+    --------
+    pandas.DataFrame
+        Таблица с самыми сильными корреляциями
+    """
+    # Создаем копию матрицы корреляций
+    corr_df = corr_matrix.copy()
+    
+    # Исключаем диагональные элементы, если нужно
+    if exclude_diagonal:
+        np.fill_diagonal(corr_df.values, np.nan)
+    
+    # Преобразуем матрицу в длинный формат
+    corr_stacked = corr_df.stack().reset_index()
+    corr_stacked.columns = ['Variable1', 'Variable2', 'Correlation']
+    
+    # Фильтруем по пороговому значению
+    if include_negative:
+        mask = (corr_stacked['Correlation'].abs() >= threshold)
+    else:
+        mask = (corr_stacked['Correlation'] >= threshold)
+    
+    strong_correlations = corr_stacked[mask].copy()
+    
+    # Удаляем дубликаты (корреляция A-B и B-A)
+    strong_correlations['Pair'] = strong_correlations.apply(
+        lambda x: tuple(sorted([x['Variable1'], x['Variable2']])), axis=1
+    )
+    strong_correlations = strong_correlations.drop_duplicates('Pair').drop('Pair', axis=1)
+    
+    # Сортируем по абсолютному значению корреляции
+    strong_correlations['Abs_Correlation'] = strong_correlations['Correlation'].abs()
+    strong_correlations = strong_correlations.sort_values('Abs_Correlation', ascending=False)
+    strong_correlations = strong_correlations.drop('Abs_Correlation', axis=1)
+    
+    # Сбрасываем индекс
+    strong_correlations = strong_correlations.reset_index(drop=True)
+    
+    return strong_correlations
 
+def get_top_correlations(corr_matrix: pd.DataFrame,
+                         n: int = 10,
+                         include_negative: bool = True,
+                         exclude_diagonal: bool = True):
+    """
+    Возвращает топ N самых сильных корреляций.
+    
+    Parameters:
+    -----------
+    corr_matrix : pandas.DataFrame
+        Матрица корреляций
+    n : int, default=10
+        Количество возвращаемых корреляций
+    include_negative : bool, default=True
+        Включать ли отрицательные корреляции
+    exclude_diagonal : bool, default=True
+        Исключать ли диагональные элементы
+    """
+    # Создаем копию матрицы корреляций
+    corr_df = corr_matrix.copy()
+    
+    # Исключаем диагональные элементы, если нужно
+    if exclude_diagonal:
+        np.fill_diagonal(corr_df.values, np.nan)
+    
+    # Преобразуем матрицу в длинный формат
+    corr_stacked = corr_df.stack().reset_index()
+    corr_stacked.columns = ['Variable 1', 'Variable 2', 'Correlation']
+    
+    # Создаем столбец с абсолютным значением
+    corr_stacked['Abs_Correlation'] = corr_stacked['Correlation'].abs()
+    
+    # Фильтруем отрицательные корреляции, если нужно
+    if not include_negative:
+        corr_stacked = corr_stacked[corr_stacked['Correlation'] >= 0]
+    
+    # Удаляем дубликаты
+    corr_stacked['Pair'] = corr_stacked.apply(
+        lambda x: tuple(sorted([x['Variable 1'], x['Variable 2']])), axis=1
+    )
+    corr_stacked = corr_stacked.drop_duplicates('Pair').drop('Pair', axis=1)
+    
+    # Сортируем и берем топ N
+    top_correlations = corr_stacked.sort_values('Abs_Correlation', ascending=False).head(n)
+    top_correlations = top_correlations.drop('Abs_Correlation', axis=1)
+    top_correlations = top_correlations.reset_index(drop=True)
+    
+    return top_correlations
+
+def check_normality(df, alpha=0.05):
+    """
+    Проверяет нормальность распределения для всех числовых столбцов DataFrame.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        Входной DataFrame
+    alpha : float, default=0.05
+        Уровень значимости
+        
+    Returns:
+    --------
+    pandas.DataFrame с результатами тестов
+    """
+    results = []
+    
+    for column in df.select_dtypes(include=[np.number]).columns:
+        data = df[column].dropna()
+        
+        # Тест Шапиро-Уилка (для n < 5000)
+        if len(data) < 5000:
+            stat_sw, p_sw = stats.shapiro(data)
+            normal_sw = p_sw > alpha
+        else:
+            stat_sw, p_sw = np.nan, np.nan
+            normal_sw = np.nan
+        
+        # Тест нормальности Д'Агостино K^2
+        stat_da, p_da = stats.normaltest(data)
+        normal_da = p_da > alpha
+        
+        # Тест Андерсона-Дарлинга
+        result_ad = stats.anderson(data, dist='norm')
+        critical_value = result_ad.critical_values[2]  # для alpha=0.05
+        normal_ad = result_ad.statistic < critical_value
+        
+        results.append({
+            'Column': column,
+            'Shapiro-Wilk_Stat': stat_sw,
+            'Shapiro-Wilk_p': p_sw,
+            'Shapiro-Wilk_Normal': normal_sw,
+            'D_Agostino_Stat': stat_da,
+            'D_Agostino_p': p_da,
+            'D_Agostino_Normal': normal_da,
+            'Anderson-Darling_Stat': result_ad.statistic,
+            'Anderson-Darling_Normal': normal_ad,
+            'Sample_Size': len(data)
+        })
+    
+    return pd.DataFrame(results)
