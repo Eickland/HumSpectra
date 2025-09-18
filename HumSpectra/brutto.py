@@ -1,4 +1,4 @@
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Hashable, Any, Dict, Tuple
 from functools import wraps
 import numpy as np
 import pandas as pd
@@ -18,9 +18,25 @@ def _freeze(func):
         return func(*args, **kwargs)
     return wrapped
 
+def _process_elems(elems: Any) -> Dict[str, Tuple[int, int]]:
+    """
+    Преобразует входные данные в рабочий dict
+    """
+
+    if elems is None:
+        return {'C':(4, 51),'H':(4, 101),'O':(0,26), 'N':(0,4), 'S':(0,3)}
+    elif isinstance(elems, frozendict):
+        return dict(elems)
+    elif isinstance(elems, dict):
+        return elems
+    else:
+        raise TypeError(f"Expected dict, frozendict or None, got {type(elems)}")
+
+
+
 @_freeze
 @lru_cache(maxsize=None)
-def brutto_gen(elems: Optional[dict] = None, rules: bool = True) -> pd.DataFrame:
+def brutto_gen(elems: Optional[Dict[str, Tuple[int, int]]] = None, rules: bool = True) -> pd.DataFrame:
     """
     Generete brutto formula dataframe
 
@@ -41,15 +57,14 @@ def brutto_gen(elems: Optional[dict] = None, rules: bool = True) -> pd.DataFrame
         Dataframe with masses for elements content
     """
 
-    if elems is None:
-        elems = {'C':(4, 51),'H':(4, 101),'O':(0,26), 'N':(0,4), 'S':(0,3)}
+    working_elems = _process_elems(elems)
 
     #load elements table. Generatete in mass folder
     elems_mass_table = elements_table()
     elems_arr = []
     elems_dict = {}
-    for el in elems:
-        elems_arr.append(np.array(range(elems[el][0],elems[el][1])))
+    for el in working_elems:
+        elems_arr.append(np.array(range(working_elems[el][0],working_elems[el][1])))
         if '_' not in el:
             temp = elems_mass_table.loc[elems_mass_table['element']==el].sort_values(by='abundance',ascending=False).reset_index(drop=True)
             elems_dict[el] = temp.loc[0,'mass']

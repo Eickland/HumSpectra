@@ -2,7 +2,8 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from scipy import stats
-
+from typing import Any, Dict
+import warnings
 
 def delete_eject_iqr(data: DataFrame,
                  iqr_param: float = 1.5,
@@ -245,8 +246,18 @@ def check_normality(df, alpha=0.05):
         
         # Тест Андерсона-Дарлинга
         result_ad = stats.anderson(data, dist='norm')
-        critical_value = result_ad.critical_values[2]  # для alpha=0.05
-        normal_ad = result_ad.statistic < critical_value
+
+        # Подавление предупреждений типа
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            
+            result: Any = stats.anderson(data, dist='norm')
+            
+            # Безопасное извлечение critical_values
+            critical_values = getattr(result, 'critical_values', [])
+            statistic = getattr(result, 'statistic', float('nan'))
+        
+        normal_ad = statistic < critical_values # type: ignore
         
         results.append({
             'Column': column,
@@ -256,7 +267,7 @@ def check_normality(df, alpha=0.05):
             'D_Agostino_Stat': stat_da,
             'D_Agostino_p': p_da,
             'D_Agostino_Normal': normal_da,
-            'Anderson-Darling_Stat': result_ad.statistic,
+            'Anderson-Darling_Stat': statistic,
             'Anderson-Darling_Normal': normal_ad,
             'Sample_Size': len(data)
         })

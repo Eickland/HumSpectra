@@ -1,28 +1,20 @@
-from pathlib import Path
-import os
-from typing import Callable, Dict, Sequence, Union, Optional, Mapping, Tuple
+from typing import Callable, Dict, Sequence, Union, Optional, Mapping, Tuple, Any
 from functools import wraps
 import copy
-import json
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from scipy import spatial
 from scipy.optimize import curve_fit
-from scipy.spatial import cKDTree
-from functools import lru_cache
-from joblib import Parallel, delayed
-from tqdm import tqdm
-
+from matplotlib.axes import Axes
 
 import HumSpectra.utilits as ut
 from HumSpectra.brutto import brutto_gen, elements_table, get_elements_masses
 
 def read_mass_list(path: str,
-                map_columns: dict = None,
+                map_columns: dict|None = None,
                 custom_columns_name: bool = False,
-                sep: str = None,
+                sep: str|None = None,
                 **kwargs) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
@@ -76,7 +68,7 @@ def find_elements(self) -> Sequence[str]:
             elems.append(col)
 
     if len(elems) == 0:
-        elems = None
+        elems = ""
 
     self.attrs['elems'] = elems
 
@@ -102,10 +94,10 @@ def _mark_assigned_by_brutto(self) -> None:
     self['assign'] = assign
 
 def assign(data: pd.DataFrame,
-            brutto_dict: Optional[dict] = None,
+            brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
-            rel_error: Optional[float] = None,
-            abs_error: Optional[float] = None,
+            rel_error: float = 0.5,
+            abs_error: float = 100.0,
             sign: str ='-',
             mass_min: Optional[float] =  None,
             mass_max: Optional[float] = None,
@@ -178,20 +170,20 @@ def assign(data: pd.DataFrame,
 
         data.attrs['sign'] = sign
 
-        if rel_error is not None:
-            rel = True
-        if abs_error is not None:
-            rel = False
         if rel_error is not None and abs_error is not None:
             raise Exception('one of rel_error or abs_error must be None in assign method')
-        if rel_error is None and abs_error is None:
+        
+        if rel_error is not None:
             rel = True
-            rel_error = 0.5
+        elif abs_error is not None:
+            rel = False
+        else:
+            rel = True
 
         data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
         table = data.copy()
 
-        masses = generated_bruttos_table["mass"].values
+        masses = np.array(generated_bruttos_table["mass"].values)
 
         elems = list(generated_bruttos_table.drop(columns=["mass"]))
         bruttos = generated_bruttos_table[elems].values.tolist()
@@ -675,7 +667,7 @@ def ai(self) -> pd.DataFrame:
 
     self["AI"] = self["DBE_AI"] / self["CAI"]
 
-    clear  = self["AI"].values[np.isfinite(self["AI"].values)]
+    clear  = self["AI"].values[np.isfinite(self["AI"].values.astype('float'))].astype('float')
     self['AI'] = self['AI'].replace(-np.inf, np.min(clear))
     self['AI'] = self['AI'].replace(np.inf, np.max(clear))
     self['AI'] = self['AI'].replace(np.nan, np.mean(clear))
@@ -834,7 +826,7 @@ def kendrick(self) -> pd.DataFrame:
         self = calc_mass(self)
 
     self['Ke'] = self['calc_mass'] * 14/14.01565
-    self['KMD'] = np.floor(self['calc_mass'].values) - np.array(self['Ke'].values)
+    self['KMD'] = np.floor(self['calc_mass'].values.astype('float')) - np.array(self['Ke'].values)
     self.loc[self['KMD']<=0, 'KMD'] = self.loc[self['KMD']<=0, 'KMD'] + 1
 
     return self
@@ -1066,7 +1058,7 @@ def get_mol_class(self, how_average: str = "weight", how: Optional[str] = None) 
 def get_dbe_vs_o(self, 
                     olim: Optional[Tuple[int, int]] = None, 
                     draw: bool = True, 
-                    ax: Optional[plt.axes] = None, 
+                    ax: Union[Axes, None] = None, 
                     **kwargs) -> Tuple[float, float]:
     """
     Calculate DBE vs nO by linear fit
@@ -1140,7 +1132,7 @@ def get_dbe_vs_o(self,
 @_copy
 def get_squares_vk(self,
                     how_average: str = 'weight',
-                    ax: Optional[plt.axes] = None, 
+                    ax: Union[Axes, None] = None, 
                     draw: bool = False) -> pd.DataFrame:
     """
     Calculate density in Van Krevelen diagram divided into 20 squares
@@ -1220,7 +1212,7 @@ def get_squares_vk(self,
 
 @_copy
 def get_mol_metrics(self, 
-                    metrics: Optional[Sequence[str]] = None, 
+                    metrics: set[str], 
                     func: Optional[str] = None) -> pd.DataFrame:
     """
     Get average metrics
@@ -1250,7 +1242,7 @@ def get_mol_metrics(self,
                                                 'assign', 'charge', 'class', 'brutto', 'Ke', 'KMD'])
 
     res = []
-    metrics = np.sort(np.array(list(metrics)))
+    sorted_metrics = np.sort(np.array(list(metrics)))
 
     if func is None:
         func = 'weight'
@@ -1266,7 +1258,7 @@ def get_mol_metrics(self,
     else:
         f = func_dict[func]
 
-    for col in metrics:
+    for col in sorted_metrics:
         try:
             res.append([col, f(col)])
         except:

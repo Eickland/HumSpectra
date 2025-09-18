@@ -86,10 +86,10 @@ def cut_spectra(data: DataFrame,
     data = data.copy()
     
     if ex_low_limit is None:
-        ex_low_limit = data.columns.min()
+        ex_low_limit = int(data.columns.min())
 
     if ex_high_limit is None:
-        ex_high_limit = data.columns.max()
+        ex_high_limit = int(data.columns.max())
     
     if em_low_limit is None:
         em_low_limit = data.index.min()
