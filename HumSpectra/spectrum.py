@@ -96,8 +96,8 @@ def _mark_assigned_by_brutto(self) -> None:
 def assign(data: pd.DataFrame,
             brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
-            rel_error: float = 0.5,
-            abs_error: float = 100.0,
+            rel_error: float|None = None,
+            abs_error: float|None = None,
             sign: str ='-',
             mass_min: Optional[float] =  None,
             mass_max: Optional[float] = None,
@@ -205,11 +205,11 @@ def assign(data: pd.DataFrame,
                     idx -= 1
 
                 if rel:
-                    if np.fabs(masses[idx] - mass) / mass * 1e6 <= rel_error/charge:
+                    if np.fabs(masses[idx] - mass) / mass * 1e6 <= rel_error/charge: # type: ignore
                         res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
                         break
                 else:
-                    if np.fabs(masses[idx] - mass) <= abs_error/charge:
+                    if np.fabs(masses[idx] - mass) <= abs_error/charge: # type: ignore
                         res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
                         break
             else:

@@ -4,6 +4,8 @@ import numpy as np
 from scipy import stats
 from typing import Any, Dict
 import warnings
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 def delete_eject_iqr(data: DataFrame,
                  iqr_param: float = 1.5,
@@ -66,7 +68,6 @@ def delete_eject_iqr(data: DataFrame,
                 data_copy.dropna(inplace=True)
 
         return data_copy
-
 
 def delete_eject_quantile(data: DataFrame,
                             quant: float=0.995)-> DataFrame:
@@ -213,6 +214,7 @@ def get_top_correlations(corr_matrix: pd.DataFrame,
     return top_correlations
 
 def check_normality(df, alpha=0.05):
+
     """
     Проверяет нормальность распределения для всех числовых столбцов DataFrame.
     
@@ -273,3 +275,36 @@ def check_normality(df, alpha=0.05):
         })
     
     return pd.DataFrame(results)
+
+def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(10, 8)):
+    """
+    Визуализирует сильные корреляции.
+    """
+    strong_corr = get_strong_correlations(corr_matrix, threshold)
+    
+    if len(strong_corr) == 0:
+        print("Нет сильных корреляций выше порога")
+        return
+    
+    plt.figure(figsize=figsize)
+    colors = ['red' if x < 0 else 'blue' for x in strong_corr['Correlation']]
+    bars = plt.barh(range(len(strong_corr)), strong_corr['Correlation'], color=colors)
+    
+    plt.yticks(range(len(strong_corr)), 
+               [f"{row['Variable1']} - {row['Variable2']}" 
+                for _, row in strong_corr.iterrows()])
+    
+    plt.xlabel('Корреляция')
+    plt.title(f'Сильные корреляции (порог: {threshold})')
+    plt.grid(axis='x', alpha=0.3)
+    
+    # Добавляем значения на график
+    for i, bar in enumerate(bars):
+        plt.text(bar.get_width() + (0.01 if bar.get_width() > 0 else -0.03), 
+                bar.get_y() + bar.get_height()/2, 
+                f'{strong_corr.iloc[i]["Correlation"]:.3f}', 
+                ha='left' if bar.get_width() > 0 else 'right', 
+                va='center')
+    
+    plt.tight_layout()
+    plt.show()
