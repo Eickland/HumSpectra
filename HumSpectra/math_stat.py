@@ -276,11 +276,11 @@ def check_normality(df, alpha=0.05):
     
     return pd.DataFrame(results)
 
-def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6)):
+def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
     """
     Визуализирует сильные корреляции.
     """
-    strong_corr = get_top_correlations(corr_matrix, n=5)
+    strong_corr = get_top_correlations(corr_matrix, n=n)
     
     if len(strong_corr) == 0:
         print("Нет сильных корреляций выше порога")
