@@ -287,6 +287,7 @@ def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
         return
     
     plt.figure(figsize=figsize)
+    return strong_corr
     colors = ['blue' if x < 0 else 'red' for x in strong_corr['Correlation']]
     bars = plt.barh(range(len(strong_corr)), strong_corr['Correlation'], color=colors)
     
