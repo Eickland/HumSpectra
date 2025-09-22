@@ -291,7 +291,7 @@ def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
     bars = plt.barh(range(len(strong_corr)), strong_corr['Correlation'], color=colors)
     
     plt.yticks(range(len(strong_corr)), 
-               [f"{row['Variable 1']} - {row['Variable 2']}" 
+               [f"{row['Variable 1']}\n{row['Variable 2']}" 
                 for _, row in strong_corr.iterrows()],
                 rotation=90)
     
