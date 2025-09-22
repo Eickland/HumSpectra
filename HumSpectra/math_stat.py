@@ -301,13 +301,12 @@ def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
     
     for bar in bars:
         width = bar.get_width()
-        # Автоматический выбор цвета текста (белый для темных столбцов)
         text_color = 'white'
         
         plt.text(width/2, bar.get_y() + bar.get_height()/2, 
-                f'{width}', 
+                f'{round(width,2)}', 
                 ha='center', va='center', 
-                color=text_color, fontweight='bold', fontsize=12)
+                color=text_color, fontweight='bold', fontsize=14)
     
     plt.tight_layout()
     plt.show()
