@@ -276,23 +276,24 @@ def check_normality(df, alpha=0.05):
     
     return pd.DataFrame(results)
 
-def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(10, 8)):
+def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6)):
     """
     Визуализирует сильные корреляции.
     """
-    strong_corr = get_strong_correlations(corr_matrix, threshold)
+    strong_corr = get_top_correlations(corr_matrix, n=5)
     
     if len(strong_corr) == 0:
         print("Нет сильных корреляций выше порога")
         return
     
     plt.figure(figsize=figsize)
-    colors = ['red' if x < 0 else 'blue' for x in strong_corr['Correlation']]
+    colors = ['blue' if x < 0 else 'red' for x in strong_corr['Correlation']]
     bars = plt.barh(range(len(strong_corr)), strong_corr['Correlation'], color=colors)
     
     plt.yticks(range(len(strong_corr)), 
                [f"{row['Variable1']} - {row['Variable2']}" 
-                for _, row in strong_corr.iterrows()])
+                for _, row in strong_corr.iterrows()],
+                rotation=90)
     
     plt.xlabel('Корреляция')
     plt.title(f'Сильные корреляции (порог: {threshold})')
