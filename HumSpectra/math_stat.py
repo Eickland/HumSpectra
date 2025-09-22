@@ -276,7 +276,7 @@ def check_normality(df, alpha=0.05):
     
     return pd.DataFrame(results)
 
-def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
+def plot_strong_correlations(corr_matrix, figsize=(6, 6),n=3):
     """
     Визуализирует сильные корреляции.
     """
@@ -296,7 +296,7 @@ def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
                 rotation=90)
     
     plt.xlabel('Корреляция')
-    plt.title(f'Сильные корреляции (порог: {threshold})')
+    plt.title(f'Сильные корреляции')
     plt.grid(axis='x', alpha=0.3)
     
     for bar in bars:
