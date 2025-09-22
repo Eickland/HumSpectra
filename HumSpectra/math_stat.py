@@ -299,13 +299,15 @@ def plot_strong_correlations(corr_matrix, threshold=0.7, figsize=(6, 6),n=3):
     plt.title(f'Сильные корреляции (порог: {threshold})')
     plt.grid(axis='x', alpha=0.3)
     
-    # Добавляем значения на график
-    for i, bar in enumerate(bars):
-        plt.text(bar.get_width() + (0.01 if bar.get_width() > 0 else -0.03), 
-                bar.get_y() + bar.get_height()/2, 
-                f'{strong_corr.iloc[i]["Correlation"]:.3f}', 
-                ha='left' if bar.get_width() > 0 else 'right', 
-                va='center')
+    for bar in bars:
+        width = bar.get_width()
+        # Автоматический выбор цвета текста (белый для темных столбцов)
+        text_color = 'white' if width > max(strong_corr['Correlation'])/2 else 'black'
+        
+        plt.text(width/2, bar.get_y() + bar.get_height()/2, 
+                f'{width}', 
+                ha='center', va='center', 
+                color=text_color, fontweight='bold', fontsize=12)
     
     plt.tight_layout()
     plt.show()
