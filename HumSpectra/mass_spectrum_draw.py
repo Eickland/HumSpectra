@@ -38,6 +38,14 @@ def draw_vk(spec: pd.DataFrame,
         spec["O/C"] = spec["O"]/spec["C"]
         spec["H/C"] = spec["H"]/spec["C"]
 
+    if "N" not in list(spec.columns):
+
+        spec["N"] = 0
+
+    if "S" not in list(spec.columns):
+
+        spec["S"] = 0
+
     if ax is None:
 
         fig, ax = plt.subplots(1,1,figsize=(6,6))
