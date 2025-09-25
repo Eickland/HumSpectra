@@ -62,8 +62,8 @@ def analyze_geographical(data):
     df["South"] = df[lat_col].apply(lambda x: False if x > mean_lat else True)
 
     mean_lon = df[lon_col].mean()
-    df["West"] = df[lat_col].apply(lambda x: True if x < mean_lon else False)
-    df["East"] = df[lat_col].apply(lambda x: True if x > mean_lon else False)   
+    df["West"] = df[lon_col].apply(lambda x: True if x < mean_lon else False)
+    df["East"] = df[lon_col].apply(lambda x: True if x > mean_lon else False)   
     
     # Находим угловые точки (северо-запад, северо-восток, юго-запад, юго-восток)
     # Для этого используем комбинации экстремальных значений
