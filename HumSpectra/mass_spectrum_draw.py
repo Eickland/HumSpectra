@@ -22,7 +22,8 @@ def ChooseColor(row):
     
 
 def draw_vk(spec: pd.DataFrame,
-               ax = None):
+               ax = None,
+               size_low: int=8):
     """
     Возвращает диаграмму Ван-Кревелина для подставленного спектра.
     """
@@ -38,14 +39,6 @@ def draw_vk(spec: pd.DataFrame,
         spec["O/C"] = spec["O"]/spec["C"]
         spec["H/C"] = spec["H"]/spec["C"]
 
-    if "N" not in list(spec.columns):
-
-        spec["N"] = 0
-
-    if "S" not in list(spec.columns):
-
-        spec["S"] = 0
-
     if ax is None:
 
         fig, ax = plt.subplots(1,1,figsize=(6,6))
@@ -54,11 +47,11 @@ def draw_vk(spec: pd.DataFrame,
         ax.set_ylim((0.0,2.2))
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
 
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=(4, 40))
+        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=(size_low, 40))
     
     else:
 
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=(4, 40),ax=ax)
+        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=(size_low, 40),ax=ax)
 
         ax.set_xlim([0,1])
         ax.set_ylim([0,2.2])

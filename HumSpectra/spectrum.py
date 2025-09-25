@@ -12,9 +12,9 @@ import HumSpectra.utilits as ut
 from HumSpectra.brutto import brutto_gen, elements_table, get_elements_masses
 
 def read_mass_list(path: str,
-                map_columns: dict|None = {"m/z":"mass","I":"intensity"},
+                map_columns: dict|None = None,
                 custom_columns_name: bool = False,
-                sep: str|None = "\t",
+                sep: str|None = None,
                 **kwargs) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
@@ -96,7 +96,7 @@ def _mark_assigned_by_brutto(self) -> None:
 def assign(data: pd.DataFrame,
             brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
-            rel_error: float|None = 0.5,
+            rel_error: float|None = None,
             abs_error: float|None = None,
             sign: str ='-',
             mass_min: Optional[float] =  None,
@@ -146,8 +146,6 @@ def assign(data: pd.DataFrame,
         ------
         pd.DataFrame 
         """
-
-        name = data.attrs['name']
 
         if generated_bruttos_table is None:
             generated_bruttos_table = brutto_gen(brutto_dict)
@@ -223,7 +221,6 @@ def assign(data: pd.DataFrame,
         data = data.merge(table, how='outer', on=list(data.columns))
         data['assign'] = data['assign'].fillna(False)
         data['charge'] = data['charge'].fillna(1)
-        data.attrs['name'] = name
 
         return data
 
