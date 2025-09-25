@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def analyze_geographical_extremes(data):
+def analyze_geographical(data):
     """
     Анализирует географические координаты и определяет крайние точки.
     
@@ -104,4 +104,6 @@ def analyze_geographical_extremes(data):
         df['se_distance'] = (df[lat_col] - df[lat_col].min())**2 + (df[lon_col] - df[lon_col].max())**2
         southeast = df.loc[df['se_distance'].idxmin()]
         df = df.drop('se_distance', axis=1)
+
+    return df
     
