@@ -276,7 +276,7 @@ def check_normality(df, alpha=0.05):
     
     return pd.DataFrame(results)
 
-def plot_strong_correlations(corr_matrix, figsize=(6, 6),n=3):
+def plot_strong_correlations(corr_matrix,n=3,ax=None):
     """
     Визуализирует сильные корреляции.
     """
@@ -286,27 +286,30 @@ def plot_strong_correlations(corr_matrix, figsize=(6, 6),n=3):
         print("Нет сильных корреляций выше порога")
         return
     
-    plt.figure(figsize=figsize)
-    colors = ['blue' if x < 0 else 'red' for x in strong_corr['Correlation']]
-    bars = plt.barh(range(len(strong_corr)), strong_corr['Correlation'], color=colors)
+    if ax == None:
+
+        fig, ax = plt.subplots(1,1,figsize=(4,4))
     
-    plt.yticks(range(len(strong_corr)), 
+
+    colors = ['blue' if x < 0 else 'red' for x in strong_corr['Correlation']]
+    bars = ax.barh(range(len(strong_corr)), strong_corr['Correlation'], color=colors)
+    
+    ax.set_yticks(range(len(strong_corr)), 
                [f"{row['Variable 1']}\n{row['Variable 2']}" 
                 for _, row in strong_corr.iterrows()],
                 rotation=90)
     
-    plt.xlabel('Корреляция')
-    plt.title(f'Сильные корреляции')
-    plt.grid(axis='x', alpha=0.3)
+    ax.set_xlabel('Корреляция')
+    ax.set_title(f'Сильные корреляции')
+    ax.grid(axis='x', alpha=0.3)
     
     for bar in bars:
         width = bar.get_width()
         text_color = 'white'
         
-        plt.text(width/2, bar.get_y() + bar.get_height()/2, 
+        ax.text(width/2, bar.get_y() + bar.get_height()/2, 
                 f'{round(width,2)}', 
                 ha='center', va='center', 
                 color=text_color, fontweight='bold', fontsize=14)
     
-    plt.tight_layout()
-    plt.show()
+
