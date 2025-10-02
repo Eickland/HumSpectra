@@ -10,7 +10,8 @@ import seaborn as sns
 def delete_eject_iqr(data: DataFrame,
                  iqr_param: float = 1.5,
                  level_index: int = 0,
-                 multi_index: bool = False) -> DataFrame:
+                 multi_index: bool = False,
+                 columns: list|None = None) -> DataFrame:
     """
     :param data: DataFrame
     :param iqr_param: Межквартильный множитель
@@ -19,7 +20,12 @@ def delete_eject_iqr(data: DataFrame,
     """
     data_copy = data.copy()
 
-    descriptor_list = data_copy.columns
+
+    if columns is None:
+        descriptor_list = data_copy.columns
+    
+    else:
+        descriptor_list = columns
 
     if multi_index:
 

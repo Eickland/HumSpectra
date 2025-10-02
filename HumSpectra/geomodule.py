@@ -59,7 +59,7 @@ def analyze_geographical(data):
 
     mean_lat = df[lat_col].mean()
     df["North"] = df[lat_col].apply(lambda x: True if x > mean_lat else False)
-    df["South"] = df[lat_col].apply(lambda x: False if x > mean_lat else True)
+    df["South"] = df[lat_col].apply(lambda x: True if x < mean_lat else False)
 
     mean_lon = df[lon_col].mean()
     df["West"] = df[lon_col].apply(lambda x: True if x < mean_lon else False)
