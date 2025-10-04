@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from scipy.spatial import ConvexHull
 
 def analyze_geographical(data):
     """
@@ -107,3 +108,7 @@ def analyze_geographical(data):
 
     return df
     
+def get_convex_hull_points(points):
+    """Получаем точки выпуклой оболочки в правильном порядке"""
+    hull = ConvexHull(points)
+    return points[hull.vertices]
