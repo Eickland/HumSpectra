@@ -193,7 +193,8 @@ def read_csv_uv(path: str,
             sep: str = "",
             index_col: int = 0,
             ignore_name: bool = False,
-            baseline: bool = True) -> DataFrame:
+            baseline: bool = True,
+            spectra_type: str|None = None) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -219,7 +220,7 @@ def read_csv_uv(path: str,
         raise Exception(f"Ошибка при чтении файла: {e}")
     
 
-    data = standart_uv_formatting(data)
+    data = standart_uv_formatting(data,spectra_type=spectra_type)
     data.sort_index(inplace=True)
 
     name = ut.extract_name_from_path(path)
@@ -235,7 +236,8 @@ def read_excel_uv(path: str,
         sep: str = "",
         index_col: int = 0,
         ignore_name: bool = False,
-        baseline: bool = True) -> DataFrame | list:
+        baseline: bool = True,
+        spectra_type: str|None = None) -> DataFrame | list:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.xlsx").
@@ -261,7 +263,7 @@ def read_excel_uv(path: str,
 
         data = pd.read_excel(path, index_col= index_col)
 
-        data = standart_uv_formatting(data)
+        data = standart_uv_formatting(data,spectra_type=spectra_type)
         data.sort_index(inplace=True)
 
         name = ut.extract_name_from_path(path)
@@ -283,7 +285,7 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
             
-            data = standart_uv_formatting(data)
+            data = standart_uv_formatting(data,spectra_type=spectra_type)
             data.sort_index(inplace=True)
 
             name = str(list_sheet_names[i])
@@ -301,7 +303,8 @@ def read_excel_uv(path: str,
     else:
         return pd.DataFrame()
 
-def standart_uv_formatting(data: DataFrame)-> DataFrame:
+def standart_uv_formatting(data: DataFrame,
+                           spectra_type: str|None = None)-> DataFrame:
     """
     :param data: DataFrame, сырой уф спектр
     :return: Отформатированный уф спектр
@@ -309,7 +312,7 @@ def standart_uv_formatting(data: DataFrame)-> DataFrame:
     """
     data_copy = data.copy()
 
-    spectra_type = check_uv_spectra_type(data_copy)
+    spectra_type = check_uv_spectra_type(data_copy,spectra_type=spectra_type)
     data_copy.attrs['spectra_type'] = spectra_type
 
     data_copy.rename(columns={data_copy.columns[0]: spectra_type}, inplace=True)
@@ -321,7 +324,8 @@ def standart_uv_formatting(data: DataFrame)-> DataFrame:
 
     return data_copy
 
-def check_uv_spectra_type(data: DataFrame)-> str:
+def check_uv_spectra_type(data: DataFrame,
+                          spectra_type: str|None = None)-> str:
     """
     :param data: DataFrame, уф спектр
     :return: Тип уф спектра
@@ -329,7 +333,10 @@ def check_uv_spectra_type(data: DataFrame)-> str:
     """
     column_name = data.columns[0]
 
-    if "Abs" in column_name:
+    if spectra_type:
+        uv_spectra_type = spectra_type
+
+    elif "Abs" in column_name:
         uv_spectra_type = "absorption"
 
     elif "R%" in column_name:
