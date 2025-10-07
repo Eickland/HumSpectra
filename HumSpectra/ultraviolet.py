@@ -294,10 +294,11 @@ def read_excel_uv(path: str,
             data.sort_index(inplace=True)
 
             sample_name = str(list_sheet_names[i])
-            data = ut.attributting_order(data, ignore_name=ignore_name, name=sample_name)
 
             if debug:
                 print(sample_name)
+
+            data = ut.attributting_order(data, ignore_name=ignore_name, name=sample_name)
 
             if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
