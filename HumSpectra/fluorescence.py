@@ -226,7 +226,7 @@ def read_fluo_3d(path: str,
     """
 
     extension = path.split(sep=".")[-1]
-    headers = pd.read_csv('file.csv', nrows=0).columns
+    
 
     if sep is None and (extension == "csv" or extension == "txt"):
         sep = ut.check_sep(path)
@@ -234,9 +234,11 @@ def read_fluo_3d(path: str,
     try:
 
         if extension == "xlsx":
+            headers = pd.read_csv(path, nrows=0).columns
             data = pd.read_excel(path, index_col=index_col,usecols=headers[dropcols:])
 
         elif extension == "csv" or extension == "txt":
+            headers = pd.read_csv(path, nrows=0).columns
             data = pd.read_csv(path, sep=sep, index_col=index_col,usecols=headers[dropcols:])
 
         else:
