@@ -23,5 +23,6 @@ setuptools.setup(
         "pandas",
         "matplotlib",
         "seaborn",
+        "transliterate",
     ],
 )

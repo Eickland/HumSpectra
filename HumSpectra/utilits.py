@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from pandas import DataFrame
 import re
+from transliterate import translit
 
 
 def extract_and_combine_digits_re(text: str) -> int:
@@ -43,7 +44,11 @@ def extract_name_from_path(file_path: str) -> str:
         # 3. Разделение имени файла и расширения.
         file_name, file_extension = os.path.splitext(file_name_with_extension)
 
+        # 4. Земена русских символов на английские транслитом.
+        file_name = translit(file_name, 'ru', reversed=True)
+
         return file_name
+    
     except Exception as e:
         print(f"Ошибка при обработке пути {file_path}: {e}")
         return ""
@@ -75,6 +80,8 @@ def extract_class_from_name(file_name: str) -> str:
             sample_class = "Soil"
         elif "K" == symbol_class:
             sample_class = "ADOM"
+        elif "B" == symbol_class:
+            sample_class = "ADOM"
         else:
             raise ValueError("Имя образца не соответствует ни одному представленному классу")
     return sample_class
@@ -93,10 +100,15 @@ def extract_subclass_from_name(file_name: str) -> str:
     sample_class = extract_class_from_name(file_name=file_name)
 
     str_name = file_name.replace(" ", "-")
-    
+
     if "ADOM" == sample_class:
         str_subclass = str_name.split(sep="-")[1]
-        sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
+
+        if "B" != str_name[0]:
+            sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
+        else:
+            sample_subclass = "Baikal"
+
     elif "L" == str_name[0]:
         if "G" == str_name[1]:
             sample_subclass = "Lg"
