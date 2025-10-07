@@ -249,14 +249,16 @@ def read_fluo_3d(path: str,
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
     
+    name = ut.extract_name_from_path(path)
+
     if "nm" in data.index:
         data.drop("nm", inplace=True)
 
     if debug:
-        print(data.head(3))
+        print(name)
 
     data = data.astype("float64")
-    name = ut.extract_name_from_path(path)
+    
 
     data.columns = data.columns.astype(int)
     data.index = data.index.astype(int)
