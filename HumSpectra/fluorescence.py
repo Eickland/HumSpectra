@@ -234,14 +234,14 @@ def read_fluo_3d(path: str,
     try:
 
         if extension == "xlsx":
-            headers = pd.read_csv(path, nrows=0).columns
+            headers = pd.read_csv(path, nrows=0, index_col=index_col).columns
             unnamed_columns = [col for col in headers if col.startswith('Unnamed:')]
 
             data = pd.read_excel(path, index_col=index_col)
             data = data.drop(unnamed_columns, axis=1)
 
         elif extension == "csv" or extension == "txt":
-            headers = pd.read_csv(path, nrows=0).columns
+            headers = pd.read_csv(path, nrows=0, index_col=index_col).columns
             unnamed_columns = [col for col in headers if col.startswith('Unnamed:')]
 
             data = pd.read_csv(path, sep=sep, index_col=index_col)
