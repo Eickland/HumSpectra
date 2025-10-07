@@ -233,7 +233,6 @@ def read_csv_uv(path: str,
     return data
     
 def read_excel_uv(path: str,
-        sep: str = "",
         index_col: int = 0,
         ignore_name: bool = False,
         baseline: bool = True,
@@ -242,7 +241,6 @@ def read_excel_uv(path: str,
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.xlsx").
-    :param sep: разделитель в строчном виде (example: ",").
     :param index_col: номер столбца, который считается индексом таблицы.
     :param ignore_name: параметр, при включении которого игнорируются встроенные классы и подклассы
     :param baseline: параметр, при включении которого производится базовая рекалибровка
