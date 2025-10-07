@@ -317,13 +317,11 @@ def standart_uv_formatting(data: DataFrame,
     data_copy.attrs['spectra_type'] = spectra_type
 
     data_copy.rename(columns={data_copy.columns[0]: spectra_type}, inplace=True)
+    
+    data_copy = data_copy.replace(',', '.', regex=True)
+    data_copy = data_copy.replace(' ', '', regex=True)
 
-    if data_copy[spectra_type].dtype == str:
-        data_copy[spectra_type]=data_copy[spectra_type].str.replace(',','.')
-    data_copy[spectra_type] = data_copy[spectra_type].astype("float64")
-
-    if data_copy[spectra_type].dtype == str:
-        data_copy.index = data_copy.index.str.replace(',','.')
+    data_copy = data_copy.astype(float)
     data_copy.index = data_copy.index.astype(float)
 
     return data_copy
