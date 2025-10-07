@@ -266,6 +266,7 @@ def read_fluo_3d(path: str,
 
     if debug:
         print(name)
+        print(data)
 
     data = data.astype("float64")
     
