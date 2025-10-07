@@ -102,12 +102,14 @@ def extract_subclass_from_name(file_name: str) -> str:
     str_name = file_name.replace(" ", "-")
 
     if "ADOM" == sample_class:
-        str_subclass = str_name.split(sep="-")[1]
 
-        if "B" != str_name[0]:
-            sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
-        else:
+        if "B" == str_name[0]:
             sample_subclass = "Baikal"
+            
+        else:
+            str_subclass = str_name.split(sep="-")[1]
+            sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
+        
 
     elif "L" == str_name[0]:
         if "G" == str_name[1]:

@@ -214,7 +214,7 @@ def cut_raman_spline(em_wvs: ndarray,
 def read_fluo_3d(path: str,
                  sep: str | None = None,
                  index_col: int = 0,
-                 debug: bool = True,
+                 debug: bool = False,
                  dropcols: int = 0) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
