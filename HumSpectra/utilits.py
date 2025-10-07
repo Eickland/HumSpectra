@@ -73,6 +73,8 @@ def extract_class_from_name(file_name: str) -> str:
             sample_class = "Peat"
         elif "S" == symbol_class:
             sample_class = "Soil"
+        elif "K" == symbol_class:
+            sample_class = "ADOM"
         else:
             raise ValueError("Имя образца не соответствует ни одному представленному классу")
     return sample_class
@@ -88,8 +90,11 @@ def extract_subclass_from_name(file_name: str) -> str:
        Lg(лигногуматы), Lst(лигносульфонаты), (C,P,S)HA (гуминовые кислоты), (C,P,S)HA (фульвокислоты), (C,P,S)HF (нефракционированные гуминовые вещества)
        """
     sample_subclass = "SampleSubClassError"
+    sample_class = extract_class_from_name(file_name=file_name)
+
     str_name = file_name.replace(" ", "-")
-    if "ADOM" in str_name:
+    
+    if "ADOM" == sample_class:
         str_subclass = str_name.split(sep="-")[1]
         sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
     elif "L" == str_name[0]:
