@@ -248,7 +248,10 @@ def read_excel_uv(path: str,
     :param baseline: параметр, при включении которого производится базовая рекалибровка
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн.
     """
+    
     file_type = ut.check_file_type(path)
+    if debug:
+        print(file_type)
 
     try:
         raw_data = pd.read_excel(path, index_col=index_col, sheet_name=None)
@@ -269,9 +272,6 @@ def read_excel_uv(path: str,
 
         name = ut.extract_name_from_path(path)
 
-        if debug:
-            print(name)
-
         data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
         if baseline and (data.attrs['spectra_type'] == "absorption"):
@@ -290,12 +290,14 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
             
-
             data = standart_uv_formatting(data,spectra_type=spectra_type)
             data.sort_index(inplace=True)
 
-            name = str(list_sheet_names[i])
-            data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
+            sample_name = str(list_sheet_names[i])
+            data = ut.attributting_order(data, ignore_name=ignore_name, name=sample_name)
+
+            if debug:
+                print(sample_name)
 
             if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
