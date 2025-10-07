@@ -285,6 +285,7 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
             
+            data.set_index(data.columns[0],inplace=True)
             data = standart_uv_formatting(data,spectra_type=spectra_type)
             data.sort_index(inplace=True)
 
