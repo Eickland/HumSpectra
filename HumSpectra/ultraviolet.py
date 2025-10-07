@@ -285,7 +285,7 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
             
-            data.set_index(data.columns[0],inplace=True)
+
             data = standart_uv_formatting(data,spectra_type=spectra_type)
             data.sort_index(inplace=True)
 
@@ -320,7 +320,7 @@ def standart_uv_formatting(data: DataFrame,
 
     if data_copy[spectra_type].dtype == str:
         data_copy[spectra_type]=data_copy[spectra_type].str.replace(',','.')
-    data_copy = data_copy.astype("float64")
+    data_copy[spectra_type] = data_copy[spectra_type].astype("float64")
 
     if data_copy[spectra_type].dtype == str:
         data_copy.index = data_copy.index.str.replace(',','.')
