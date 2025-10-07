@@ -214,7 +214,8 @@ def cut_raman_spline(em_wvs: ndarray,
 def read_fluo_3d(path: str,
                  sep: str | None = None,
                  index_col: int = 0,
-                 debug: bool = True) -> DataFrame:
+                 debug: bool = True,
+                 dropcols: int = 0) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -225,6 +226,7 @@ def read_fluo_3d(path: str,
     """
 
     extension = path.split(sep=".")[-1]
+    headers = pd.read_csv('file.csv', nrows=0).columns
 
     if sep is None and (extension == "csv" or extension == "txt"):
         sep = ut.check_sep(path)
@@ -232,10 +234,10 @@ def read_fluo_3d(path: str,
     try:
 
         if extension == "xlsx":
-            data = pd.read_excel(path, index_col=index_col)
+            data = pd.read_excel(path, index_col=index_col,usecols=headers[dropcols:])
 
         elif extension == "csv" or extension == "txt":
-            data = pd.read_csv(path, sep=sep, index_col=index_col)
+            data = pd.read_csv(path, sep=sep, index_col=index_col,usecols=headers[dropcols:])
 
         else:
             raise KeyError("Тип данных не поддерживается")
@@ -259,7 +261,6 @@ def read_fluo_3d(path: str,
 
     data = data.astype("float64")
     
-
     data.columns = data.columns.astype(int)
     data.index = data.index.astype(int)
 
