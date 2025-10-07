@@ -180,9 +180,11 @@ def cut_peak_spline(em_wvs, fl, peak_position, peak_half_width=15., points_in_sp
     peak_half_width - half-width at half-maximum of peak to cut
     """
     mask = ((em_wvs < peak_position - peak_half_width) | (em_wvs > peak_position + peak_half_width)) & (~np.isnan(fl))
+
     knots = em_wvs[mask][1:-1][::points_in_spline]
     spline = scipy.interpolate.LSQUnivariateSpline(em_wvs[mask], fl[mask], knots, k=2, ext=1)
     spline_wvs = em_wvs[mask]
+
     return knots, mask, spline_wvs, spline
 
 
@@ -201,15 +203,18 @@ def cut_raman_spline(em_wvs: ndarray,
 
     return 1d numpy array of fluorescence intensity with cut emission
     """
+
     res = cut_peak_spline(em_wvs, fl,
                           peak_position=where_is_raman(exc_wv, omega=raman_freq),
                           peak_half_width=raman_hwhm, points_in_spline=points_in_spline)
+    
     return np.array(res[-1](em_wvs))
 
 
 def read_fluo_3d(path: str,
                  sep: str | None = None,
-                 index_col: int = 0) -> DataFrame:
+                 index_col: int = 0,
+                 debug: bool = True) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -235,19 +240,27 @@ def read_fluo_3d(path: str,
         else:
             raise KeyError("Тип данных не поддерживается")
 
-
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
+    
     except pd.errors.EmptyDataError:
         raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
+    
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
+    
     if "nm" in data.index:
         data.drop("nm", inplace=True)
+
+    if debug:
+        print(data.head(3))
+
     data = data.astype("float64")
     name = ut.extract_name_from_path(path)
+
     data.columns = data.columns.astype(int)
     data.index = data.index.astype(int)
+
     data.attrs['name'] = name
     data.attrs['class'] = ut.extract_class_from_name(name)
     data.attrs['subclass'] = ut.extract_subclass_from_name(name)
