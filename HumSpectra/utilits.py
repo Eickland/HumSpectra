@@ -186,7 +186,8 @@ def check_file_type(path: str) -> str:
 
 def attributting_order(data: DataFrame,
                        ignore_name: bool,
-                       name: str)-> DataFrame:
+                       name: str
+                       )-> DataFrame:
     """
     :param data: DataFrame, сырой уф спектр
     :param ignore_name: параметр, при включении которого игнорируются встроенные классы и подклассы

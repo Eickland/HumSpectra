@@ -237,7 +237,8 @@ def read_excel_uv(path: str,
         index_col: int = 0,
         ignore_name: bool = False,
         baseline: bool = True,
-        spectra_type: str|None = None) -> DataFrame | list:
+        spectra_type: str|None = None,
+        debug:bool = False) -> DataFrame | list:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.xlsx").
@@ -267,6 +268,10 @@ def read_excel_uv(path: str,
         data.sort_index(inplace=True)
 
         name = ut.extract_name_from_path(path)
+
+        if debug:
+            print(name)
+
         data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
 
         if baseline and (data.attrs['spectra_type'] == "absorption"):
