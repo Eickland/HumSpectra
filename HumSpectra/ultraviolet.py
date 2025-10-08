@@ -8,7 +8,6 @@ from typing import Union
 
 from HumSpectra import utilits as ut
 
-
 def check_recall_flag(data: DataFrame) -> bool:
     """
     :param data: DataFrame, уф спектр
@@ -25,7 +24,6 @@ def check_recall_flag(data: DataFrame) -> bool:
                 raise ValueError("Спектр должен быть откалиброван")
     return True
 
-
 def base_recall_uv(data: DataFrame) -> DataFrame:
     """
     :param data: DataFrame, уф спектр
@@ -38,7 +36,6 @@ def base_recall_uv(data: DataFrame) -> DataFrame:
     data_copy.attrs['recall'] = True
 
     return data_copy + 1.001 * abs(min_value)
-
 
 def e2_e3(data: DataFrame,
           debug: bool=False) -> float:
@@ -59,7 +56,6 @@ def e2_e3(data: DataFrame,
 
     return uv_param
 
-
 def e4_e6(data: DataFrame,
           debug: bool=False) -> float:
     """
@@ -78,7 +74,6 @@ def e4_e6(data: DataFrame,
     uv_param = float(uv_param.iloc[0].item())
 
     return uv_param
-
 
 def epsilon(data: DataFrame,
             wave: int = 254,
@@ -99,7 +94,6 @@ def epsilon(data: DataFrame,
 
     return uv_param
 
-
 def suva(data: DataFrame,
          debug: bool=False) -> float:
     """
@@ -119,7 +113,6 @@ def suva(data: DataFrame,
     uv_param = a_254 / data.attrs['TOC']
 
     return uv_param
-
 
 def lambda_UV(data: DataFrame,
               short_wave: int = 450,
@@ -146,39 +139,56 @@ def lambda_UV(data: DataFrame,
 
     return uv_param
 
-
 def plot_uv(data: DataFrame,
             xlabel: bool = True,
             ylabel: bool = True,
             title: bool = True,
             norm_by_TOC: bool = False,
             ax: Union[Axes, None] = None,
-            name:Optional[str] = None) -> Axes:
+            name: Optional[str] = None) -> Axes:
     """
+    Функция для построения УФ спектров.
+    
     :param data: DataFrame, уф спектр
+    :param xlabel: показывать подпись оси X
+    :param ylabel: показывать подпись оси Y
+    :param title: показывать заголовок
+    :param norm_by_TOC: нормализовать по TOC
+    :param ax: ось для построения (если None, создается новая)
+    :param name: название спектра
     :return: ax: Axes, ось графика matplotlib.pyplot
-    Функция возвращает график 2D уф-спетра
     """
-
+    
     data_copy = data.copy()
 
-    if "name" in data_copy.attrs:
-        name = data_copy.attrs["name"]
-    else:
-        name = "uv_spectra"
+    # Определяем имя спектра
+    if name is None:
+        if "name" in data_copy.attrs:
+            name = data_copy.attrs["name"]
+        else:
+            name = "uv_spectra"
 
+    # Нормализация по TOC
     if norm_by_TOC:
         if "TOC" not in data_copy.attrs:
             raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
-        data_copy = data_copy/data_copy.attrs['TOC']
+        data_copy = data_copy / data_copy.attrs['TOC']
 
+    # Создаем ось если не передана
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-    ax.plot(data_copy.index, data_copy[data_copy.columns[0]], label = name)
+    # Проверяем, что в данных есть столбцы
+    if len(data_copy.columns) == 0:
+        raise ValueError("DataFrame не содержит столбцов с данными")
+    
+    # Строим график - используем первый столбец данных
+    column_name = data_copy.columns[0]
+    ax.plot(data_copy.index, data_copy[column_name], label=name)
 
+    # Добавляем подписи
     if title:
-            ax.set_title(str(name))
+        ax.set_title(str(name))
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
