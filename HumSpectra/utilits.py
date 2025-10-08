@@ -109,8 +109,9 @@ def extract_subclass_from_name(file_name: str) -> str:
         else:
             split_name = str_name.split(sep="-")
 
-            if len(split_name) == 0:
+            if len(split_name) == 1:
                 str_name = split_name[0][:1]+"-"+split_name[0][1:]
+
             str_subclass = str_name.split(sep="-")[1]
             sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
         
