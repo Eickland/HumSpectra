@@ -4,7 +4,7 @@ import pandas as pd
 from pandas import DataFrame
 from typing import Optional
 from matplotlib.axes import Axes
-from typing import Union
+from typing import Union, List
 
 from HumSpectra import utilits as ut
 
@@ -247,7 +247,7 @@ def read_excel_uv(path: str,
         ignore_name: bool = False,
         baseline: bool = True,
         spectra_type: str|None = None,
-        debug:bool = False) -> DataFrame | list:
+        debug:bool = False) -> DataFrame | List[DataFrame]:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.xlsx").
@@ -314,11 +314,13 @@ def read_excel_uv(path: str,
             data_list.append(data)
 
             i += 1
+        
+        data_list:List[DataFrame]
 
         return data_list
     
     else:
-        return pd.DataFrame()
+        raise KeyboardInterrupt("Нет доступного типа!")
 
 def standart_uv_formatting(data: DataFrame,
                            spectra_type: str|None = None)-> DataFrame:
