@@ -3,20 +3,18 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def ChooseColor(row):
+def ChooseColor(row:pd.Series):
     """
     Придает формуле цвет на диаграмме Ван-Кревелина.
     """
-
-    if row["S"] != 0 and row["N"] != 0:
-        return "red"
-    
-    if row["S"] != 0:
-        return "green"
-    
-    elif row["N"] != 0:
-        return "orange"
-    
+    if "N" in row.columns:
+        if "S" in row.columns:
+            if row["S"] != 0:
+                return "red" if row["N"] != 0 else "green"
+            else:
+                return "orange" if row["N"] != 0 else "blue"
+        else:
+            return "orange" if row["N"] != 0 else "blue"
     else:
         return "blue"
     
@@ -37,14 +35,6 @@ def draw_vk(spec: pd.DataFrame,
 
         spec["O/C"] = spec["O"]/spec["C"]
         spec["H/C"] = spec["H"]/spec["C"]
-
-    if "N" not in list(spec.columns):
-
-        spec["N"] = 0
-
-    if "S" not in list(spec.columns):
-
-        spec["S"] = 0
 
     if ax is None:
 

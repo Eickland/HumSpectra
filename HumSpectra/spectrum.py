@@ -43,7 +43,6 @@ def read_mass_list(path: str,
     name = ut.extract_name_from_path(path)
     data.attrs['name'] = name
 
-
     return data
 
 def find_elements(self) -> Sequence[str]:
