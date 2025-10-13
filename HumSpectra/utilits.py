@@ -102,12 +102,13 @@ def extract_subclass_from_name(file_name: str) -> str:
     str_name = file_name.replace(" ", "-")
 
     if "ADOM" == sample_class:
+        
+        split_name = str_name.split(sep="-")
 
-        if "B" == str_name[0]:
+        if "B" in split_name:
             sample_subclass = "Baikal"
             
         else:
-            split_name = str_name.split(sep="-")
 
             if len(split_name) == 2:
                 str_name = split_name[0][:1]+"-"+split_name[0][1:]
