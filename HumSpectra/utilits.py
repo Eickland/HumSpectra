@@ -105,7 +105,7 @@ def extract_subclass_from_name(file_name: str) -> str:
         
         split_name = str_name.split(sep="-")
 
-        if "B" in split_name:
+        if "B" in split_name  or "В" in split_name:
             sample_subclass = "Baikal"
             
         else:
