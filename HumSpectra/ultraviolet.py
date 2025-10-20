@@ -37,6 +37,29 @@ def base_recall_uv(data: DataFrame) -> DataFrame:
 
     return data_copy + 1.001 * abs(min_value)
 
+def ratio_descriptor(data: DataFrame,
+                     wave_1: int,
+                     wave_2: int,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :wave_1/wave_2: значение длины волны в нм (целое число)
+    :return: uv_param: float, значение параметра оптической плотности wave 1 деленной на оптическую плотность wave 2
+    
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_1 = series.sub(wave_1).abs().idxmin()
+    index_2 = series.sub(wave_2).abs().idxmin()
+    uv_param = data.loc[index_1] / data.loc[index_2]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+
 def e2_e3(data: DataFrame,
           debug: bool=False) -> float:
     """
