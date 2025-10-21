@@ -22,7 +22,6 @@ def extract_and_combine_digits_re(text: str) -> int:
     else:
         return 0  # Возвращаем 0, если цифры не найдены
 
-
 def extract_name_from_path(file_path: str) -> str:
     r"""Извлекает имя файла (без расширения) из пути.
 
@@ -52,7 +51,6 @@ def extract_name_from_path(file_path: str) -> str:
     except Exception as e:
         print(f"Ошибка при обработке пути {file_path}: {e}")
         return ""
-
 
 def extract_class_from_name(file_name: str) -> str:
     """Извлекает класс образца из имени.
@@ -85,7 +83,6 @@ def extract_class_from_name(file_name: str) -> str:
         else:
             raise ValueError("Имя образца не соответствует ни одному представленному классу")
     return sample_class
-
 
 def extract_subclass_from_name(file_name: str) -> str:
     """Извлекает подкласс образца из имени.
@@ -126,7 +123,6 @@ def extract_subclass_from_name(file_name: str) -> str:
         sample_subclass = str_name.split(sep="-")[0]
 
     return sample_subclass
-
 
 def check_sep(path: str) -> str:
     """
@@ -217,3 +213,22 @@ def attributting_order(data: DataFrame,
         data_copy.attrs['name'] = name
 
     return data_copy
+
+def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
+    
+    """Загружает все спектры из папки"""
+
+    return [reader_func(str(path), **kwargs) for path in folder.rglob('*.csv')]
+
+def spectra_to_df(spectra_list, metrics, class_filter="ADOM"):
+
+    df = pd.DataFrame([{
+
+        "Sample": s.attrs['name'],
+        "Class": s.attrs['class'], 
+        "Subclass": s.attrs['subclass'],
+
+        **{name: func(s) for name, func in metrics.items()}
+    } for s in spectra_list])
+
+    return df[df.Class == class_filter] if class_filter else df
