@@ -20,7 +20,6 @@ def delete_eject_iqr(data: DataFrame,
     """
     data_copy = data.copy()
 
-
     if columns is None:
         descriptor_list = data_copy.columns
     
@@ -70,6 +69,8 @@ def delete_eject_iqr(data: DataFrame,
 
                 data_iqr = data_iqr[(data_iqr[descriptor] < q3 + iqr_param * iqr)]
                 data_iqr = data_iqr[(data_iqr[descriptor] > q1 - iqr_param * iqr)]
+
+                data_copy = data_iqr
                 
                 data_copy.dropna(inplace=True)
 
