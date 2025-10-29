@@ -26,7 +26,7 @@ def vk(spec: pd.DataFrame,
     Возвращает диаграмму Ван-Кревелина для подставленного спектра.
     """
 
-    s = spec["intensity"]/spec["intensity"].median()
+    s = spec["intensity"]
     size = s
 
     spec = spec.copy(deep=True)
