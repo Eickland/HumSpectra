@@ -26,9 +26,6 @@ def vk(spec: pd.DataFrame,
     Возвращает диаграмму Ван-Кревелина для подставленного спектра.
     """
 
-    s = spec["intensity"]
-    size = s
-
     spec = spec.copy(deep=True)
     spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=1)
 
@@ -45,11 +42,11 @@ def vk(spec: pd.DataFrame,
         ax.set_ylim((0.0,2.2))
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
 
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=sizes)
+        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = "intensity", alpha = 0.7,legend = False,sizes=sizes)
     
     else:
 
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = size, alpha = 0.7,legend = False,sizes=sizes,ax=ax)
+        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = "intensity", alpha = 0.7,legend = False,sizes=sizes,ax=ax)
 
         ax.set_xlim([0,1])
         ax.set_ylim([0,2.2])
