@@ -19,7 +19,7 @@ def ChooseColor(row:pd.Series):
         return "blue"
     
 
-def draw_vk(spec: pd.DataFrame,
+def vk(spec: pd.DataFrame,
                ax = None):
     """
     Возвращает диаграмму Ван-Кревелина для подставленного спектра.
@@ -28,8 +28,8 @@ def draw_vk(spec: pd.DataFrame,
     s = spec["intensity"]/spec["intensity"].median()
     size = s
 
-    spec = spec.copy()
-    spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=1)
+    spec = spec.copy(deep=True)
+    spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=0)
 
     if "O/C" not in list(spec.columns):
 
