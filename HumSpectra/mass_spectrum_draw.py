@@ -51,3 +51,20 @@ def vk(spec: pd.DataFrame,
         ax.set_xlim([0,1])
         ax.set_ylim([0,2.2])
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
+        
+def spectrum(spec: pd.DataFrame,
+             ax = None):
+    
+    spec = spec.copy(deep=True)
+    
+    if ax is None:
+
+        fig, ax = plt.subplots(1,1,figsize=(6,6))
+    
+    ax.plot(spec["mass"],spec["intensity"], color="black",linewidth=0.2)
+        
+    ax.set_xlabel("m/z")
+    ax.set_ylabel("intensity")
+        
+    ax.set_xlim([200,1000])
+        
