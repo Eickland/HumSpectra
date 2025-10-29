@@ -182,7 +182,7 @@ def assign(data: pd.DataFrame,
             rel = True
 
         data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
-        table = data.copy()
+        table = data.copy(deep=True)
 
         masses = np.array(generated_bruttos_table["mass"].values)
 
