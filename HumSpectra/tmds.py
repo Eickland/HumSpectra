@@ -185,6 +185,7 @@ def calc(
     counts[0] = 0
 
     tmds_spec = pd.DataFrame()
+    tmds_spec.attrs['name'] = spec.attrs['name']
     tmds_spec['mass'] = unique
     tmds_spec['count'] = counts
     tmds_spec['intensity'] = tmds_spec['count']/mass_num
