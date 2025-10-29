@@ -488,7 +488,7 @@ def calc_mass(self,debug=False) -> pd.DataFrame:
         print(elems)
         print(self.loc[:,elems])
         
-    table = self.loc[:,elems].copy()
+    table = self.loc[:,elems].copy(deep=True)
     
     masses = get_elements_masses(elems)
 
@@ -642,7 +642,7 @@ def cram(self) -> pd.DataFrame:
             return False
         return True
 
-    table = merge_isotopes(self.copy())
+    table = merge_isotopes(self.copy(deep=True))
     self['CRAM'] = table.apply(check, axis=1)
 
     return self
