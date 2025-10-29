@@ -468,7 +468,7 @@ def merge_isotopes(self) -> "pd.DataFrame":
 
 
 @_copy
-def calc_mass(self) -> pd.DataFrame:
+def calc_mass(self,debug=False) -> pd.DataFrame:
     """
     Calculate mass from assigned brutto formulas and elements exact masses
 
@@ -484,6 +484,10 @@ def calc_mass(self) -> pd.DataFrame:
     
     elems = find_elements(self)
     
+    if debug:
+        print(elems)
+        print(self.loc[:,elems])
+        
     table = self.loc[:,elems].copy()
     
     masses = get_elements_masses(elems)
