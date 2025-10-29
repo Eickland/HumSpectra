@@ -262,7 +262,7 @@ def assign_error(
     '''
 
     spectr = copy.deepcopy(spec)
-    spectr = spectr.assign(rel_error=ppm, brutto_dict=brutto_dict, sign=mode)
+    spectr = Hspm.assign(spectr,rel_error=ppm, brutto_dict=brutto_dict, sign=mode)
     spectr = Hspm.calc_error(Hspm.calc_mass(spectr))
 
     error_table = spectr
