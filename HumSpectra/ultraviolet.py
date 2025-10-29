@@ -2,9 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
-from typing import Optional
+from typing import Optional, Union, List
 from matplotlib.axes import Axes
-from typing import Union, List
 
 from HumSpectra import utilits as ut
 
