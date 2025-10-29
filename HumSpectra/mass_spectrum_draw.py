@@ -3,12 +3,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def ChooseColor(row:pd.Series):
+def ChooseColor(row):
     """
     Придает формуле цвет на диаграмме Ван-Кревелина.
     """
-    if "N" in row.columns:
-        if "S" in row.columns:
+    if "N" in row:
+        if "S" in row:
             if row["S"] != 0:
                 return "red" if row["N"] != 0 else "green"
             else:
@@ -29,7 +29,7 @@ def vk(spec: pd.DataFrame,
     size = s
 
     spec = spec.copy(deep=True)
-    spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=0)
+    spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=1)
 
     if "O/C" not in list(spec.columns):
 
