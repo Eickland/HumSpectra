@@ -588,7 +588,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        plt.tight_layout()
+        fig.tight_layout()
         return fig
     
     def plot_component_profiles(self, figsize=(15, 10)):
@@ -727,7 +727,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 plt.text(middle, plt.ylim()[0] - 0.05 * (plt.ylim()[1] - plt.ylim()[0]), 
                         class_name, ha='center', va='top')
             
-            plt.xlabel('Образцы (сгруппированы по классам)')
             plt.ylabel('Относительная доля')
             plt.title('Распределение компонентов по образцам')
             plt.legend()
@@ -767,7 +766,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         plt.tight_layout()
         plt.show()
 
-    def plot_component_loadings(self, normalization='max', figsize=(12, 6)):
+    def plot_component_loadings(self, normalization='percentage', figsize=(12, 18)):
         """
         Визуализация нагрузок компонентов
         """
@@ -778,16 +777,10 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         
         plt.figure(figsize=figsize)
         
-        if normalization == 'percentage':
-            # Столбчатая диаграмма для процентных вкладов
-            loadings_df.plot(kind='bar', stacked=True)
-            plt.ylabel('Доля компонента, %')
-            plt.title('Относительные вклады компонентов в образцы')
-        else:
-            # Heatmap для обычных нагрузок
-            sns.heatmap(loadings_df, annot=False, cmap='RdBu_r', center=0,
-                       fmt='.3f', linewidths=0.5)
-            plt.title('Нагрузки компонентов по образцам')
+        # Столбчатая диаграмма для процентных вкладов
+        loadings_df.plot(kind='bar', stacked=True)
+        plt.ylabel('Доля компонента, %')
+        plt.title('Относительные вклады компонентов в образцы')
         
         plt.xticks(rotation=45)
         plt.tight_layout()
