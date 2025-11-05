@@ -479,11 +479,11 @@ class OpticalDataAnalyzer:
         
         return component_eem
     
-class ComponentVisualizer:
-    def __init__(self, analyzer):
-        self.analyzer = analyzer
+class ComponentVisualizer(OpticalDataAnalyzer):
+    def __init__(self, n_components=3):
+        super().__init__(n_components)
     
-    def plot_single_component_eem(self, component_idx, sample_idx=None, weights = None,
+    def plot_single_component_eem(self, component_idx, sample_idx=None,
                                 normalization='max', figsize=(7, 5)):
         """
         Построение EEM спектра для одного компонента
@@ -595,7 +595,7 @@ class ComponentVisualizer:
         """
         Визуализация компонентов с реальными длинами волн
         """
-        if not hasattr(self, 'factors'):
+        if not hasattr(self.analyzer, 'factors'):
             raise ValueError("Сначала выполните fit_parafac()")
         
         fig, axes = plt.subplots(2, self.n_components, figsize=figsize)
