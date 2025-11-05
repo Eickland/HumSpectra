@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import HumSpectra.fluorescence as fl
-
+import HumSpectra.utilits as ut
 class EEMDataLoader:
     def __init__(self, data_folder):
         self.data_folder = data_folder
@@ -682,6 +682,58 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
         plt.show()
+        
+    def plot_fraction_profiles_grouped(self, figsize=(14, 6)):
+        """
+        Визуализация с группировкой по классам с сохранением всех точек
+        """
+        if not hasattr(self, 'factors'):
+            raise ValueError("Сначала выполните fit_parafac()")
+        
+        fraction = self.factors[0]
+        
+        if self.sample_names is not None:
+            classes = []
+            for sample_name in self.sample_names:
+                class_name = ut.extract_subclass_from_name(sample_name)
+                classes.append(class_name)
+            
+            unique_classes = sorted(list(set(classes)))
+            
+            # Создаем позиции для группировки
+            x_pos = []
+            current_pos = 0
+            class_positions = {}
+            
+            for class_name in unique_classes:
+                class_indices = [i for i, cls in enumerate(classes) if cls == class_name]
+                class_size = len(class_indices)
+                class_x = np.arange(current_pos, current_pos + class_size)
+                x_pos.extend(class_x)
+                class_positions[class_name] = (current_pos, current_pos + class_size - 1)
+                current_pos += class_size + 1  # +1 для пробела между группами
+            
+            plt.figure(figsize=figsize)
+            
+            # Рисуем линии для каждого компонента
+            for i in range(self.n_components):
+                plt.plot(x_pos, fraction[:, i], 'o-', linewidth=1, 
+                        markersize=4, label=f'Компонент {i+1}', alpha=0.7)
+            
+            # Добавляем разделители и подписи классов
+            for class_name, (start, end) in class_positions.items():
+                middle = (start + end) / 2
+                plt.axvline(x=end + 0.5, color='gray', linestyle='--', alpha=0.5)
+                plt.text(middle, plt.ylim()[0] - 0.05 * (plt.ylim()[1] - plt.ylim()[0]), 
+                        class_name, ha='center', va='top')
+            
+            plt.xlabel('Образцы (сгруппированы по классам)')
+            plt.ylabel('Относительная доля')
+            plt.title('Распределение компонентов по образцам')
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.show()
     
     def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(8, 6)):
         """
