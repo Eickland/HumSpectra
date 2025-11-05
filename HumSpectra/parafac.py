@@ -394,52 +394,8 @@ class OpticalDataAnalyzer:
             percentages = loadings_df.abs().div(loadings_df.abs().sum(axis=1), axis=0) * 100
             return percentages.round(4)
             
-        elif method == 'variance':
-            # Оценка вклада в объясненную дисперсию
-            explained_variance = self.calculate_explained_variance()
-            variance_contributions = {}
-            
-            for i, comp in enumerate(loadings_df.columns):
-                # Взвешиваем нагрузку на долю объясненной дисперсии компонента
-                variance_contributions[comp] = (loadings_df[comp].abs() * 
-                                              explained_variance[i]).values
-            
-            result_df = pd.DataFrame(variance_contributions, index=loadings_df.index)
-            return result_df.div(result_df.sum(axis=1), axis=0) * 100
-            
         else:
             raise ValueError(f"Неизвестный метод: {method}")
-    
-    def calculate_explained_variance(self):
-        """
-        Рассчитать объясненную дисперсию для каждого компонента
-        """
-        
-        # Реконструируем тензор
-        reconstructed = tl.cp_to_tensor(self.parafac_result)
-        
-        # Общая сумма квадратов
-        total_ss = np.sum(self.X ** 2)
-        
-        # Объясненная сумма квадратов
-        explained_ss = np.sum(reconstructed ** 2)
-        
-        # Вклад каждого компонента
-        component_variances = []
-        for i in range(self.n_components):
-            # Создаем тензор только для i-го компонента
-            component_factors = []
-            for factor in self.factors:
-                component_factor = np.zeros_like(factor)
-                component_factor[:, i:i+1] = factor[:, i:i+1]
-                component_factors.append(component_factor)
-            
-                component_tensor = tl.cp_to_tensor(component_factors)
-            
-            component_ss = np.sum(component_tensor ** 2)
-            component_variances.append(component_ss / total_ss * 100)
-        
-        return component_variances
     
     def get_component_summary(self):
         """
@@ -451,9 +407,6 @@ class OpticalDataAnalyzer:
         # Процентные вклады
         percentages = self.get_relative_contributions(method='percentage')
         
-        # Объясненная дисперсия
-        explained_var = self.calculate_explained_variance()
-        
         summary_data = {}
         for i in range(self.n_components):
             comp_name = f"Component_{i+1}"
@@ -464,7 +417,6 @@ class OpticalDataAnalyzer:
                 'Std_Loading': sample_loadings[comp_name].std(),
                 'Max_Percentage': percentages[comp_name].max(),
                 'Mean_Percentage': percentages[comp_name].mean(),
-                'Explained_Variance_%': explained_var[i]
             }
         
         return pd.DataFrame(summary_data).T
