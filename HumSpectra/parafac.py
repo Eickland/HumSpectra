@@ -347,7 +347,7 @@ class OpticalDataAnalyzer:
         columns = [f"Component_{i+1}" for i in range(self.n_components)]
         
         loadings_df = pd.DataFrame(sample_factor, index=index, columns=columns)
-        loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names]
+        
         
         # Применяем нормализацию
         if normalization == 'max':
@@ -370,6 +370,7 @@ class OpticalDataAnalyzer:
         else:
             raise ValueError(f"Неизвестный метод нормализации: {normalization}")
         
+        loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names]
         return loadings_df
     
     def get_relative_contributions(self, method='absolute'):
