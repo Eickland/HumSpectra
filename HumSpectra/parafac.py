@@ -434,11 +434,6 @@ class OpticalDataAnalyzer:
                 component_factor[:, i:i+1] = factor[:, i:i+1]
                 component_factors.append(component_factor)
             
-            if self.weights is not None:
-                component_weights = np.zeros_like(self.weights)
-                component_weights[i] = self.weights[i]
-                component_tensor = tl.cp_to_tensor((component_weights, component_factors))
-            else:
                 component_tensor = tl.cp_to_tensor(component_factors)
             
             component_ss = np.sum(component_tensor ** 2)
@@ -518,40 +513,6 @@ class OpticalDataAnalyzer:
         df.to_csv(filename)
         print(f"Таблица сохранена в {filename}")
     
-    def plot_component_loadings(self, normalization='max', figsize=(12, 6)):
-        """
-        Визуализация нагрузок компонентов
-        """
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        
-        loadings_df = self.get_component_loadings(normalization=normalization)
-        
-        plt.figure(figsize=figsize)
-        
-        if normalization == 'percentage':
-            # Столбчатая диаграмма для процентных вкладов
-            loadings_df.plot(kind='bar', stacked=True)
-            plt.ylabel('Доля компонента, %')
-            plt.title('Относительные вклады компонентов в образцы')
-        else:
-            # Heatmap для обычных нагрузок
-            sns.heatmap(loadings_df, annot=False, cmap='RdBu_r', center=0,
-                       fmt='.3f', linewidths=0.5)
-            plt.title('Нагрузки компонентов по образцам')
-        
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
-        
-    def plot_component_eem(self, component_idx, sample_idx=None, 
-                          normalization='max', figsize=(12, 8)):
-        """Построение EEM спектра для компонента"""
-        visualizer = ComponentVisualizer(self)
-        return visualizer.plot_single_component_eem(
-            component_idx, sample_idx, normalization, figsize
-        )
-    
     def get_component_eem_matrix(self, component_idx, sample_idx=None):
         """Получить EEM матрицу для компонента"""
         factors = self.factors
@@ -565,32 +526,6 @@ class OpticalDataAnalyzer:
             component_eem = component_eem * sample_loading
         
         return component_eem
-    
-    def plot_all_components_eem(self):
-        """Построение EEM для всех компонентов"""
-        fig, axes = plt.subplots(self.n_components, 1, figsize=(10, 16))
-        
-        if self.n_components == 1:
-            axes = [axes]
-        
-        for i in range(self.n_components):
-            component_eem = self.get_component_eem_matrix(i)
-            component_eem = component_eem / np.max(component_eem)
-            
-            X, Y = np.meshgrid(self.excitation_wavelengths, 
-                              self.emission_wavelengths)
-            
-            im = axes[i].contourf(X, Y, component_eem, levels=50, cmap='viridis')
-            axes[i].contour(X, Y, component_eem, levels=10, colors='black', linewidths=0.3)
-            
-            axes[i].set_title(f'Component {i+1}')
-            axes[i].set_xlabel('Excitation (nm)')
-            axes[i].set_ylabel('Emission (nm)')
-            
-            plt.colorbar(im, ax=axes[i])
-        
-        plt.tight_layout()
-        return fig
     
 class ComponentVisualizer:
     def __init__(self, analyzer):
@@ -827,4 +762,64 @@ class ComponentVisualizer:
         
         plt.tight_layout()
         plt.show()
+
+    def plot_component_loadings(self, normalization='max', figsize=(12, 6)):
+        """
+        Визуализация нагрузок компонентов
+        """
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        
+        loadings_df = self.get_component_loadings(normalization=normalization)
+        
+        plt.figure(figsize=figsize)
+        
+        if normalization == 'percentage':
+            # Столбчатая диаграмма для процентных вкладов
+            loadings_df.plot(kind='bar', stacked=True)
+            plt.ylabel('Доля компонента, %')
+            plt.title('Относительные вклады компонентов в образцы')
+        else:
+            # Heatmap для обычных нагрузок
+            sns.heatmap(loadings_df, annot=False, cmap='RdBu_r', center=0,
+                       fmt='.3f', linewidths=0.5)
+            plt.title('Нагрузки компонентов по образцам')
+        
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.show()
+        
+    def plot_component_eem(self, component_idx, sample_idx=None, 
+                          normalization='max', figsize=(12, 8)):
+        """Построение EEM спектра для компонента"""
+        visualizer = ComponentVisualizer(self)
+        return visualizer.plot_single_component_eem(
+            component_idx, sample_idx, normalization, figsize
+        )
+    
+    def plot_all_components_eem(self):
+            """Построение EEM для всех компонентов"""
+            fig, axes = plt.subplots(self.n_components, 1, figsize=(10, 16))
+            
+            if self.n_components == 1:
+                axes = [axes]
+            
+            for i in range(self.n_components):
+                component_eem = self.get_component_eem_matrix(i)
+                component_eem = component_eem / np.max(component_eem)
+                
+                X, Y = np.meshgrid(self.excitation_wavelengths, 
+                                self.emission_wavelengths)
+                
+                im = axes[i].contourf(X, Y, component_eem, levels=50, cmap='viridis')
+                axes[i].contour(X, Y, component_eem, levels=10, colors='black', linewidths=0.3)
+                
+                axes[i].set_title(f'Component {i+1}')
+                axes[i].set_xlabel('Excitation (nm)')
+                axes[i].set_ylabel('Emission (nm)')
+                
+                plt.colorbar(im, ax=axes[i])
+            
+            plt.tight_layout()
+            return fig
     
