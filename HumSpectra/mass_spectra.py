@@ -2338,8 +2338,6 @@ def FormulaSpecData(specList, draw=True):
         
     return data
 
-
-
 def assign_by_tmds(
     spec: pd.DataFrame, 
     tmds_spec: Optional["pd.DataFrame"] = None,
