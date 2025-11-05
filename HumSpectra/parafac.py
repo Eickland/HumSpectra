@@ -387,7 +387,8 @@ class OpticalDataAnalyzer:
             pandas.DataFrame: таблица с относительными вкладами
         """
         loadings_df = self.get_component_loadings(normalization='none')
-        
+        numeric_columns = loadings_df.select_dtypes(exclude=['object', 'category', 'datetime'])
+        loadings_df = loadings_df[numeric_columns]
         if method == 'absolute':
             return loadings_df
             
