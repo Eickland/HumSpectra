@@ -387,14 +387,14 @@ class OpticalDataAnalyzer:
             pandas.DataFrame: таблица с относительными вкладами
         """
         loadings_df = self.get_component_loadings(normalization='none')
-        numeric_columns = loadings_df.select_dtypes(exclude=['object', 'category', 'datetime'])
-        loadings_df = loadings_df[numeric_columns]
+        numeric_columns = loadings_df.select_dtypes(include=['number']).columns
+
         if method == 'absolute':
-            return loadings_df
+            return loadings_df[numeric_columns]
             
         elif method == 'percentage':
             # Процентный вклад каждого компонента в каждом образце
-            percentages = loadings_df.abs().div(loadings_df.abs().sum(axis=1), axis=0) * 100
+            percentages = loadings_df[numeric_columns].abs().div(loadings_df[numeric_columns].abs().sum(axis=1), axis=0) * 100
             return percentages.round(4)
             
         else:
