@@ -493,11 +493,11 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             sample_idx: индекс образца для масштабирования (если None - используется максимальная нагрузка)
             normalization: метод нормализации ('max', 'none')
         """
-        if not hasattr(self.analyzer, 'factors'):
+        if not hasattr(self, 'factors'):
             raise ValueError("Сначала выполните PARAFAC анализ")
         
         # Получаем факторы
-        factors = self.analyzer.factors
+        factors = self.factors
         
         # Индексы для модов: 0-образцы, 1-испускание, 2-возбуждение
         sample_factor = factors[0]  # Нагрузки образцов
