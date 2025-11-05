@@ -276,186 +276,6 @@ class OpticalDataAnalyzer:
         except:
             return None
 
-    # Добавляем метод для выбора оптимального числа компонентов
-    def find_optimal_components(self, X, max_components=6, **kwargs):
-        """
-        Поиск оптимального числа компонентов через анализ отсечки
-        """
-        from math import log10
-        
-        print("=== ПОИСК ОПТИМАЛЬНОГО ЧИСЛА КОМПОНЕНТОВ ===")
-        
-        explained_variances = []
-        core_consistencies = []
-        
-        for n_comp in range(1, max_components + 1):
-            print(f"\nТестирование {n_comp} компонентов...")
-            
-            # Временно меняем число компонентов
-            original_components = self.n_components
-            self.n_components = n_comp
-            # Выполняем разложение
-            self.fit_parafac(X, **kwargs)
-            
-            explained_variances.append(self.explained_variance)
-            
-            print(f"Объясненная дисперсия для {n_comp} компонентов: {self.explained_variance:.2f}%")
-            explained_variances.append(0)
-            self.n_components = original_components
-        
-        # Анализ "локтя" на графике
-        self._plot_scree(explained_variances)
-        
-        return explained_variances
-
-    def _plot_scree(self, explained_variances):
-        """
-        Построение графика отсечки для выбора числа компонентов
-        """
-        plt.figure(figsize=(10, 6))
-        n_components = range(1, len(explained_variances) + 1)
-        
-        plt.plot(n_components, explained_variances, 'bo-', linewidth=2, markersize=8)
-        plt.xlabel('Число компонентов')
-        plt.ylabel('Объясненная дисперсия, %')
-        plt.title('График отсечки для выбора числа компонентов')
-        plt.grid(True, alpha=0.3)
-        
-        # Добавление разностей
-        differences = [0] + [explained_variances[i] - explained_variances[i-1] 
-                            for i in range(1, len(explained_variances))]
-        
-        plt.twinx()
-        plt.plot(n_components, differences, 'ro--', linewidth=1, markersize=6, alpha=0.7)
-        plt.ylabel('Прирост дисперсии, %', color='red')
-        
-        plt.tight_layout()
-        plt.show()
-    
-    def plot_component_profiles(self, figsize=(15, 10)):
-        """
-        Визуализация компонентов с реальными длинами волн
-        """
-        if not hasattr(self, 'factors'):
-            raise ValueError("Сначала выполните fit_parafac()")
-        
-        fig, axes = plt.subplots(2, self.n_components, figsize=figsize)
-        
-        for i in range(self.n_components):
-            # Спектры возбуждения
-            if self.excitation_wavelengths is not None:
-                x_exc = self.excitation_wavelengths
-                xlabel_exc = 'Длина волны возбуждения (нм)'
-            else:
-                x_exc = np.arange(len(self.factors[2][:, i]))
-                xlabel_exc = 'Индекс длины волны возбуждения'
-            
-            axes[0, i].plot(x_exc, self.factors[2][:, i], 'b-', linewidth=2)
-            axes[0, i].set_title(f'Компонент {i+1} - Возбуждение')
-            axes[0, i].set_xlabel(xlabel_exc)
-            axes[0, i].set_ylabel('Интенсивность')
-            axes[0, i].grid(True, alpha=0.3)
-            
-            # Находим и отмечаем максимум
-            max_idx = np.argmax(self.factors[2][:, i])
-            max_val = self.factors[2][max_idx, i]
-            if self.excitation_wavelengths is not None:
-                max_wavelength = self.excitation_wavelengths[max_idx]
-                axes[0, i].axvline(x=max_wavelength, color='red', linestyle='--', alpha=0.7)
-                axes[0, i].text(0.05, 0.95, f'λ_max = {max_wavelength:.1f} нм', 
-                               transform=axes[0, i].transAxes, verticalalignment='top',
-                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-            
-            # Спектры испускания
-            if self.emission_wavelengths is not None:
-                x_em = self.emission_wavelengths
-                xlabel_em = 'Длина волны испускания (нм)'
-            else:
-                x_em = np.arange(len(self.factors[1][:, i]))
-                xlabel_em = 'Индекс длины волны испускания'
-            
-            axes[1, i].plot(x_em, self.factors[1][:, i], 'r-', linewidth=2)
-            axes[1, i].set_title(f'Компонент {i+1} - Испускание')
-            axes[1, i].set_xlabel(xlabel_em)
-            axes[1, i].set_ylabel('Интенсивность')
-            axes[1, i].grid(True, alpha=0.3)
-            
-            # Находим и отмечаем максимум
-            max_idx_em = np.argmax(self.factors[1][:, i])
-            max_val_em = self.factors[1][max_idx_em, i]
-            if self.emission_wavelengths is not None:
-                max_wavelength_em = self.emission_wavelengths[max_idx_em]
-                axes[1, i].axvline(x=max_wavelength_em, color='red', linestyle='--', alpha=0.7)
-                axes[1, i].text(0.05, 0.95, f'λ_max = {max_wavelength_em:.1f} нм', 
-                               transform=axes[1, i].transAxes, verticalalignment='top',
-                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-        
-        plt.tight_layout()
-        plt.show()
-    
-    def plot_concentration_profiles(self, figsize=(12, 6)):
-        """
-        Визуализация концентраций с именами образцов
-        """
-        if not hasattr(self, 'factors'):
-            raise ValueError("Сначала выполните fit_parafac()")
-        
-        concentrations = self.factors[0]
-        
-        plt.figure(figsize=figsize)
-        
-        # Создаем ось X
-        if self.sample_names is not None:
-            x_pos = np.arange(len(self.sample_names))
-            plt.xticks(x_pos, self.sample_names, rotation=45, ha='right')
-        else:
-            x_pos = np.arange(concentrations.shape[0])
-        
-        # Рисуем концентрации для каждого компонента
-        for i in range(self.n_components):
-            plt.plot(x_pos, concentrations[:, i], 'o-', linewidth=2, 
-                    markersize=6, label=f'Компонент {i+1}')
-        
-        plt.xlabel('Образцы')
-        plt.ylabel('Относительная концентрация')
-        plt.title('Распределение компонентов по образцам')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
-    
-    def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(10, 8)):
-        """
-        Контурный график EEM для выбранного образца
-        """
-        if not hasattr(self, 'factors'):
-            raise ValueError("Сначала выполните fit_parafac()")
-        
-        # Реконструируем EEM для выбранного образца
-        sample_eem = self.reconstruct_sample(sample_idx)
-        
-        plt.figure(figsize=figsize)
-        
-        # Контурный график
-        if self.excitation_wavelengths is not None and self.emission_wavelengths is not None:
-            X, Y = np.meshgrid(self.excitation_wavelengths, self.emission_wavelengths)
-            contour = plt.contourf(X, Y, sample_eem, levels=n_levels, cmap='viridis')
-            plt.colorbar(contour, label='Интенсивность флуоресценции')
-            plt.xlabel('Длина волны возбуждения (нм)')
-            plt.ylabel('Длина волны испускания (нм)')
-            
-            sample_name = self.sample_names[sample_idx] if self.sample_names else f"Образец {sample_idx+1}"
-            plt.title(f'Контурный график EEM: {sample_name}')
-        else:
-            plt.imshow(sample_eem, aspect='auto', cmap='viridis')
-            plt.colorbar(label='Интенсивность флуоресценции')
-            plt.xlabel('Индекс возбуждения')
-            plt.ylabel('Индекс испускания')
-            plt.title(f'EEM матрица: Образец {sample_idx+1}')
-        
-        plt.tight_layout()
-        plt.show()
-    
     def reconstruct_sample(self, sample_idx):
         """Реконструкция EEM для конкретного образца"""
         reconstructed = np.zeros((len(self.emission_wavelengths),  # pyright: ignore[reportArgumentType]
@@ -497,21 +317,6 @@ class OpticalDataAnalyzer:
             })
         
         return maxima
-    
-    def print_component_summary(self):
-        """Печатает сводку по компонентам"""
-        maxima = self.get_component_maxima()
-        
-        print("=" * 60)
-        print("СВОДКА ПО КОМПОНЕНТАМ PARAFAC")
-        print("=" * 60)
-        
-        for comp in maxima:
-            print(f"Компонент {comp['component']}:")
-            print(f"  Возбуждение: λ_max = {comp['excitation_max']:.1f} нм")
-            print(f"  Испускание: λ_max = {comp['emission_max']:.1f} нм")
-            print(f"  Stokes shift: {comp['emission_max'] - comp['excitation_max']:.1f} нм")
-            print()
             
     def get_component_loadings(self, normalization='max'):
         """
@@ -611,7 +416,7 @@ class OpticalDataAnalyzer:
         """
         
         # Реконструируем тензор
-        reconstructed = tl.cp_to_tensor(self.factors)
+        reconstructed = tl.cp_to_tensor(self.parafac_result)
         
         # Общая сумма квадратов
         total_ss = np.sum(self.X ** 2)
@@ -897,4 +702,129 @@ class ComponentVisualizer:
         ax2.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        return fig   
+        return fig
+    
+    def plot_component_profiles(self, figsize=(15, 10)):
+        """
+        Визуализация компонентов с реальными длинами волн
+        """
+        if not hasattr(self, 'factors'):
+            raise ValueError("Сначала выполните fit_parafac()")
+        
+        fig, axes = plt.subplots(2, self.n_components, figsize=figsize)
+        
+        for i in range(self.n_components):
+            # Спектры возбуждения
+            if self.excitation_wavelengths is not None:
+                x_exc = self.excitation_wavelengths
+                xlabel_exc = 'Длина волны возбуждения (нм)'
+            else:
+                x_exc = np.arange(len(self.factors[2][:, i]))
+                xlabel_exc = 'Индекс длины волны возбуждения'
+            
+            axes[0, i].plot(x_exc, self.factors[2][:, i], 'b-', linewidth=2)
+            axes[0, i].set_title(f'Компонент {i+1} - Возбуждение')
+            axes[0, i].set_xlabel(xlabel_exc)
+            axes[0, i].set_ylabel('Интенсивность')
+            axes[0, i].grid(True, alpha=0.3)
+            
+            # Находим и отмечаем максимум
+            max_idx = np.argmax(self.factors[2][:, i])
+            max_val = self.factors[2][max_idx, i]
+            if self.excitation_wavelengths is not None:
+                max_wavelength = self.excitation_wavelengths[max_idx]
+                axes[0, i].axvline(x=max_wavelength, color='red', linestyle='--', alpha=0.7)
+                axes[0, i].text(0.05, 0.95, f'λ_max = {max_wavelength:.1f} нм', 
+                               transform=axes[0, i].transAxes, verticalalignment='top',
+                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+            # Спектры испускания
+            if self.emission_wavelengths is not None:
+                x_em = self.emission_wavelengths
+                xlabel_em = 'Длина волны испускания (нм)'
+            else:
+                x_em = np.arange(len(self.factors[1][:, i]))
+                xlabel_em = 'Индекс длины волны испускания'
+            
+            axes[1, i].plot(x_em, self.factors[1][:, i], 'r-', linewidth=2)
+            axes[1, i].set_title(f'Компонент {i+1} - Испускание')
+            axes[1, i].set_xlabel(xlabel_em)
+            axes[1, i].set_ylabel('Интенсивность')
+            axes[1, i].grid(True, alpha=0.3)
+            
+            # Находим и отмечаем максимум
+            max_idx_em = np.argmax(self.factors[1][:, i])
+            max_val_em = self.factors[1][max_idx_em, i]
+            if self.emission_wavelengths is not None:
+                max_wavelength_em = self.emission_wavelengths[max_idx_em]
+                axes[1, i].axvline(x=max_wavelength_em, color='red', linestyle='--', alpha=0.7)
+                axes[1, i].text(0.05, 0.95, f'λ_max = {max_wavelength_em:.1f} нм', 
+                               transform=axes[1, i].transAxes, verticalalignment='top',
+                               bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        plt.tight_layout()
+        plt.show()
+    
+    def plot_fraction_profiles(self, figsize=(12, 6)):
+        """
+        Визуализация концентраций с именами образцов
+        """
+        if not hasattr(self, 'factors'):
+            raise ValueError("Сначала выполните fit_parafac()")
+        
+        fraction = self.factors[0]
+        
+        plt.figure(figsize=figsize)
+        
+        # Создаем ось X
+        if self.sample_names is not None:
+            x_pos = np.arange(len(self.sample_names))
+            plt.xticks(x_pos, self.sample_names, rotation=45, ha='right')
+        else:
+            x_pos = np.arange(fraction.shape[0])
+        
+        # Рисуем доли для каждого компонента
+        for i in range(self.n_components):
+            plt.plot(x_pos, fraction[:, i], 'o-', linewidth=2, 
+                    markersize=6, label=f'Компонент {i+1}')
+        
+        plt.xlabel('Образцы')
+        plt.ylabel('Относительная доля')
+        plt.title('Распределение компонентов по образцам')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+    
+    def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(8, 6)):
+        """
+        Контурный график EEM для выбранного образца
+        """
+        if not hasattr(self, 'factors'):
+            raise ValueError("Сначала выполните fit_parafac()")
+        
+        # Реконструируем EEM для выбранного образца
+        sample_eem = self.reconstruct_sample(sample_idx)
+        
+        plt.figure(figsize=figsize)
+        
+        # Контурный график
+        if self.excitation_wavelengths is not None and self.emission_wavelengths is not None:
+            X, Y = np.meshgrid(self.excitation_wavelengths, self.emission_wavelengths)
+            contour = plt.contourf(X, Y, sample_eem, levels=n_levels, cmap='viridis')
+            plt.colorbar(contour, label='Интенсивность флуоресценции')
+            plt.xlabel('Длина волны возбуждения (нм)')
+            plt.ylabel('Длина волны испускания (нм)')
+            
+            sample_name = self.sample_names[sample_idx] if self.sample_names else f"Образец {sample_idx+1}"
+            plt.title(f'Контурный график EEM: {sample_name}')
+        else:
+            plt.imshow(sample_eem, aspect='auto', cmap='viridis')
+            plt.colorbar(label='Интенсивность флуоресценции')
+            plt.xlabel('Индекс возбуждения')
+            plt.ylabel('Индекс испускания')
+            plt.title(f'EEM матрица: Образец {sample_idx+1}')
+        
+        plt.tight_layout()
+        plt.show()
+    
