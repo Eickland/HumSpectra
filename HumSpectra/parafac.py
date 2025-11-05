@@ -527,8 +527,8 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         fig, ax = plt.subplots(figsize=figsize)
         
         # Контурный график
-        X, Y = np.meshgrid(self.analyzer.excitation_wavelengths, 
-                          self.analyzer.emission_wavelengths)
+        X, Y = np.meshgrid(self.excitation_wavelengths, 
+                          self.emission_wavelengths)
         
         # Уровни для контурных линий
         levels = np.linspace(np.min(component_eem), np.max(component_eem), 20)
@@ -546,8 +546,8 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         
         sample_info = ""
         if sample_idx is not None:
-            if self.analyzer.sample_names:
-                sample_info = f" (масштабировано для {self.analyzer.sample_names[sample_idx]})"
+            if self.sample_names:
+                sample_info = f" (масштабировано для {self.sample_names[sample_idx]})"
             else:
                 sample_info = f" (масштабировано для образца {sample_idx})"
         
@@ -564,13 +564,13 @@ class ComponentVisualizer(OpticalDataAnalyzer):
     
     def plot_component_spectra(self, component_idx, figsize=(12, 6)):
         """Построение отдельных спектров возбуждения и испускания"""
-        factors = self.analyzer.factors
+        factors = self.factors
         
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
         
         # Спектр испускания
         emission_spectrum = factors[1][:, component_idx]
-        ax1.plot(self.analyzer.emission_wavelengths, emission_spectrum, 
+        ax1.plot(self.emission_wavelengths, emission_spectrum, 
                 'b-', linewidth=2, label=f'Компонент {component_idx+1}')
         ax1.set_xlabel('Длина волны испускания, нм')
         ax1.set_ylabel('Интенсивность (норм.)')
@@ -580,7 +580,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         
         # Спектр возбуждения
         excitation_spectrum = factors[2][:, component_idx]
-        ax2.plot(self.analyzer.excitation_wavelengths, excitation_spectrum,
+        ax2.plot(self.excitation_wavelengths, excitation_spectrum,
                 'r-', linewidth=2, label=f'Компонент {component_idx+1}')
         ax2.set_xlabel('Длина волны возбуждения, нм')
         ax2.set_ylabel('Интенсивность (норм.)')
@@ -595,7 +595,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         """
         Визуализация компонентов с реальными длинами волн
         """
-        if not hasattr(self.analyzer, 'factors'):
+        if not hasattr(self, 'factors'):
             raise ValueError("Сначала выполните fit_parafac()")
         
         fig, axes = plt.subplots(2, self.n_components, figsize=figsize)
