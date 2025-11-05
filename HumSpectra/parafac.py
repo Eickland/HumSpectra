@@ -347,6 +347,7 @@ class OpticalDataAnalyzer:
         columns = [f"Component_{i+1}" for i in range(self.n_components)]
         
         loadings_df = pd.DataFrame(sample_factor, index=index, columns=columns)
+        loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names]
         
         # Применяем нормализацию
         if normalization == 'max':
@@ -766,25 +767,67 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         plt.tight_layout()
         plt.show()
 
-    def plot_component_loadings(self, normalization='percentage', figsize=(12, 18)):
+    def plot_component_loadings(self, normalization='percentage', figsize=(12, 18), group_by_subclass=True):
         """
-        Визуализация нагрузок компонентов
+        Визуализация нагрузок компонентов с группировкой по классам
+        
+        Args:
+            normalization: метод нормализации
+            figsize: размер фигуры
+            group_by_subclass: если True, группирует образцы по подклассам
         """
         import matplotlib.pyplot as plt
         import seaborn as sns
         
         loadings_df = self.get_component_loadings(normalization=normalization)
         
-        plt.figure(figsize=figsize)
-        
-        # Столбчатая диаграмма для процентных вкладов
-        loadings_df.plot(kind='bar', stacked=True)
-        plt.ylabel('Доля компонента, %')
-        plt.title('Относительные вклады компонентов в образцы')
-        
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
+        if group_by_subclass and 'Subclass' in loadings_df.columns:
+            # Группируем по подклассам
+            subclass_groups = loadings_df.groupby('Subclass')
+            
+            # Вычисляем средние значения для каждого подкласса
+            component_columns = [col for col in loadings_df.columns if col.startswith('Component_')]
+            grouped_data = subclass_groups[component_columns].mean()
+            
+            # Создаем фигуру с двумя subplots
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] + 4))
+            
+            # 1. Столбчатая диаграмма для группированных данных
+            grouped_data.plot(kind='bar', stacked=True, ax=ax1)
+            ax1.set_ylabel('Доля компонента, %')
+            ax1.set_title('Относительные вклады компонентов в подклассы (средние значения)')
+            ax1.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
+            ax1.tick_params(axis='x', rotation=45)
+            
+            # 2. Box plot для распределения по подклассам
+            melted_data = loadings_df.melt(id_vars=['Subclass'], 
+                                        value_vars=component_columns,
+                                        var_name='Component', 
+                                        value_name='Loading')
+            
+            sns.boxplot(data=melted_data, x='Subclass', y='Loading', hue='Component', ax=ax2)
+            ax2.set_ylabel('Доля компонента, %')
+            ax2.set_title('Распределение вкладов компонентов по подклассам')
+            ax2.tick_params(axis='x', rotation=45)
+            ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            
+            plt.tight_layout()
+            plt.show()
+            
+        else:
+            # Исходный вариант без группировки
+            plt.figure(figsize=figsize)
+            
+            # Столбчатая диаграмма для процентных вкладов
+            component_columns = [col for col in loadings_df.columns if col.startswith('Component_')]
+            loadings_df[component_columns].plot(kind='bar', stacked=True)
+            plt.ylabel('Доля компонента, %')
+            plt.title('Относительные вклады компонентов в образцы')
+            
+            plt.xticks(rotation=45)
+            plt.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
+            plt.tight_layout()
+            plt.show()
         
     def plot_component_eem(self, component_idx, sample_idx=None, 
                           normalization='max', figsize=(12, 8)):
