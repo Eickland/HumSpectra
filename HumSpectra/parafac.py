@@ -768,7 +768,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         plt.tight_layout()
         plt.show()
 
-    def plot_component_loadings(self, normalization='percentage', figsize=(12, 18), group_by_subclass=True):
+    def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True):
         """
         Визуализация нагрузок компонентов с группировкой по классам
         
@@ -829,15 +829,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
             plt.tight_layout()
             plt.show()
-        
-    def plot_component_eem(self, component_idx, sample_idx=None, 
-                          normalization='max', figsize=(12, 8)):
-        """Построение EEM спектра для компонента"""
-        visualizer = ComponentVisualizer(self)
-        return visualizer.plot_single_component_eem(
-            component_idx, sample_idx, normalization, figsize
-        )
-    
+         
     def plot_all_components_eem(self):
             """Построение EEM для всех компонентов"""
             fig, axes = plt.subplots(self.n_components, 1, figsize=(10, 16))
@@ -861,6 +853,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 
                 plt.colorbar(im, ax=axes[i])
             
-            plt.tight_layout()
+            fig.tight_layout()
             return fig
     
