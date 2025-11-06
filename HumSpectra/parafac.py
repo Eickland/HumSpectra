@@ -766,7 +766,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.ylabel('Индекс испускания')
             plt.title(f'EEM матрица: Образец {sample_idx+1}')
         
-        plt.tight_layout()
 
     def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True):
         """
