@@ -17,7 +17,7 @@ class EEMDataLoader:
         self.excitation_wavelengths = None
         self.emission_wavelengths = None
         
-    def load_eem_data(self):
+    def load_eem_data(self,index_col):
         """Загрузка всех EEM спектров из папки"""
         
         # Находим все CSV файлы в папке
@@ -32,7 +32,7 @@ class EEMDataLoader:
         for i, file_path in enumerate(csv_files):
             
             # Загружаем CSV файл
-            df = fl.read_fluo_3d(file_path,index_col=1)
+            df = fl.read_fluo_3d(file_path,index_col=index_col)
             df = fl.cut_spectra(df,ex_low_limit=255,ex_high_limit=450,em_low_limit=255,em_high_limit=600)
             
             # Извлекаем длины волн
