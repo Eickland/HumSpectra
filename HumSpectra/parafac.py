@@ -767,7 +767,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.title(f'EEM матрица: Образец {sample_idx+1}')
         
         plt.tight_layout()
-        plt.show()
 
     def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True):
         """
