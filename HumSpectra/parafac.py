@@ -7,6 +7,7 @@ import tensorly as tl
 from tensorly.decomposition import non_negative_parafac_hals
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import seaborn as sns
 
 import HumSpectra.fluorescence as fl
 import HumSpectra.utilits as ut
@@ -562,7 +563,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         cax = divider.append_axes("right", size="5%", pad=0.1)
         plt.colorbar(im, cax=cax, label='Интенсивность (норм.)')
         
-        plt.tight_layout()
         return fig, ax, component_eem
     
     def plot_component_spectra(self, component_idx, figsize=(12, 6)):
@@ -591,7 +591,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        fig.tight_layout()
         return fig
     
     def plot_component_profiles(self, figsize=(15, 10)):
@@ -652,8 +651,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                                transform=axes[1, i].transAxes, verticalalignment='top',
                                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
-        plt.tight_layout()
-        plt.show()
+
     
     def plot_fraction_profiles(self, figsize=(12, 6)):
         """
@@ -683,8 +681,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         plt.title('Распределение компонентов по образцам')
         plt.legend()
         plt.grid(True, alpha=0.3)
-        plt.tight_layout()
-        plt.show()
         
     def plot_fraction_profiles_grouped(self, figsize=(14, 6)):
         """
@@ -734,8 +730,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.title('Распределение компонентов по образцам')
             plt.legend()
             plt.grid(True, alpha=0.3)
-            plt.tight_layout()
-            plt.show()
     
     def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(8, 6)):
         """
@@ -776,8 +770,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             figsize: размер фигуры
             group_by_subclass: если True, группирует образцы по подклассам
         """
-        import matplotlib.pyplot as plt
-        import seaborn as sns
         
         loadings_df = self.get_component_loadings(normalization=normalization)
         
@@ -811,8 +803,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             ax2.tick_params(axis='x', rotation=45)
             ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             
-            plt.tight_layout()
-            plt.show()
             
         else:
             # Исходный вариант без группировки
@@ -826,8 +816,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             
             plt.xticks(rotation=45)
             plt.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
-            plt.tight_layout()
-            plt.show()
          
     def plot_all_components_eem(self):
             """Построение EEM для всех компонентов"""
@@ -852,6 +840,5 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 
                 plt.colorbar(im, ax=axes[i])
             
-            fig.tight_layout()
             return fig
     

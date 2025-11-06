@@ -231,42 +231,73 @@ def cut_raman_spline(em_wvs: np.ndarray,
 
 def read_fluo_3d(path: str,
                  sep: str | None = None,
-                 index_col: int = 0,
+                 index_col: int | None = None,  # Изменено на None по умолчанию
                  debug: bool = False,
                  dropcols: int = 0) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
     :param sep: разделитель в строчном виде (example: ",").
-    :param index_col: номер столбца, который считается индексом таблицы.
+    :param index_col: номер столбца, который считается индексом таблицы. Если None, будет определён автоматически.
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, имена столбцов - длины волн
             возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
     """
 
     extension = path.split(sep=".")[-1]
     
-
     if sep is None and (extension == "csv" or extension == "txt"):
         sep = ut.check_sep(path)
 
     try:
-
+        # Сначала читаем небольшой кусок данных для анализа структуры
         if extension == "xlsx":
-            headers = pd.read_csv(path, nrows=0, index_col=index_col).columns
-            unnamed_columns = [col for col in headers if col.startswith('Unnamed:')]
-
-            data = pd.read_excel(path, index_col=index_col)
-            data = data.drop(unnamed_columns, axis=1)
-
+            sample_data = pd.read_excel(path, nrows=5)
         elif extension == "csv" or extension == "txt":
-            headers = pd.read_csv(path, nrows=0, index_col=index_col).columns
-            unnamed_columns = [col for col in headers if col.startswith('Unnamed:')]
-
-            data = pd.read_csv(path, sep=sep, index_col=index_col)
-            data = data.drop(unnamed_columns, axis=1)
-
+            sample_data = pd.read_csv(path, sep=sep, nrows=5)
         else:
             raise KeyError("Тип данных не поддерживается")
+        
+        # Автоматическое определение индексного столбца
+        if index_col is None:
+            # Проверяем, есть ли столбец без имени в позиции 0 (типичный индекс)
+            if sample_data.columns[0] == 'Unnamed: 0' or sample_data.columns[0] == '':
+                index_col = 0
+                if debug:
+                    print(f"Автоматически определён индексный столбец: {index_col}")
+            else:
+                # Если нет явного индексного столбца, создаём обычный числовой индекс
+                index_col = False
+                if debug:
+                    print("Индексный столбец не найден, используется стандартный индекс")
+        
+        # Чтение полных данных с определённым индексом
+        if extension == "xlsx":
+            if index_col is False:
+                data = pd.read_excel(path)
+                # Удаляем безымянные столбцы если они есть
+                unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
+                if unnamed_columns:
+                    data = data.drop(unnamed_columns, axis=1)
+            else:
+                data = pd.read_excel(path, index_col=index_col)
+                # Удаляем безымянные столбцы если они есть
+                unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
+                if unnamed_columns:
+                    data = data.drop(unnamed_columns, axis=1)
+                    
+        elif extension == "csv" or extension == "txt":
+            if index_col is False:
+                data = pd.read_csv(path, sep=sep)
+                # Удаляем безымянные столбцы если они есть
+                unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
+                if unnamed_columns:
+                    data = data.drop(unnamed_columns, axis=1)
+            else:
+                data = pd.read_csv(path, sep=sep, index_col=index_col)
+                # Удаляем безымянные столбцы если они есть
+                unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
+                if unnamed_columns:
+                    data = data.drop(unnamed_columns, axis=1)
 
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
@@ -279,17 +310,25 @@ def read_fluo_3d(path: str,
     
     name = ut.extract_name_from_path(path)
 
+    # Удаляем строку с "nm" если она присутствует в индексе
     if "nm" in data.index:
-        data.drop("nm", inplace=True)
+        data = data.drop("nm", axis=0)
 
     if debug:
-        print(name)
-        print(data)
+        print(f"Имя файла: {name}")
+        print(f"Размер данных: {data.shape}")
+        print(f"Первые 5 строк:\n{data.head()}")
 
-    data = data.astype("float64")
-    
-    data.columns = data.columns.astype(int)
-    data.index = data.index.astype(int)
+    # Преобразование типов с обработкой возможных ошибок
+    try:
+        data = data.astype("float64")
+        data.columns = data.columns.astype(int)
+        data.index = data.index.astype(int)
+    except (ValueError, TypeError) as e:
+        if debug:
+            print(f"Предупреждение: ошибка преобразования типов: {e}")
+        # Пробуем преобразовать только числовые столбцы
+        data = data.apply(pd.to_numeric, errors='coerce')
 
     data.attrs['name'] = name
     data.attrs['class'] = ut.extract_class_from_name(name)
