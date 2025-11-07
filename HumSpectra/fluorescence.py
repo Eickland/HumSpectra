@@ -232,8 +232,7 @@ def cut_raman_spline(em_wvs: np.ndarray,
 def read_fluo_3d(path: str,
                  sep: str | None = None,
                  index_col: int | None = None,  # Изменено на None по умолчанию
-                 debug: bool = False,
-                 dropcols: int = 0) -> pd.DataFrame:
+                 debug: bool = False) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
