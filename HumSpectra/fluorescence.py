@@ -329,6 +329,8 @@ def read_fluo_3d(path: str,
             print(f"Предупреждение: ошибка преобразования типов: {e}")
         # Пробуем преобразовать только числовые столбцы
         data = data.apply(pd.to_numeric, errors='coerce')
+        
+    data.dropna(axis=0,inplace=True)
 
     data.attrs['name'] = name
     data.attrs['class'] = ut.extract_class_from_name(name)
