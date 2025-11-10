@@ -13,7 +13,7 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
-def cluster_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None):
+def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None):
     """
     Кластеризация данных с многоуровневым индексом и анализ подклассов
     с выводом результатов в HTML файл
