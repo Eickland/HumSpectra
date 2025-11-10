@@ -13,7 +13,7 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
-def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None):
+def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None, save=False):
     """
     Кластеризация данных с многоуровневым индексом и анализ подклассов
     с выводом результатов в HTML файл
@@ -190,12 +190,13 @@ def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output
         # Восстанавливаем stdout
         sys.stdout = old_stdout
         
-        # Создаем HTML отчет
-        create_html_report(console_output, result_df, contingency_table, 
-                          percentage_table, cluster_summary_df, cluster_means, 
-                          subclass_cluster_map, n_clusters, output_html_path)
-        
-        print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
+        if save:
+            # Создаем HTML отчет
+            create_html_report(console_output, result_df, contingency_table, 
+                            percentage_table, cluster_summary_df, cluster_means, 
+                            subclass_cluster_map, n_clusters, output_html_path)
+            
+            print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
         
         return result_df, kmeans, scaler, contingency_table, percentage_table, subclass_cluster_map
         
