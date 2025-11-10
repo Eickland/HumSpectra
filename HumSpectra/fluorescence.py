@@ -332,6 +332,7 @@ def read_fluo_3d(path: str,
     data.dropna(axis=0,inplace=True)
     data.set_index(data.columns[0], inplace=True,drop=True)
     data.index = data.index.astype(int)
+    data.columns = data.columns.astype(int)
 
     data.attrs['name'] = name
     data.attrs['class'] = ut.extract_class_from_name(name)
