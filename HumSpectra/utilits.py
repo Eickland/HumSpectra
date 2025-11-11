@@ -9,7 +9,7 @@ from scipy import stats
 from typing import Any, Dict
 import warnings
 import matplotlib.pyplot as plt
-import seaborn as sns
+import matplotlib.patheffects as path_effects
 
 
 def extract_and_combine_digits_re(text: str) -> int:
@@ -664,4 +664,30 @@ def plot_strong_correlations(corr_matrix,n=3,ax=None):
                 f'{round(width,2)}', 
                 ha='center', va='center', 
                 color=text_color, fontweight='bold', fontsize=14)
+        
+def add_median_labels(ax, fmt='.3f'):
+    
+    '''
+    Добавление числовой подписи на медиану в seaborn.boxplot
+    '''
+
+    lines = ax.get_lines()
+    boxes = [c for c in ax.get_children() if type(c).__name__ == 'PathPatch']
+    lines_per_box = int(len(lines) / len(boxes))
+
+    for median in lines[4:len(lines):lines_per_box]:
+
+        x, y = (data.mean() for data in median.get_data())
+
+        # choose value depending on horizontal or vertical plot orientation
+
+        value = x if (median.get_xdata()[1] - median.get_xdata()[0]) == 0 else y
+        text = ax.text(x, y, f'{value:{fmt}}', ha='center', va='center',
+                       fontweight='bold', color='white')
+        
+        # create median-colored border around white text for contrast
+        text.set_path_effects([
+            path_effects.Stroke(linewidth=3, foreground=median.get_color()),
+            path_effects.Normal(),
+        ])
     
