@@ -12,8 +12,8 @@ import seaborn as sns
 import HumSpectra.fluorescence as fl
 import HumSpectra.utilits as ut
 class EEMDataLoader:
-    def __init__(self, data_folder):
-        self.data_folder = data_folder
+    def __init__(self):
+        self.data_folder = None
         self.sample_names = []
         self.excitation_wavelengths = None
         self.emission_wavelengths = None
@@ -21,10 +21,10 @@ class EEMDataLoader:
     def load_eem_data(self, data_folders=None, index_col=None):
         """Загрузка всех EEM спектров из одной или нескольких папок"""
         
-        # Если data_folders не указан, используем self.data_folder
+
         if data_folders is None:
             data_folders = [self.data_folder]
-        # Если передан путь к одной папке, преобразуем в список
+
         elif isinstance(data_folders, (str, Path)):
             data_folders = [data_folders]
         
