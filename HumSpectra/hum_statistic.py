@@ -12,6 +12,7 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None, save=False):
     """
@@ -953,10 +954,10 @@ def create_rf_html_report(console_output, results_df, feature_importance,
 def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
                                test_size=0.2, random_state=42, 
                                output_html_path='lda_analysis_report.html',
-                               save=False):
+                               save=False, vif_threshold=10.0):
     """
     Анализ данных с помощью Linear Discriminant Analysis (LDA)
-    с выводом результатов в HTML файл
+    с выводом результатов в HTML файл и проверкой на мультиколлинеарность
     """
     
     # Перехватываем вывод в консоль
@@ -1019,11 +1020,78 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             print(f"   Обнаружено пропущенных значений: {missing_count}")
             features_numeric = features_numeric.fillna(features_numeric.mean())
         
+        # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
+        print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
+        
+        def calculate_vif(X, threshold=10.0):
+            """
+            Рассчитывает VIF для признаков и удаляет сильно коррелированные
+            """
+            X_temp = X.copy()
+            vif_data = pd.DataFrame()
+            vif_data["feature"] = X_temp.columns
+            vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
+                              for i in range(X_temp.shape[1])]
+            vif_data = vif_data.sort_values("VIF", ascending=False)
+            
+            # Удаляем признаки с высоким VIF итеративно
+            high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
+            iterations = 0
+            max_iterations = 20
+            
+            while high_vif_features and iterations < max_iterations:
+                # Удаляем признак с наибольшим VIF
+                feature_to_remove = high_vif_features[0]
+                X_temp = X_temp.drop(columns=[feature_to_remove])
+                
+                # Пересчитываем VIF
+                if X_temp.shape[1] > 1:
+                    vif_data = pd.DataFrame()
+                    vif_data["feature"] = X_temp.columns
+                    vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
+                                      for i in range(X_temp.shape[1])]
+                    vif_data = vif_data.sort_values("VIF", ascending=False)
+                    
+                    high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
+                else:
+                    break
+                    
+                iterations += 1
+            
+            return X_temp, vif_data
+        
+        # Проверяем, достаточно ли признаков для VIF анализа
+        if len(features_numeric.columns) > 1:
+            features_after_vif, vif_results = calculate_vif(features_numeric, vif_threshold)
+            
+            # Выводим результаты VIF анализа
+            print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
+            print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
+            print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
+            
+            if len(vif_results) > 0:
+                print(f"\n   Топ-10 признаков по VIF (после фильтрации):")
+                for i, row in vif_results.head(10).iterrows():
+                    status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
+                    print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
+            
+            # Используем отфильтрованные признаки
+            features_numeric = features_after_vif
+            
+            # Обновляем список числовых колонок
+            numeric_columns = features_numeric.columns
+            
+            if len(numeric_columns) == 0:
+                raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
+        else:
+            print("   Недостаточно признаков для VIF анализа (требуется > 1)")
+            vif_results = pd.DataFrame()
+        
         # Масштабирование признаков (важно для LDA)
         scaler = StandardScaler()
         features_scaled = scaler.fit_transform(features_numeric)
         
-        print(f"   Размерность данных: {features_scaled.shape}")
+        print(f"   Размерность данных после VIF фильтрации: {features_scaled.shape}")
         print(f"   Количество признаков: {features_scaled.shape[1]}")
         
         # Шаг 3: Разделение на train/test с контролем стратификации
@@ -1178,12 +1246,12 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         if save:
             create_lda_html_report(console_output, results_df, feature_importance, 
                                  lda_model, class_names, le, X_test, y_test, y_pred, 
-                                 X_train_lda, y_train, output_html_path)
+                                 X_train_lda, y_train, output_html_path, vif_results)
             
             print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
         
         return (results_df, lda_model, scaler, feature_importance, 
-                X_train, X_test, y_train, y_test, le, accuracy, X_train_lda, X_test_lda)
+                X_train, X_test, y_train, y_test, le, accuracy, X_train_lda, X_test_lda, vif_results)
         
     except Exception as e:
         # Восстанавливаем stdout в случае ошибки
@@ -1193,7 +1261,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
 
 def create_lda_html_report(console_output, results_df, feature_importance, 
                           lda_model, class_names, label_encoder,
-                          X_test, y_test, y_pred, X_lda, y_train, output_html_path):
+                          X_test, y_test, y_pred, X_lda, y_train, output_html_path, vif_results=None):
     """Создание HTML отчета с результатами анализа LDA"""
     
     # Создаем визуализации
@@ -1260,6 +1328,24 @@ def create_lda_html_report(console_output, results_df, feature_importance,
     buffer3.seek(0)
     lda_projection_plot = base64.b64encode(buffer3.getvalue()).decode()
     plt.close(fig3)
+    
+    # Создаем секцию VIF если есть результаты
+    vif_section = ""
+    if vif_results is not None and len(vif_results) > 0:
+        vif_table = vif_results.to_html(classes='dataframe', border=0, index=False)
+        vif_section = f"""
+        <div class="section">
+            <h2>📊 Анализ мультиколлинеарности (VIF)</h2>
+            <p><em>Variance Inflation Factor для признаков после фильтрации</em></p>
+            {vif_table}
+            <div class="coefficient-info">
+                <h3>ℹ️ Интерпретация VIF</h3>
+                <p><strong>VIF < 5</strong>: Нет мультиколлинеарности</p>
+                <p><strong>5 ≤ VIF < 10</strong>: Умеренная мультиколлинеарность</p>
+                <p><strong>VIF ≥ 10</strong>: Высокая мультиколлинеарность (требует внимания)</p>
+            </div>
+        </div>
+        """
     
     # Создаем стилизованный HTML
     html_content = f"""
@@ -1441,6 +1527,8 @@ def create_lda_html_report(console_output, results_df, feature_importance,
                 <p><strong>Отрицательные коэффициенты</strong> (красные) уменьшают вероятность принадлежности к определенным классам</p>
                 <p>Чем больше абсолютное значение коэффициента, тем сильнее влияние признака на разделение классов</p>
             </div>
+            
+            {vif_section}
             
             <div class="section">
                 <h2>📋 Полный вывод анализа</h2>
