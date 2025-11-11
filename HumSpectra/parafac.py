@@ -688,8 +688,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                                transform=axes[1, i].transAxes, verticalalignment='top',
                                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
-
-    
     def plot_fraction_profiles(self, figsize=(12, 6)):
         """
         Визуализация концентраций с именами образцов
@@ -719,7 +717,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         plt.legend()
         plt.grid(True, alpha=0.3)
         
-    def plot_fraction_profiles_grouped(self, figsize=(14, 6)):
+    def plot_fraction_profiles_grouped(self, figsize=(14, 6),rotation=45):
         """
         Визуализация с группировкой по классам с сохранением всех точек
         """
@@ -767,6 +765,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.title('Распределение компонентов по образцам')
             plt.legend()
             plt.grid(True, alpha=0.3)
+            plt.xticks(rotation=rotation)
     
     def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(8, 6)):
         """
