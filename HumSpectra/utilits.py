@@ -55,7 +55,7 @@ def extract_name_from_path(file_path: str) -> str:
         # 4. Земена русских символов на английские транслитом.
         file_name = translit(file_name, 'ru', reversed=True)
 
-        return file_name + "_" + date
+        return file_name + "-" + date
     
     except Exception as e:
         print(f"Ошибка при обработке пути {file_path}: {e}")
