@@ -18,46 +18,85 @@ class EEMDataLoader:
         self.excitation_wavelengths = None
         self.emission_wavelengths = None
         
-    def load_eem_data(self,index_col):
-        """Загрузка всех EEM спектров из папки"""
+    def load_eem_data(self, data_folders=None, index_col=None):
+        """Загрузка всех EEM спектров из одной или нескольких папок"""
         
-        # Находим все CSV файлы в папке
-        csv_files = glob.glob(os.path.join(self.data_folder, "*.csv"))
-        csv_files.sort()  # Сортируем для воспроизводимости
-        
-        if not csv_files:
-            raise ValueError(f"CSV файлы не найдены в папке {self.data_folder}")
+        # Если data_folders не указан, используем self.data_folder
+        if data_folders is None:
+            data_folders = [self.data_folder]
+        # Если передан путь к одной папке, преобразуем в список
+        elif isinstance(data_folders, (str, Path)):
+            data_folders = [data_folders]
         
         eem_matrices = []
+        self.sample_names = []  # Очищаем имена образцов
         
-        for i, file_path in enumerate(csv_files):
+        for data_folder in data_folders:
+            data_folder = Path(data_folder)
             
-            # Загружаем CSV файл
-            df = fl.read_fluo_3d(file_path,index_col=index_col)
-            df = fl.cut_spectra(df,ex_low_limit=255,ex_high_limit=450,em_low_limit=255,em_high_limit=600)
+            # Находим все CSV файлы в папке
+            csv_files = list(data_folder.glob("*.csv"))
+            csv_files.sort()  # Сортируем для воспроизводимости
             
-            # Извлекаем длины волн
-            if self.excitation_wavelengths is None:
-                self.excitation_wavelengths = np.array(df.columns, dtype=float)
-            if self.emission_wavelengths is None:
-                self.emission_wavelengths = np.array(df.index, dtype=float)
+            if not csv_files:
+                print(f"Предупреждение: CSV файлы не найдены в папке {data_folder}")
+                continue
             
-            # Преобразуем в numpy array
-            eem_matrix = df.values.astype(float)
-            eem_matrices.append(eem_matrix)
+            print(f"Загрузка данных из папки: {data_folder}")
+            print(f"Найдено файлов: {len(csv_files)}")
             
-            # Сохраняем имя образца
-            self.sample_names.append(os.path.splitext(os.path.basename(file_path))[0])
+            for i, file_path in enumerate(csv_files):
+                try:
+                    # Загружаем CSV файл
+                    df = fl.read_fluo_3d(file_path, index_col=index_col)
+                    df = fl.cut_spectra(df, ex_low_limit=255, ex_high_limit=450, 
+                                    em_low_limit=255, em_high_limit=600)
+                    
+                    # Извлекаем длины волн (только при первой успешной загрузке)
+                    if self.excitation_wavelengths is None:
+                        self.excitation_wavelengths = np.array(df.columns, dtype=float)
+                    if self.emission_wavelengths is None:
+                        self.emission_wavelengths = np.array(df.index, dtype=float)
+                    
+                    # Проверяем совместимость размерностей
+                    current_ex_wavelengths = np.array(df.columns, dtype=float)
+                    current_em_wavelengths = np.array(df.index, dtype=float)
+                    
+                    if (not np.array_equal(self.excitation_wavelengths, current_ex_wavelengths) or
+                        not np.array_equal(self.emission_wavelengths, current_em_wavelengths)):
+                        print(f"Предупреждение: Размерности в файле {file_path.name} не совпадают с предыдущими. Файл пропущен.")
+                        continue
+                    
+                    # Преобразуем в numpy array
+                    eem_matrix = df.values.astype(float)
+                    eem_matrices.append(eem_matrix)
+                    
+                    # Сохраняем имя образца с информацией о папке
+                    folder_name = data_folder.name
+                    sample_name = f"{folder_name}_{os.path.splitext(file_path.name)[0]}"
+                    self.sample_names.append(sample_name)
+                    
+                    print(f"  Загружен: {file_path.name} -> {sample_name}")
+                    
+                except Exception as e:
+                    print(f"Ошибка при загрузке файла {file_path}: {e}")
+                    continue
+        
+        if not eem_matrices:
+            raise ValueError(f"Не удалось загрузить ни одного спектра из папок: {data_folders}")
         
         # Создаем 3D тензор: образцы × испускание × возбуждение
         self.tensor = np.stack(eem_matrices, axis=0)
         
+        print(f"\nРезультат загрузки:")
         print(f"Создан тензор размерности: {self.tensor.shape}")
         print(f"Образцы: {len(self.sample_names)}")
-        print(f"Длины волн испускания: {len(self.emission_wavelengths)}") # type: ignore
-        print(f"Длины волн возбуждения: {len(self.excitation_wavelengths)}") # type: ignore
+        print(f"Длины волн испускания: {len(self.emission_wavelengths)}")
+        print(f"Длины волн возбуждения: {len(self.excitation_wavelengths)}")
+        print(f"Загружено из папок: {len(data_folders)}")
         
-        return tl.tensor(self.tensor),self.emission_wavelengths,self.excitation_wavelengths,self.sample_names
+        return (tl.tensor(self.tensor), self.emission_wavelengths, 
+                self.excitation_wavelengths, self.sample_names)
     
     def get_data_info(self):
         """Возвращает информацию о загруженных данных"""
