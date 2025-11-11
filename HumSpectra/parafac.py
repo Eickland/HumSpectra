@@ -760,12 +760,13 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 plt.axvline(x=end + 0.5, color='gray', linestyle='--', alpha=0.5)
                 plt.text(middle, plt.ylim()[0] - 0.05 * (plt.ylim()[1] - plt.ylim()[0]), 
                         class_name, ha='center', va='top')
+                plt.xticks(rotation=rotation)
             
             plt.ylabel('Относительная доля')
             plt.title('Распределение компонентов по образцам')
             plt.legend()
             plt.grid(True, alpha=0.3)
-            plt.xticks(rotation=rotation)
+            
     
     def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(8, 6)):
         """
