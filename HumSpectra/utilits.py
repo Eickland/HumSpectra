@@ -43,6 +43,8 @@ def extract_name_from_path(file_path: str) -> str:
         #    а также приведение к абсолютному пути (это нужно не всегда,
         #    но может помочь избежать проблем).
         normalized_path = os.path.abspath(os.path.normpath(file_path))
+        
+        date = normalized_path.split(sep="\\")[-3]
 
         # 2. Извлечение имени файла (вместе с расширением).
         file_name_with_extension = os.path.basename(normalized_path)
@@ -53,7 +55,7 @@ def extract_name_from_path(file_path: str) -> str:
         # 4. Земена русских символов на английские транслитом.
         file_name = translit(file_name, 'ru', reversed=True)
 
-        return file_name
+        return file_name + "_" + date
     
     except Exception as e:
         print(f"Ошибка при обработке пути {file_path}: {e}")
