@@ -73,12 +73,8 @@ class EEMDataLoader:
                     eem_matrix = df.values.astype(float)
                     eem_matrices.append(eem_matrix)
                     
-                    # Сохраняем имя образца с информацией о папке
-                    folder_name = data_folder.name
-                    sample_name = f"{folder_name}_{os.path.splitext(file_path.name)[0]}"
+                    sample_name = ut.extract_name_from_path(file_path)
                     self.sample_names.append(sample_name)
-                    
-                    print(f"  Загружен: {file_path.name} -> {sample_name}")
                     
                 except Exception as e:
                     print(f"Ошибка при загрузке файла {file_path}: {e}")
