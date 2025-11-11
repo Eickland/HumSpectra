@@ -45,9 +45,11 @@ class EEMDataLoader:
             print(f"Загрузка данных из папки: {data_folder}")
             print(f"Найдено файлов: {len(csv_files)}")
             
-            for i, file_path in enumerate(csv_files):
+            for i, window_path in enumerate(csv_files):
                 try:
                     # Загружаем CSV файл
+                    file_path = str(window_path)
+                    
                     df = fl.read_fluo_3d(file_path, index_col=index_col)
                     df = fl.cut_spectra(df, ex_low_limit=255, ex_high_limit=450, 
                                     em_low_limit=255, em_high_limit=600)
