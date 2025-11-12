@@ -238,11 +238,13 @@ def attributting_order(data: DataFrame,
 
     return data_copy
 
-def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
+def load_spectra_data(folder, reader_func, mode, **kwargs)-> list[DataFrame]:
     
     """Загружает все спектры из папки"""
-
-    return [reader_func(str(path), **kwargs) for path in folder.rglob('*.csv')]
+    
+    spectra_list = [reader_func(str(path), **kwargs) for path in folder.rglob('*.csv')]
+    
+    return [x for x in spectra_list if x is not None]
 
 def spectra_to_df(spectra_list, metrics, class_filter="ADOM"):
 

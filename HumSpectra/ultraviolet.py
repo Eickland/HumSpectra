@@ -59,7 +59,6 @@ def ratio_descriptor(data: DataFrame,
 
     return uv_param
 
-
 def e2_e3(data: DataFrame,
           debug: bool=False) -> float:
     """
@@ -252,6 +251,10 @@ def read_csv_uv(path: str,
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
     
+    if spectra_type:
+        if check_uv_spectra_type(data) != spectra_type:
+            
+            return None
 
     data = standart_uv_formatting(data,spectra_type=spectra_type)
     data.sort_index(inplace=True)
@@ -262,7 +265,6 @@ def read_csv_uv(path: str,
     if baseline and (data.attrs['spectra_type'] == "absorption"):
         data = base_recall_uv(data)
     
-
     return data
     
 def read_excel_uv(path: str,
@@ -394,6 +396,19 @@ def check_uv_spectra_type(data: DataFrame,
         raise KeyError("Недопустимый тип спектра")
 
     return uv_spectra_type
+
+def check_uv_spectra_type_by_path(path: str):
+    
+    name = ut.extract_name_from_path(path)
+    
+    if "R" in name:
+        spectra_type = "reflection"
+    
+    else:
+        spectra_type = "absorption"
+        
+    return spectra_type
+    
 
 def plot_uv_spectra_by_subclass(spectra_list: List[pd.DataFrame],
                             plot_func, 
