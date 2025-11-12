@@ -258,7 +258,10 @@ def read_csv_uv(path: str,
         if check_uv_spectra_type(data) != spectra_type:
             
             return None
-        
+    
+    else:
+        spectra_type = check_uv_spectra_type(data)
+            
     data.attrs['spectra_type'] = spectra_type
     data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
 
@@ -310,7 +313,9 @@ def read_excel_uv(path: str,
         if spectra_type:
             if check_uv_spectra_type(data) != spectra_type:
             
-                return None
+                return None 
+        else:
+            spectra_type = check_uv_spectra_type(data)
             
         data.attrs['spectra_type'] = spectra_type
         data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
@@ -334,8 +339,15 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
             
-            data = standart_uv_formatting(data,spectra_type=spectra_type)
+            data = standart_uv_formatting(data)
             data.sort_index(inplace=True)
+            
+            if spectra_type:
+                if check_uv_spectra_type(data) != spectra_type:
+                
+                    return None 
+            else:
+                spectra_type = check_uv_spectra_type(data)
 
             sample_name = str(list_sheet_names[i])
 
@@ -343,7 +355,10 @@ def read_excel_uv(path: str,
                 print(sample_name)
 
             data = ut.attributting_order(data, ignore_name=ignore_name, name=sample_name)
-
+            
+            data.attrs['spectra_type'] = spectra_type
+            data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
+            
             if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
 
@@ -386,9 +401,8 @@ def check_uv_spectra_type(data: DataFrame,
     :return: Тип уф спектра
     Функция определяет тип уф спектра - поглощение, зеркальное отражение
     """
-    column_name = data.columns[0]
     
-    median = data.median()
+    median = data[data.columns[0]].median()
 
     if spectra_type:
         uv_spectra_type = spectra_type
