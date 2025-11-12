@@ -238,7 +238,7 @@ def attributting_order(data: DataFrame,
 
     return data_copy
 
-def load_spectra_data(folder, reader_func, mode, **kwargs)-> list[DataFrame]:
+def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
     
     """Загружает все спектры из папки"""
     
