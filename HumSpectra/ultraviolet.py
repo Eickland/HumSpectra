@@ -251,7 +251,7 @@ def read_csv_uv(path: str,
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
 
-    data = standart_uv_formatting(data,spectra_type=spectra_type)
+    data = standart_uv_formatting(data)
     data.sort_index(inplace=True)
     
     if spectra_type:
