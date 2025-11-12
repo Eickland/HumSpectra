@@ -250,14 +250,17 @@ def read_csv_uv(path: str,
         raise pd.errors.EmptyDataError(f"Файл пуст: {path}")
     except Exception as e:
         raise Exception(f"Ошибка при чтении файла: {e}")
+
+    data = standart_uv_formatting(data,spectra_type=spectra_type)
+    data.sort_index(inplace=True)
     
     if spectra_type:
         if check_uv_spectra_type(data) != spectra_type:
             
             return None
-
-    data = standart_uv_formatting(data,spectra_type=spectra_type)
-    data.sort_index(inplace=True)
+        
+    data.attrs['spectra_type'] = spectra_type
+    data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
 
     name = ut.extract_name_from_path(path)
     data = ut.attributting_order(data, ignore_name=ignore_name, name=name)
@@ -283,6 +286,7 @@ def read_excel_uv(path: str,
     """
     
     file_type = ut.check_file_type(path)
+    
     if debug:
         print(file_type)
 
@@ -300,8 +304,16 @@ def read_excel_uv(path: str,
 
         data = pd.read_excel(path, index_col= index_col)
 
-        data = standart_uv_formatting(data,spectra_type=spectra_type)
+        data = standart_uv_formatting(data)
         data.sort_index(inplace=True)
+        
+        if spectra_type:
+            if check_uv_spectra_type(data) != spectra_type:
+            
+                return None
+            
+        data.attrs['spectra_type'] = spectra_type
+        data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
 
         name = ut.extract_name_from_path(path)
 
@@ -309,7 +321,6 @@ def read_excel_uv(path: str,
 
         if baseline and (data.attrs['spectra_type'] == "absorption"):
             data = base_recall_uv(data)
-
 
         return data
     
@@ -347,19 +358,13 @@ def read_excel_uv(path: str,
     else:
         raise KeyboardInterrupt("Нет доступного типа!")
 
-def standart_uv_formatting(data: DataFrame,
-                           spectra_type: str|None = None)-> DataFrame:
+def standart_uv_formatting(data: DataFrame)-> DataFrame:
     """
     :param data: DataFrame, сырой уф спектр
     :return: Отформатированный уф спектр
     Функция заменяет строковые данные на числовые в уф спектре
     """
     data_copy = data.copy()
-
-    spectra_type = check_uv_spectra_type(data_copy,spectra_type=spectra_type)
-    data_copy.attrs['spectra_type'] = spectra_type
-
-    data_copy.rename(columns={data_copy.columns[0]: spectra_type}, inplace=True)
 
     if all(isinstance(x, str) for x in data_copy[data_copy.columns[0]]):
         data_copy = data_copy.replace(',', '.', regex=True)
@@ -382,14 +387,16 @@ def check_uv_spectra_type(data: DataFrame,
     Функция определяет тип уф спектра - поглощение, зеркальное отражение
     """
     column_name = data.columns[0]
+    
+    median = data.median()
 
     if spectra_type:
         uv_spectra_type = spectra_type
 
-    elif "Abs" in column_name:
+    elif median < 1:
         uv_spectra_type = "absorption"
 
-    elif "R%" in column_name:
+    elif median > 1 :
         uv_spectra_type = "reflection"
 
     else:
