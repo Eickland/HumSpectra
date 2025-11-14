@@ -165,6 +165,7 @@ def plot_uv(data: DataFrame,
             xlabel: bool = True,
             ylabel: bool = True,
             title: bool = True,
+            ylim: float = None,
             norm_by_TOC: bool = False,
             ax: Union[Axes, None] = None,
             name: Optional[str] = None) -> Axes:
@@ -211,6 +212,8 @@ def plot_uv(data: DataFrame,
     # Добавляем подписи
     if title:
         ax.set_title(str(name))
+    if ylim:
+        ax.set_ylim((0,ylim))
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
@@ -436,7 +439,6 @@ def check_uv_spectra_type_by_path(path: str):
         
     return spectra_type
     
-
 def plot_uv_spectra_by_subclass(spectra_list: List[pd.DataFrame],
                             plot_func, 
                            figsize_multiplier: int = 4,
