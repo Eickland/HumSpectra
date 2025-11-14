@@ -97,8 +97,8 @@ def e4_e6(data: DataFrame,
 
     return uv_param
 
-def epsilon(data: DataFrame,
-            wave: int = 254,
+def single_density(data: DataFrame,
+            wave: int,
             debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
@@ -111,8 +111,8 @@ def epsilon(data: DataFrame,
             raise ValueError("Ошибка проверки статуса калибровки")
     
     series = pd.Series(data.index, index=data.index)
-    index_254 = series.sub(wave).abs().idxmin()
-    uv_param = data.loc[index_254].iloc[0].item()
+    index_wave = series.sub(wave).abs().idxmin()
+    uv_param = data.loc[index_wave].iloc[0].item()
 
     return uv_param
 
@@ -131,7 +131,7 @@ def suva(data: DataFrame,
     if "TOC" not in data.attrs:
         raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
 
-    a_254 = epsilon(data)
+    a_254 = single_density(data, 254)
     uv_param = a_254 / data.attrs['TOC']
 
     return uv_param
