@@ -271,6 +271,8 @@ def read_csv_uv(path: str,
     if baseline and (data.attrs['spectra_type'] == "absorption"):
         data = base_recall_uv(data)
     
+    data.attrs['path'] = path
+    
     return data
     
 def read_excel_uv(path: str,
@@ -326,6 +328,8 @@ def read_excel_uv(path: str,
 
         if baseline and (data.attrs['spectra_type'] == "absorption"):
             data = base_recall_uv(data)
+            
+        data.attrs['path'] = path
 
         return data
     
@@ -362,6 +366,8 @@ def read_excel_uv(path: str,
             if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
 
+            data.attrs['path'] = path
+            
             data_list.append(data)
 
             i += 1

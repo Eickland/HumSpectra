@@ -337,6 +337,7 @@ def read_fluo_3d(path: str,
     data.attrs['name'] = name
     data.attrs['class'] = ut.extract_class_from_name(name)
     data.attrs['subclass'] = ut.extract_subclass_from_name(name)
-
+    data.attrs['path'] = path
+    
     return data
 
