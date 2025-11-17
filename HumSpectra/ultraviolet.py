@@ -97,8 +97,8 @@ def e4_e6(data: DataFrame,
 
     return uv_param
 
-def epsilon(data: DataFrame,
-            wave: int = 254,
+def single_density(data: DataFrame,
+            wave: int,
             debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
@@ -111,8 +111,8 @@ def epsilon(data: DataFrame,
             raise ValueError("Ошибка проверки статуса калибровки")
     
     series = pd.Series(data.index, index=data.index)
-    index_254 = series.sub(wave).abs().idxmin()
-    uv_param = data.loc[index_254].iloc[0].item()
+    index_wave = series.sub(wave).abs().idxmin()
+    uv_param = data.loc[index_wave].iloc[0].item()
 
     return uv_param
 
@@ -131,7 +131,7 @@ def suva(data: DataFrame,
     if "TOC" not in data.attrs:
         raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
 
-    a_254 = epsilon(data)
+    a_254 = single_density(data, 254)
     uv_param = a_254 / data.attrs['TOC']
 
     return uv_param
@@ -165,6 +165,7 @@ def plot_uv(data: DataFrame,
             xlabel: bool = True,
             ylabel: bool = True,
             title: bool = True,
+            ylim: float = None,
             norm_by_TOC: bool = False,
             ax: Union[Axes, None] = None,
             name: Optional[str] = None) -> Axes:
@@ -211,6 +212,8 @@ def plot_uv(data: DataFrame,
     # Добавляем подписи
     if title:
         ax.set_title(str(name))
+    if ylim:
+        ax.set_ylim((0,ylim))
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
     if ylabel:
@@ -271,6 +274,8 @@ def read_csv_uv(path: str,
     if baseline and (data.attrs['spectra_type'] == "absorption"):
         data = base_recall_uv(data)
     
+    data.attrs['path'] = path
+    
     return data
     
 def read_excel_uv(path: str,
@@ -326,6 +331,8 @@ def read_excel_uv(path: str,
 
         if baseline and (data.attrs['spectra_type'] == "absorption"):
             data = base_recall_uv(data)
+            
+        data.attrs['path'] = path
 
         return data
     
@@ -362,6 +369,8 @@ def read_excel_uv(path: str,
             if baseline and (data.attrs['spectra_type'] == "absorption"):
                 data = base_recall_uv(data)
 
+            data.attrs['path'] = path
+            
             data_list.append(data)
 
             i += 1
@@ -430,7 +439,6 @@ def check_uv_spectra_type_by_path(path: str):
         
     return spectra_type
     
-
 def plot_uv_spectra_by_subclass(spectra_list: List[pd.DataFrame],
                             plot_func, 
                            figsize_multiplier: int = 4,
