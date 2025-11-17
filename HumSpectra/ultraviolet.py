@@ -98,7 +98,7 @@ def e4_e6(data: DataFrame,
     return uv_param
 
 def single_density(data: DataFrame,
-            wave: int,
+            wave: int = 254,
             debug: bool=False) -> float:
     """
     :param data: DataFrame, уф спектр
