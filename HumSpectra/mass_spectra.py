@@ -2549,6 +2549,7 @@ def calc_by_brutto(self) -> "pd.DataFrame":
     ------
     pd.DataFrame
     """
+    name = self.attrs['name']
     mass = calc_error(
         drop_unassigned(self)
     )['calc_mass'].values
@@ -2569,6 +2570,8 @@ def calc_by_brutto(self) -> "pd.DataFrame":
     diff_spec['intensity'] = diff_spec['count']/massl
     diff_spec = diff_spec.sort_values(by='mass').reset_index(drop=True)
 
+    diff_spec.attrs['name'] = name
+    
     self = diff_spec
 
     return self
