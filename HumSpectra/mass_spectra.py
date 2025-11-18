@@ -108,7 +108,7 @@ def assign(data: pd.DataFrame,
             intensity_min: Optional[float] =  None,
             intensity_max: Optional[float] = None,
             charge_max: int = 1,
-            n_jobs=-1
+
     ) -> pd.DataFrame:
         """
         Assigning brutto formulas to signal by mass
@@ -2510,7 +2510,7 @@ def calc(
             if dif < 300:
                 mdiff[x,y] = dif
 
-    mdiff = np.round(mdiff, 3)
+    mdiff = np.round(mdiff, 6)
     unique, counts = np.unique(mdiff, return_counts=True)
     counts[0] = 0
 
