@@ -37,7 +37,7 @@ def base_recall_uv(data: DataFrame) -> DataFrame:
 
     return data_copy + 1.001 * abs(min_value)
 
-def ratio_descriptor(data: DataFrame,
+def ratio_descriptor_uv(data: DataFrame,
                      wave_1: int,
                      wave_2: int,
           debug: bool=True) -> float:
@@ -56,6 +56,39 @@ def ratio_descriptor(data: DataFrame,
     index_2 = series.sub(wave_2).abs().idxmin()
     uv_param = data.loc[index_1] / data.loc[index_2]
     uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+def integral_ratio_uv(data: DataFrame,
+                      low_wv_left: float,
+                      low_wv_right: float,
+                      high_wv_left: float,
+                      high_wv_right: float,
+          debug: bool=False) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :return: uv_param: float, значение параметра E2/E3
+    Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 265 к 365 нм.
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    
+    index_low_left = series.sub(low_wv_left).abs().idxmin()
+    index_low_right = series.sub(low_wv_left).abs().idxmin()
+    index_high_left = series.sub(low_wv_left).abs().idxmin()
+    index_high_right = series.sub(low_wv_left).abs().idxmin()
+    
+    high = np.trapezoid(
+        data.loc[index_high_left:index_high_right]
+    )
+    low = np.trapezoid(
+        data.loc[index_low_left:index_low_right]
+    )
+    
+    uv_param = high / low
 
     return uv_param
 
