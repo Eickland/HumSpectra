@@ -2510,7 +2510,7 @@ def calc(
             if dif < 300:
                 mdiff[x,y] = dif
 
-    #mdiff = np.round(mdiff, 6)
+    mdiff = np.round(mdiff, 3)
     unique, counts = np.unique(mdiff, return_counts=True)
     counts[0] = 0
 
