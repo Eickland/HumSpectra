@@ -503,7 +503,7 @@ class OpticalDataAnalyzer:
         else:
             df = self.get_component_loadings(normalization=normalization)
         
-        df.reset_index().rename(columns={df.columns[0]:"Sample"}).to_csv(filename, index=False)
+        df.reset_index().rename(columns={"index":"Sample"}).to_csv(filename, index=False)
         print(f"Таблица сохранена в {filename}")
     
     def get_component_eem_matrix(self, component_idx, sample_idx=None):
