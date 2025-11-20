@@ -51,7 +51,18 @@ def extract_name_from_path(file_path: str) -> str:
             date = "2025"
             
         else:
-            date = ""
+            
+            folder = normalized_path.split(sep="\\")[-4]
+            
+            if folder == "2024":
+                date = "2024"
+        
+            elif folder == "2025":
+                date = "2025"
+
+            else:
+
+                date = ""
 
         # 2. Извлечение имени файла (вместе с расширением).
         file_name_with_extension = os.path.basename(normalized_path)
