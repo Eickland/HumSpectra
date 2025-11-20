@@ -366,6 +366,77 @@ def get_convex_hull_points(points):
     hull = ConvexHull(points)
     return points[hull.vertices]
 
+def filter_by_iqr_per_group(df, target_column, filter_columns=None, iqr_param=1.5):
+    """
+    Фильтрует DataFrame по методу IQR для каждого уникального типа в целевом столбце.
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        Исходный DataFrame
+    target_column : str
+        Столбец, по уникальным значениям которого производится группировка
+    filter_columns : list, optional
+        Список столбцов для применения фильтра IQR. Если None, применяется ко всем числовым столбцам
+    
+    Returns:
+    --------
+    pandas.DataFrame
+        Отфильтрованный DataFrame
+    """
+    
+    def calculate_iqr_bounds(series, iqr_param=iqr_param):
+        """Рассчитывает границы IQR для одного столбца"""
+        Q1 = series.quantile(0.25)
+        Q3 = series.quantile(0.75)
+        IQR = Q3 - Q1
+        lower_bound = Q1 - iqr_param * IQR
+        upper_bound = Q3 + iqr_param * IQR
+        return lower_bound, upper_bound
+    
+    # Определяем столбцы для фильтрации
+    if filter_columns is None:
+        # Берем только числовые столбцы, исключая целевую колонку
+        numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+        filter_columns = [col for col in numeric_columns if col != target_column]
+    
+    if not filter_columns:
+        print("Нет числовых столбцов для фильтрации")
+        return df
+    
+    print(f"Фильтрация по столбцам: {filter_columns}")
+    
+    # Создаем маску для фильтрации
+    mask = pd.Series([True] * len(df), index=df.index)
+    
+    # Применяем фильтр IQR для каждой группы
+    for group_value in df[target_column].unique():
+        group_mask = df[target_column] == group_value
+        group_indices = df[group_mask].index
+        
+        for column in filter_columns:
+            if column in df.columns:
+                group_data = df.loc[group_indices, column]
+                lower_bound, upper_bound = calculate_iqr_bounds(group_data)
+                
+                # Обновляем маску для текущей группы и столбца
+                column_mask = (group_data >= lower_bound) & (group_data <= upper_bound)
+                mask.loc[group_indices] &= column_mask
+                
+                # Выводим информацию о выбросах
+                outliers_count = (~column_mask).sum()
+                if outliers_count > 0:
+                    print(f"Группа '{group_value}', столбец '{column}': удалено {outliers_count} выбросов")
+    
+    # Применяем финальную маску
+    filtered_df = df[mask].copy()
+    
+    print(f"Исходный размер: {len(df)} записей")
+    print(f"После фильтрации: {len(filtered_df)} записей")
+    print(f"Удалено: {len(df) - len(filtered_df)} записей")
+    
+    return filtered_df
+
 def delete_eject_quantile_fluo(data: DataFrame,
                             quant: float=0.995)-> DataFrame:
 
