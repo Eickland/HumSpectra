@@ -39,23 +39,19 @@ def extract_name_from_path(file_path: str) -> str:
     :return: file_name: Имя файла без расширения.  Возвращает пустую строку, если путь недопустимый.
     """
     try:
-        # 1. Нормализация пути: Замена двойных слешей на одинарные,
-        #    а также приведение к абсолютному пути (это нужно не всегда,
-        #    но может помочь избежать проблем).
+        # 1. Нормализация пути: Замена двойных слешей на одинарные.
         normalized_path = os.path.abspath(os.path.normpath(file_path))
         
-        folder_list = normalized_path.split(sep="\\")[-3]
+        folder = normalized_path.split(sep="\\")[-3]
+                    
+        if folder == "2024":
+            date = "2024"
         
-        for folder in folder_list:
+        elif folder == "2025":
+            date = "2025"
             
-            if folder == "2024":
-                date = "2024"
-            
-            elif folder == "2025":
-                date = "2025"
-                
-            else:
-                date = ""
+        else:
+            date = ""
 
         # 2. Извлечение имени файла (вместе с расширением).
         file_name_with_extension = os.path.basename(normalized_path)
