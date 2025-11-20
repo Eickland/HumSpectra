@@ -503,7 +503,7 @@ class OpticalDataAnalyzer:
         else:
             df = self.get_component_loadings(normalization=normalization)
         
-        df.to_csv(filename)
+        df.reset_index(name='Sample').to_csv(filename)
         print(f"Таблица сохранена в {filename}")
     
     def get_component_eem_matrix(self, component_idx, sample_idx=None):
@@ -767,7 +767,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.legend()
             plt.grid(True, alpha=0.3)
             
-    
     def plot_eem_contours(self, sample_idx=0, n_levels=20, figsize=(8, 6)):
         """
         Контурный график EEM для выбранного образца
@@ -797,7 +796,6 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.ylabel('Индекс испускания')
             plt.title(f'EEM матрица: Образец {sample_idx+1}')
         
-
     def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True):
         """
         Визуализация нагрузок компонентов с группировкой по классам
