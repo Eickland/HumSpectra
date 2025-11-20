@@ -370,7 +370,7 @@ def get_convex_hull_points(points):
     hull = ConvexHull(points)
     return points[hull.vertices]
 
-def filter_by_iqr_per_group(df, target_column, filter_columns=None):
+def filter_by_iqr_per_group(df, target_column, filter_columns=None,iqr_param=1.5):
     """
     Фильтрует DataFrame по методу IQR для каждого уникального типа в целевом столбце.
     
@@ -389,13 +389,13 @@ def filter_by_iqr_per_group(df, target_column, filter_columns=None):
         Отфильтрованный DataFrame
     """
     
-    def calculate_iqr_bounds(series):
+    def calculate_iqr_bounds(series,iqr_param):
         """Рассчитывает границы IQR для одного столбца"""
         Q1 = series.quantile(0.25)
         Q3 = series.quantile(0.75)
         IQR = Q3 - Q1
-        lower_bound = Q1 - 1.5 * IQR
-        upper_bound = Q3 + 1.5 * IQR
+        lower_bound = Q1 - iqr_param * IQR
+        upper_bound = Q3 + iqr_param * IQR
         return lower_bound, upper_bound
     
     # Определяем столбцы для фильтрации
@@ -421,7 +421,7 @@ def filter_by_iqr_per_group(df, target_column, filter_columns=None):
         for column in filter_columns:
             if column in df.columns:
                 group_data = df.loc[group_indices, column]
-                lower_bound, upper_bound = calculate_iqr_bounds(group_data)
+                lower_bound, upper_bound = calculate_iqr_bounds(group_data,iqr_param=iqr_param)
                 
                 # Обновляем маску для текущей группы и столбца
                 column_mask = (group_data >= lower_bound) & (group_data <= upper_bound)
