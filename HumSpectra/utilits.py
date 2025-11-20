@@ -409,7 +409,7 @@ def delete_eject_iqr(data: DataFrame,
                 data_iqr = data_iqr[(data_iqr[descriptor] < q3 + iqr_param * iqr)]
                 data_iqr = data_iqr[(data_iqr[descriptor] > q1 - iqr_param * iqr)]
 
-                data_iqr = pd.concat({gen_class: data_iqr}, names=['Класс'])
+                data_iqr = pd.concat({gen_class: data_iqr}, names=['CLass'])
 
                 data_copy.loc[gen_class] = data_iqr
                 
