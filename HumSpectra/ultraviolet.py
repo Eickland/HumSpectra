@@ -291,12 +291,12 @@ def read_csv_uv(path: str,
     data.sort_index(inplace=True)
     
     if spectra_type:
-        if check_uv_spectra_type(data) != spectra_type:
+        if check_uv_spectra_type_by_path(path) != spectra_type:
             
             return None
     
     else:
-        spectra_type = check_uv_spectra_type(data)
+        spectra_type = check_uv_spectra_type_by_path(path)
             
     data.attrs['spectra_type'] = spectra_type
     data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
@@ -349,11 +349,11 @@ def read_excel_uv(path: str,
         data.sort_index(inplace=True)
         
         if spectra_type:
-            if check_uv_spectra_type(data) != spectra_type:
+            if check_uv_spectra_type_by_path(path) != spectra_type:
             
                 return None 
         else:
-            spectra_type = check_uv_spectra_type(data)
+            spectra_type = check_uv_spectra_type_by_path(path)
             
         data.attrs['spectra_type'] = spectra_type
         data.rename(columns={data.columns[0]: spectra_type}, inplace=True)
@@ -383,11 +383,11 @@ def read_excel_uv(path: str,
             data.sort_index(inplace=True)
             
             if spectra_type:
-                if check_uv_spectra_type(data) != spectra_type:
+                if check_uv_spectra_type_by_path(path) != spectra_type:
                 
                     return None 
             else:
-                spectra_type = check_uv_spectra_type(data)
+                spectra_type = check_uv_spectra_type_by_path(path)
 
             sample_name = str(list_sheet_names[i])
 
@@ -435,30 +435,6 @@ def standart_uv_formatting(data: DataFrame)-> DataFrame:
     data_copy.index = data_copy.index.astype(float)
 
     return data_copy
-
-def check_uv_spectra_type(data: DataFrame,
-                          spectra_type: str|None = None)-> str:
-    """
-    :param data: DataFrame, уф спектр
-    :return: Тип уф спектра
-    Функция определяет тип уф спектра - поглощение, зеркальное отражение
-    """
-    
-    median = data[data.columns[0]].median()
-
-    if spectra_type:
-        uv_spectra_type = spectra_type
-
-    elif median < 1:
-        uv_spectra_type = "absorption"
-
-    elif median > 1 :
-        uv_spectra_type = "reflection"
-
-    else:
-        raise KeyError("Недопустимый тип спектра")
-
-    return uv_spectra_type
 
 def check_uv_spectra_type_by_path(path: str):
     
