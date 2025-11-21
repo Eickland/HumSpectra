@@ -93,7 +93,7 @@ def integral_ratio_uv(data: DataFrame,
     return uv_param
 
 def e2_e3(data: DataFrame,
-          debug: bool=False) -> float:
+          debug: bool=True) -> float:
     """
     :param data: DataFrame, уф спектр
     :return: uv_param: float, значение параметра E2/E3
@@ -112,7 +112,7 @@ def e2_e3(data: DataFrame,
     return uv_param
 
 def e4_e6(data: DataFrame,
-          debug: bool=False) -> float:
+          debug: bool=True) -> float:
     """
     :param data: DataFrame, уф спектр
     :return: uv_param: float, значение параметра E4/E6
@@ -132,7 +132,7 @@ def e4_e6(data: DataFrame,
 
 def single_density(data: DataFrame,
             wave: int = 254,
-            debug: bool=False) -> float:
+            debug: bool=True) -> float:
     """
     :param data: DataFrame, уф спектр
     :param wave: int, длина волны, по которой ищется оптическая плотность
@@ -172,7 +172,7 @@ def suva(data: DataFrame,
 def lambda_UV(data: DataFrame,
               short_wave: int = 450,
               long_wave: int = 550,
-              debug: bool=False) -> float:
+              debug: bool=True) -> float:
     """
     :param data: DataFrame, уф спектр
     :param short_wave: int, длина волны, с которого будет производится аппроксимация
