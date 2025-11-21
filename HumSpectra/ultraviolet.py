@@ -261,7 +261,7 @@ def read_csv_uv(path: str,
             sep: str = "",
             index_col: int = 0,
             ignore_name: bool = False,
-            baseline: bool = True,
+            baseline: bool = False,
             spectra_type: str|None = None) -> DataFrame:
     """
     :param path: путь к файлу в строчном виде,
