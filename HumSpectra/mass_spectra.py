@@ -181,12 +181,12 @@ def assign(data: pd.DataFrame,
         
         if rel_error is not None:
             rel = True
-            rel_error = 0.5
             
         elif abs_error is not None:
             rel = False
         else:
             rel = True
+            rel_error = 0.5
 
         data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
         table = data.copy(deep=True)
