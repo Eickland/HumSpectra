@@ -1795,7 +1795,9 @@ def vk(spec: pd.DataFrame,
                sizes=(7, 30),
                plot_type='default',
                color_palette='viridis',
-               error_type='rel_error'):
+               error_type='rel_error',
+               kde_fill=True,
+               kde_levels=10):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -1818,10 +1820,15 @@ def vk(spec: pd.DataFrame,
         - 'mass_heatmap': тепловая карта масс
         - 'oxygen_scatter': точечная карта количества кислорода
         - 'oxygen_heatmap': тепловая карта количества кислорода
+        - 'density': плотность точек (2D KDE)
     color_palette : str, optional
         Цветовая палитра для тепловой карты
     error_type : str, optional
         Тип ошибки для визуализации: 'rel_error' или 'abs_error'
+    kde_fill : bool, optional
+        Заливать контуры KDE (True) или отображать только линии (False)
+    kde_levels : int, optional
+        Количество уровней для KDE
     
     Returns
     -------
@@ -2031,8 +2038,43 @@ def vk(spec: pd.DataFrame,
         plt.colorbar(im, ax=ax, label='Average Oxygen Count')
         ax.set_title(f"{spec.attrs['name']} - Oxygen Distribution")
     
+    # Плотность точек (2D KDE)
+    elif plot_type == 'density':
+        valid_data = spec.dropna(subset=['O/C', 'H/C'])
+        
+        # Создаем 2D KDE
+        if len(valid_data) > 1:  # Нужно как минимум 2 точки для KDE
+            try:
+                # Используем seaborn для KDE
+                if kde_fill:
+                    sns.kdeplot(data=valid_data, x='O/C', y='H/C',
+                               fill=True, alpha=0.6, levels=kde_levels,
+                               cmap=color_palette, ax=ax)
+                else:
+                    sns.kdeplot(data=valid_data, x='O/C', y='H/C',
+                               fill=False, levels=kde_levels,
+                               cmap=color_palette, ax=ax, linewidths=1.5)
+                
+                # Добавляем scatter plot поверх KDE для лучшей видимости отдельных точек
+                scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                                   c='black', alpha=0.3, s=10, marker='o')
+                
+            except Exception as e:
+                print(f"KDE plotting failed: {e}. Using scatter plot instead.")
+                # Если KDE не сработал, используем обычный scatter plot
+                ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                          alpha=0.5, s=20, c='blue')
+        else:
+            # Если точек мало, просто рисуем scatter
+            ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                      alpha=0.7, s=30, c='red')
+            ax.text(0.5, 1.1, "Not enough points for KDE", 
+                   ha='center', transform=ax.transAxes, color='red')
+        
+        ax.set_title(f"{spec.attrs['name']} - Point Density (KDE), {len(valid_data)} points")
+    
     else:
-        raise ValueError(f"Unknown plot_type: {plot_type}. Available options: 'default', 'heatmap', 'scatter', 'error_scatter', 'error_heatmap', 'mass_scatter', 'mass_heatmap', 'oxygen_scatter', 'oxygen_heatmap'")
+        raise ValueError(f"Unknown plot_type: {plot_type}. Available options: 'default', 'heatmap', 'scatter', 'error_scatter', 'error_heatmap', 'mass_scatter', 'mass_heatmap', 'oxygen_scatter', 'oxygen_heatmap', 'density'")
     
     # Общие настройки для всех типов графиков
     ax.set_xlabel('O/C')
