@@ -2226,7 +2226,321 @@ def filter_dense_region_advanced(spec: pd.DataFrame,
     
     return result_df
 
+def plot_spectra_kde_comparison(spectra_list: list,
+                               classes: list|None = None,
+                               bandwidth: float = 0.05,
+                               n_levels: int = 10,
+                               figsize: tuple = (12, 8),
+                               color_palette: str = 'viridis',
+                               show_contours: bool = True,
+                               show_fill: bool = True,
+                               alpha: float = 0.7,
+                               subplot_layout: tuple|None = None):
+    """
+    Рисует 2D KDE графики для сравнения плотных участков нескольких спектров.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами
+    classes : list, optional
+        Список классов для группировки, если None - используется spec.attrs['Class']
+    bandwidth : float, optional
+        Параметр сглаживания для KDE
+    n_levels : int, optional
+        Количество уровней контуров
+    figsize : tuple, optional
+        Размер фигуры
+    color_palette : str, optional
+        Цветовая палитра
+    show_contours : bool, optional
+        Показывать контурные линии
+    show_fill : bool, optional
+        Заливать области
+    alpha : float, optional
+        Прозрачность заливки
+    subplot_layout : tuple, optional
+        Расположение subplots (rows, cols), если None - определяется автоматически
+    
+    Returns
+    -------
+    matplotlib.figure.Figure, numpy.ndarray of matplotlib.axes.Axes
+    """
+    
+    if not spectra_list:
+        raise ValueError("Список спектров не может быть пустым")
+    
+    # Определяем классы для каждого спектра
+    if classes is None:
+        classes = []
+        for spec in spectra_list:
+            if hasattr(spec, 'attrs') and 'Class' in spec.attrs:
+                classes.append(spec.attrs['Class'])
+            else:
+                classes.append(f"Spectrum_{len(classes)+1}")
+    else:
+        if len(classes) != len(spectra_list):
+            raise ValueError("Длина списка классов должна совпадать с длиной списка спектров")
+    
+    # Группируем спектры по классам
+    from collections import defaultdict
+    class_spectra = defaultdict(list)
+    class_names = []
+    
+    for spec, class_name in zip(spectra_list, classes):
+        class_spectra[class_name].append(spec)
+        if class_name not in class_names:
+            class_names.append(class_name)
+    
+    # Определяем layout subplots
+    if subplot_layout is None:
+        n_classes = len(class_names)
+        n_cols = min(3, n_classes)
+        n_rows = (n_classes + n_cols - 1) // n_cols
+    else:
+        n_rows, n_cols = subplot_layout
+    
+    # Создаем фигуру и оси
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+    
+    # Цветовая схема
+    colors = plt.cm.get_cmap(color_palette, len(class_names))
+    
+    # Для каждого класса строим KDE
+    for idx, (class_name, class_specs) in enumerate(class_spectra.items()):
+        if idx >= len(axes):
+            break
+            
+        ax = axes[idx]
         
+        # Объединяем все спектры этого класса
+        all_class_data = []
+        for spec in class_specs:
+            spec_copy = spec.copy(deep=True)
+            
+            # Добавляем соотношения O/C и H/C если их нет
+            if "O/C" not in list(spec_copy.columns):
+                spec_copy["O/C"] = spec_copy["O"] / spec_copy["C"]
+                spec_copy["H/C"] = spec_copy["H"] / spec_copy["C"]
+            
+            valid_data = spec_copy.dropna(subset=['O/C', 'H/C'])
+            if len(valid_data) > 0:
+                all_class_data.append(valid_data[['O/C', 'H/C']])
+        
+        if not all_class_data:
+            ax.text(0.5, 0.5, f"No valid data\nfor {class_name}", 
+                   ha='center', va='center', transform=ax.transAxes)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 2.2)
+            continue
+        
+        # Объединяем все данные класса
+        combined_data = pd.concat(all_class_data, ignore_index=True)
+        X = combined_data[['O/C', 'H/C']].values
+        
+        if len(X) < 2:
+            ax.text(0.5, 0.5, f"Not enough data\nfor KDE\n{len(X)} points", 
+                   ha='center', va='center', transform=ax.transAxes)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 2.2)
+            continue
+        
+        # Создаем KDE
+        from scipy.stats import gaussian_kde
+        try:
+            kde = gaussian_kde(X.T, bw_method=bandwidth)
+            
+            # Создаем сетку для KDE
+            x_min, x_max = 0, 1.0
+            y_min, y_max = 0, 2.2
+            xx, yy = np.mgrid[x_min:x_max:100j, y_min:y_max:100j]
+            grid_coords = np.vstack([xx.ravel(), yy.ravel()])
+            
+            # Вычисляем плотность на сетке
+            grid_density = kde(grid_coords).reshape(xx.shape)
+            
+            # Визуализируем KDE
+            if show_fill:
+                contourf = ax.contourf(xx, yy, grid_density, 
+                                     levels=n_levels, 
+                                     alpha=alpha, 
+                                     cmap=color_palette)
+            
+            if show_contours:
+                contour = ax.contour(xx, yy, grid_density, 
+                                   levels=n_levels, 
+                                   colors='black', 
+                                   alpha=0.5, 
+                                   linewidths=0.8)
+                # ax.clabel(contour, inline=True, fontsize=8)
+            
+            # Добавляем цветовую шкалу для каждого subplot
+            if show_fill:
+                plt.colorbar(contourf, ax=ax, label='Density') # type: ignore
+            
+        except Exception as e:
+            print(f"Ошибка при построении KDE для класса {class_name}: {e}")
+            ax.text(0.5, 0.5, f"KDE error\n{class_name}", 
+                   ha='center', va='center', transform=ax.transAxes)
+        
+        # Настройки графика
+        ax.set_xlim(0, 1.0)
+        ax.set_ylim(0, 2.2)
+        ax.set_xlabel('O/C')
+        ax.set_ylabel('H/C')
+        ax.set_title(f'{class_name}\n({len(combined_data)} points, {len(class_specs)} spectra)')
+        ax.grid(True, alpha=0.3)
+    
+    # Скрываем неиспользованные оси
+    for idx in range(len(class_spectra), len(axes)):
+        axes[idx].set_visible(False)
+    
+    plt.tight_layout()
+    return fig, axes
+
+
+def plot_spectra_kde_overlay(spectra_list: list,
+                           classes: list|None = None,
+                           bandwidth: float = 0.05,
+                           n_levels: int = 8,
+                           figsize: tuple = (10, 8),
+                           color_palette: str = 'Set2',
+                           alpha: float = 0.6):
+    """
+    Рисует несколько KDE на одном графике для сравнения.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами
+    classes : list, optional
+        Список классов для группировки
+    bandwidth : float, optional
+        Параметр сглаживания для KDE
+    n_levels : int, optional
+        Количество уровней контуров
+    figsize : tuple, optional
+        Размер фигуры
+    color_palette : str, optional
+        Цветовая палитра
+    alpha : float, optional
+        Прозрачность заливки
+    
+    Returns
+    -------
+    matplotlib.figure.Figure, matplotlib.axes.Axes
+    """
+    
+    if not spectra_list:
+        raise ValueError("Список спектров не может быть пустым")
+    
+    # Определяем классы для каждого спектра
+    if classes is None:
+        classes = []
+        for spec in spectra_list:
+            if hasattr(spec, 'attrs') and 'Class' in spec.attrs:
+                classes.append(spec.attrs['Class'])
+            else:
+                classes.append(f"Spectrum_{len(classes)+1}")
+    
+    # Убираем дубликаты классов
+    unique_classes = []
+    unique_indices = []
+    for i, class_name in enumerate(classes):
+        if class_name not in unique_classes:
+            unique_classes.append(class_name)
+            unique_indices.append(i)
+    
+    # Создаем фигуру
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    # Цветовая схема
+    colors = plt.cm.get_cmap(color_palette, len(unique_classes))
+    
+    # Для каждого уникального класса строим KDE
+    legend_elements = []
+    
+    for idx, class_idx in enumerate(unique_indices):
+        class_name = classes[class_idx]
+        
+        # Собираем все спектры этого класса
+        class_spectra = [spectra_list[i] for i, cls in enumerate(classes) if cls == class_name]
+        
+        # Объединяем данные класса
+        all_class_data = []
+        for spec in class_spectra:
+            spec_copy = spec.copy(deep=True)
+            
+            if "O/C" not in list(spec_copy.columns):
+                spec_copy["O/C"] = spec_copy["O"] / spec_copy["C"]
+                spec_copy["H/C"] = spec_copy["H"] / spec_copy["C"]
+            
+            valid_data = spec_copy.dropna(subset=['O/C', 'H/C'])
+            if len(valid_data) > 0:
+                all_class_data.append(valid_data[['O/C', 'H/C']])
+        
+        if not all_class_data:
+            continue
+        
+        combined_data = pd.concat(all_class_data, ignore_index=True)
+        X = combined_data[['O/C', 'H/C']].values
+        
+        if len(X) < 2:
+            continue
+        
+        # Создаем KDE
+        from scipy.stats import gaussian_kde
+        try:
+            kde = gaussian_kde(X.T, bw_method=bandwidth)
+            
+            # Создаем сетку для KDE
+            x_min, x_max = 0, 1.0
+            y_min, y_max = 0, 2.2
+            xx, yy = np.mgrid[x_min:x_max:100j, y_min:y_max:100j]
+            grid_coords = np.vstack([xx.ravel(), yy.ravel()])
+            
+            # Вычисляем плотность на сетке
+            grid_density = kde(grid_coords).reshape(xx.shape)
+            
+            # Нормализуем плотность для лучшего сравнения
+            if grid_density.max() > 0:
+                grid_density = grid_density / grid_density.max()
+            
+            # Визуализируем контуры
+            color = colors(idx)
+            contourf = ax.contourf(xx, yy, grid_density, 
+                                 levels=n_levels, 
+                                 alpha=alpha, 
+                                 colors=[color])
+            
+            contour = ax.contour(xx, yy, grid_density, 
+                               levels=n_levels, 
+                               colors=[color], 
+                               alpha=0.8, 
+                               linewidths=1.5)
+            
+            # Добавляем в легенду
+            from matplotlib.patches import Patch
+            legend_elements.append(Patch(facecolor=color, alpha=alpha, label=class_name))
+            
+        except Exception as e:
+            print(f"Ошибка при построении KDE для класса {class_name}: {e}")
+    
+    # Настройки графика
+    ax.set_xlim(0, 1.0)
+    ax.set_ylim(0, 2.2)
+    ax.set_xlabel('O/C')
+    ax.set_ylabel('H/C')
+    ax.set_title('KDE Comparison of Different Classes')
+    ax.legend(handles=legend_elements, loc='best')
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    return fig, ax
+       
 def spectrum(spec: pd.DataFrame,
              ax = None):
     
