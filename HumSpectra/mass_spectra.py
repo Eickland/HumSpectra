@@ -1791,37 +1791,128 @@ def ChooseColor(row):
         return "blue"
 
 def vk(spec: pd.DataFrame,
-               ax = None,
-               sizes=(7, 30)):
+               ax=None,
+               sizes=(7, 30),
+               plot_type='default',
+               color_palette='viridis'):
     """
-    Возвращает диаграмму Ван-Кревелина для подставленного спектра.
+    Возвращает диаграмму Ван-Кревелена для подставленного спектра.
+    
+    Parameters
+    ----------
+    spec : pd.DataFrame
+        DataFrame с данными спектра
+    ax : matplotlib.axes.Axes, optional
+        Оси для отрисовки, если None - создаются новые
+    sizes : tuple, optional
+        Размеры точек для scatter plot
+    plot_type : str, optional
+        Тип визуализации:
+        - 'default': базовый scatter plot (по умолчанию)
+        - 'heatmap': тепловая карта интенсивности
+        - 'scatter': точечная карта интенсивности
+    color_palette : str, optional
+        Цветовая палитра для тепловой карты
+    
+    Returns
+    -------
+    matplotlib.axes.Axes
     """
-
     spec = spec.copy(deep=True)
-    spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=1)
-
+    
+    # Добавляем соотношения O/C и H/C если их нет
     if "O/C" not in list(spec.columns):
-
-        spec["O/C"] = spec["O"]/spec["C"]
-        spec["H/C"] = spec["H"]/spec["C"]
-
+        spec["O/C"] = spec["O"] / spec["C"]
+        spec["H/C"] = spec["H"] / spec["C"]
+    
+    # Создаем оси если не переданы
     if ax is None:
-
-        fig, ax = plt.subplots(1,1,figsize=(6,6))
-
-        ax.set_xlim((0.0,1.0))
-        ax.set_ylim((0.0,2.2))
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+        ax.set_xlim((0.0, 1.0))
+        ax.set_ylim((0.0, 2.2))
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
-
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = "intensity", alpha = 0.7,legend = False,sizes=sizes)
+    
+    if plot_type == 'default':
+        # Базовый вариант (оригинальный)
+        spec["Color value"] = spec.apply(lambda x: ChooseColor(x), axis=1)
+        sns.scatterplot(data=spec, x="O/C", y="H/C", 
+                       hue="Color value", hue_order=["blue","orange","green","red"], 
+                       size="intensity", alpha=0.7, legend=False, 
+                       sizes=sizes, ax=ax)
+    
+    elif plot_type == 'heatmap':
+        # Тепловая карта интенсивности
+        # Создаем 2D гистограмму
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        # Фильтруем данные для гистограммы
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
+        
+        # Создаем 2D гистограмму с весами по интенсивности
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data['intensity']
+        )
+        
+        # Нормализуем для лучшего отображения
+        if heatmap.max() > 0:
+            heatmap = heatmap / heatmap.max()
+        
+        # Отображаем тепловую карту
+        im = ax.imshow(heatmap.T, 
+                      extent=(0.0, 1.0, 0.0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette,
+                      alpha=0.8)
+        
+        # Добавляем цветовую шкалу
+        plt.colorbar(im, ax=ax, label='Normalized Intensity')
+        
+        # Добавляем контуры для лучшей читаемости
+        ax.contour(heatmap.T, levels=5, extent=[0, 1, 0, 2.2], 
+                  colors='white', alpha=0.5, linewidths=0.5)
+    
+    elif plot_type == 'scatter':
+        # Точечная карта интенсивности
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
+        
+        # Нормализуем интенсивности для размеров точек
+        intensities = valid_data['intensity']
+        if intensities.max() > intensities.min():
+            normalized_sizes = (intensities - intensities.min()) / (intensities.max() - intensities.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(intensities)
+        
+        # Создаем scatter plot с цветом по интенсивности
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data['intensity'],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        # Добавляем цветовую шкалу
+        plt.colorbar(scatter, ax=ax, label='Intensity')
     
     else:
-
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = "intensity", alpha = 0.7,legend = False,sizes=sizes,ax=ax)
-
-        ax.set_xlim([0,1])
-        ax.set_ylim([0,2.2])
-        ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
+        raise ValueError(f"Unknown plot_type: {plot_type}. Available options: 'default', 'heatmap', 'scatter'")
+    
+    # Общие настройки для всех типов графиков
+    ax.set_xlabel('O/C')
+    ax.set_ylabel('H/C')
+    ax.grid(True, alpha=0.3)
+    
+    # Устанавливаем пределы если они не были установлены ранее
+    if ax.get_xlim() == (0.0, 1.0):
+        ax.set_xlim(0.0, 1.0)
+    if ax.get_ylim() == (0.0, 1.0):
+        ax.set_ylim(0.0, 2.2)
+    
+    return ax
         
 def spectrum(spec: pd.DataFrame,
              ax = None):
@@ -1837,7 +1928,7 @@ def spectrum(spec: pd.DataFrame,
     ax.set_xlabel("m/z")
     ax.set_ylabel("intensity")
         
-    ax.set_xlim([200,1000])
+    ax.set_xlim((200,1000))
 
 def recallibrate(spec: pd.DataFrame, 
                 error_table: Optional[pd.DataFrame] = None, 
@@ -2261,7 +2352,7 @@ def MolClassesSpectrum(specList,draw=True,ax=None):
         density_class_list.append(data_class["density"])
         sample_list.append(spec.metadata["name"])
         mol_class_list=data_class["class"].to_list()
-    mol_class_data = pd.DataFrame(np.array(density_class_list), index=sample_list, columns=mol_class_list)
+    mol_class_data = pd.DataFrame(np.array(density_class_list), index=sample_list, columns=mol_class_list) # type: ignore
     df_reversed = mol_class_data.sort_index(ascending=False).copy()
     if ax is None:
         fig, ax = plt.subplots(1,1,figsize=(8, 6))
@@ -2288,9 +2379,9 @@ def CalcMetricSpectrum(specList,func="weight",draw=True):
             data_prev = data
             continue
         else:
-            data_prev=data.merge(data_prev, on="metric")
+            data_prev=data.merge(data_prev, on="metric") # type: ignore
 
-    return data_prev
+    return data_prev # type: ignore
 
 def FormulaSpecData(specList, draw=True):
     all_formula_list = []
@@ -2755,9 +2846,9 @@ def assign_new(data: pd.DataFrame,
                 if rel:
                     current_error = rel_error
                     if has_nitrogen:
-                        current_error = rel_error / nitrogen_precision_factor
+                        current_error = rel_error / nitrogen_precision_factor # type: ignore
                     if has_sulfur:
-                        current_error = rel_error / sulfur_precision_factor
+                        current_error = rel_error / sulfur_precision_factor # type: ignore
                     
                     if np.fabs(masses[idx] - mass) / mass * 1e6 <= current_error/charge: # type: ignore
                         res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
