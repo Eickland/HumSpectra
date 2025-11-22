@@ -1794,7 +1794,8 @@ def vk(spec: pd.DataFrame,
                ax=None,
                sizes=(7, 30),
                plot_type='default',
-               color_palette='viridis'):
+               color_palette='viridis',
+               error_type='rel_error'):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -1811,8 +1812,16 @@ def vk(spec: pd.DataFrame,
         - 'default': базовый scatter plot (по умолчанию)
         - 'heatmap': тепловая карта интенсивности
         - 'scatter': точечная карта интенсивности
+        - 'error_scatter': точечная карта ошибки
+        - 'error_heatmap': тепловая карта ошибки
+        - 'mass_scatter': точечная карта масс
+        - 'mass_heatmap': тепловая карта масс
+        - 'oxygen_scatter': точечная карта количества кислорода
+        - 'oxygen_heatmap': тепловая карта количества кислорода
     color_palette : str, optional
         Цветовая палитра для тепловой карты
+    error_type : str, optional
+        Тип ошибки для визуализации: 'rel_error' или 'abs_error'
     
     Returns
     -------
@@ -1832,24 +1841,21 @@ def vk(spec: pd.DataFrame,
         ax.set_ylim((0.0, 2.2))
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
     
+    # Базовый вариант (оригинальный)
     if plot_type == 'default':
-        # Базовый вариант (оригинальный)
         spec["Color value"] = spec.apply(lambda x: ChooseColor(x), axis=1)
         sns.scatterplot(data=spec, x="O/C", y="H/C", 
                        hue="Color value", hue_order=["blue","orange","green","red"], 
                        size="intensity", alpha=0.7, legend=False, 
                        sizes=sizes, ax=ax)
     
+    # Тепловая карта интенсивности
     elif plot_type == 'heatmap':
-        # Тепловая карта интенсивности
-        # Создаем 2D гистограмму
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
+        
         x_bins = np.linspace(0, 1, 50)
         y_bins = np.linspace(0, 2.2, 50)
         
-        # Фильтруем данные для гистограммы
-        valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
-        
-        # Создаем 2D гистограмму с весами по интенсивности
         heatmap, xedges, yedges = np.histogram2d(
             valid_data['O/C'], 
             valid_data['H/C'], 
@@ -1857,30 +1863,24 @@ def vk(spec: pd.DataFrame,
             weights=valid_data['intensity']
         )
         
-        # Нормализуем для лучшего отображения
         if heatmap.max() > 0:
             heatmap = heatmap / heatmap.max()
         
-        # Отображаем тепловую карту
         im = ax.imshow(heatmap.T, 
-                      extent=(0.0, 1.0, 0.0, 2.2), 
+                      extent=(0, 1, 0, 2.2), 
                       origin='lower', 
                       aspect='auto',
                       cmap=color_palette,
                       alpha=0.8)
         
-        # Добавляем цветовую шкалу
         plt.colorbar(im, ax=ax, label='Normalized Intensity')
-        
-        # Добавляем контуры для лучшей читаемости
-        ax.contour(heatmap.T, levels=5, extent=[0, 1, 0, 2.2], 
+        ax.contour(heatmap.T, levels=5, extent=(0, 1, 0, 2.2), 
                   colors='white', alpha=0.5, linewidths=0.5)
     
+    # Точечная карта интенсивности
     elif plot_type == 'scatter':
-        # Точечная карта интенсивности
         valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
         
-        # Нормализуем интенсивности для размеров точек
         intensities = valid_data['intensity']
         if intensities.max() > intensities.min():
             normalized_sizes = (intensities - intensities.min()) / (intensities.max() - intensities.min())
@@ -1888,18 +1888,151 @@ def vk(spec: pd.DataFrame,
         else:
             point_sizes = [sizes[0]] * len(intensities)
         
-        # Создаем scatter plot с цветом по интенсивности
         scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
                            c=valid_data['intensity'],
                            s=point_sizes,
                            alpha=0.7,
                            cmap=color_palette)
         
-        # Добавляем цветовую шкалу
         plt.colorbar(scatter, ax=ax, label='Intensity')
     
+    # Точечная карта ошибки
+    elif plot_type == 'error_scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', error_type])
+        
+        errors = valid_data[error_type]
+        if errors.max() > errors.min():
+            normalized_sizes = (errors - errors.min()) / (errors.max() - errors.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(errors)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data[error_type],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        error_label = 'Relative Error (ppm)' if error_type == 'rel_error' else 'Absolute Error'
+        plt.colorbar(scatter, ax=ax, label=error_label)
+        ax.set_title(f"{spec.attrs['name']} - {error_label}")
+    
+    # Тепловая карта ошибки
+    elif plot_type == 'error_heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', error_type])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data[error_type]
+        )
+        
+        # Для ошибки лучше использовать инверсную палитру - меньшие ошибки лучше
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette + '_r',  # инверсная палитра
+                      alpha=0.8)
+        
+        error_label = 'Relative Error (ppm)' if error_type == 'rel_error' else 'Absolute Error'
+        plt.colorbar(im, ax=ax, label=error_label)
+        ax.set_title(f"{spec.attrs['name']} - {error_label}")
+    
+    # Точечная карта масс
+    elif plot_type == 'mass_scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'mass'])
+        
+        masses = valid_data['mass']
+        if masses.max() > masses.min():
+            normalized_sizes = (masses - masses.min()) / (masses.max() - masses.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(masses)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data['mass'],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        plt.colorbar(scatter, ax=ax, label='Mass')
+        ax.set_title(f"{spec.attrs['name']} - Mass Distribution")
+    
+    # Тепловая карта масс
+    elif plot_type == 'mass_heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'mass'])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data['mass']
+        )
+        
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette,
+                      alpha=0.8)
+        
+        plt.colorbar(im, ax=ax, label='Average Mass')
+        ax.set_title(f"{spec.attrs['name']} - Mass Distribution")
+    
+    # Точечная карта количества кислорода
+    elif plot_type == 'oxygen_scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'O'])
+        
+        oxygen_counts = valid_data['O']
+        if oxygen_counts.max() > oxygen_counts.min():
+            normalized_sizes = (oxygen_counts - oxygen_counts.min()) / (oxygen_counts.max() - oxygen_counts.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(oxygen_counts)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data['O'],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        plt.colorbar(scatter, ax=ax, label='Oxygen Count')
+        ax.set_title(f"{spec.attrs['name']} - Oxygen Distribution")
+    
+    # Тепловая карта количества кислорода
+    elif plot_type == 'oxygen_heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'O'])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data['O']
+        )
+        
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette,
+                      alpha=0.8)
+        
+        plt.colorbar(im, ax=ax, label='Average Oxygen Count')
+        ax.set_title(f"{spec.attrs['name']} - Oxygen Distribution")
+    
     else:
-        raise ValueError(f"Unknown plot_type: {plot_type}. Available options: 'default', 'heatmap', 'scatter'")
+        raise ValueError(f"Unknown plot_type: {plot_type}. Available options: 'default', 'heatmap', 'scatter', 'error_scatter', 'error_heatmap', 'mass_scatter', 'mass_heatmap', 'oxygen_scatter', 'oxygen_heatmap'")
     
     # Общие настройки для всех типов графиков
     ax.set_xlabel('O/C')
