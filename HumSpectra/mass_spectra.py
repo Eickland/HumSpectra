@@ -100,7 +100,7 @@ def _mark_assigned_by_brutto(self) -> None:
 def assign(data: pd.DataFrame,
             brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
-            rel_error: float|None = 0.5,
+            rel_error: float|None = None,
             abs_error: float|None = None,
             sign: str ='-',
             mass_min: Optional[float] =  None,
@@ -181,6 +181,8 @@ def assign(data: pd.DataFrame,
         
         if rel_error is not None:
             rel = True
+            rel_error = 0.5
+            
         elif abs_error is not None:
             rel = False
         else:
