@@ -1797,7 +1797,8 @@ def vk(spec: pd.DataFrame,
                color_palette='viridis',
                error_type='rel_error',
                kde_fill=True,
-               kde_levels=10):
+               kde_levels=10,
+               scatter_kde_enable=False):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -2056,8 +2057,9 @@ def vk(spec: pd.DataFrame,
                                cmap=color_palette, ax=ax, linewidths=1.5)
                 
                 # Добавляем scatter plot поверх KDE для лучшей видимости отдельных точек
-                scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
-                                   c='black', alpha=0.3, s=10, marker='o')
+                if scatter_kde_enable:
+                    scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                                    c='black', alpha=0.3, s=10, marker='o')
                 
             except Exception as e:
                 print(f"KDE plotting failed: {e}. Using scatter plot instead.")
@@ -2088,6 +2090,142 @@ def vk(spec: pd.DataFrame,
         ax.set_ylim(0.0, 2.2)
     
     return ax
+
+def filter_dense_region_advanced(spec: pd.DataFrame,
+                                method: str = 'kde',
+                                percentile: float = 50,
+                                cluster_method: str = 'dbscan',
+                                visualize: bool = False,
+                                ax=None,
+                                **kwargs):
+    """
+    Расширенная функция для выделения плотных регионов.
+    
+    Parameters
+    ----------
+    spec : pd.DataFrame
+        DataFrame с данными спектра
+    method : str
+        Метод фильтрации: 'kde' (по умолчанию), 'clustering', 'percentile'
+    percentile : float
+        Процентиль для отбора (для method='kde' и 'percentile')
+    cluster_method : str
+        Метод кластеризации: 'dbscan', 'kmeans'
+    visualize : bool
+        Визуализировать процесс
+    ax : matplotlib.axes.Axes
+        Оси для визуализации
+    **kwargs : dict
+        Дополнительные параметры для методов
+    
+    Returns
+    -------
+    pd.DataFrame
+    """
+    
+    spec = spec.copy(deep=True)
+    
+    # Добавляем соотношения O/C и H/C если их нет
+    if "O/C" not in list(spec.columns):
+        spec["O/C"] = spec["O"] / spec["C"]
+        spec["H/C"] = spec["H"] / spec["C"]
+    
+    valid_data = spec.dropna(subset=['O/C', 'H/C']).copy()
+    
+    if len(valid_data) == 0:
+        return spec
+    
+    X = valid_data[['O/C', 'H/C']].values
+    
+    if method == 'kde':
+        from scipy.stats import gaussian_kde
+        
+        bandwidth = kwargs.get('bandwidth', 0.05)
+        kde = gaussian_kde(X.T, bw_method=bandwidth)
+        densities = kde(X.T)
+        valid_data['density'] = densities
+        
+        density_threshold = np.percentile(densities, percentile)
+        filtered_data = valid_data[valid_data['density'] >= density_threshold]
+        
+    elif method == 'percentile':
+        # Простой метод по процентилю координат
+        o_c_threshold = np.percentile(valid_data['O/C'], percentile)
+        h_c_threshold = np.percentile(valid_data['H/C'], percentile)
+        
+        filtered_data = valid_data[
+            (valid_data['O/C'] >= o_c_threshold) & 
+            (valid_data['H/C'] >= h_c_threshold)
+        ]
+        
+    elif method == 'clustering':
+        from sklearn.cluster import DBSCAN, KMeans
+        
+        if cluster_method == 'dbscan':
+            eps = kwargs.get('eps', 0.1)
+            min_samples = kwargs.get('min_samples', 5)
+            clusterer = DBSCAN(eps=eps, min_samples=min_samples)
+            labels = clusterer.fit_predict(X)
+            
+        elif cluster_method == 'kmeans':
+            n_clusters = kwargs.get('n_clusters', 3)
+            clusterer = KMeans(n_clusters=n_clusters, random_state=42)
+            labels = clusterer.fit_predict(X)
+        
+        valid_data['cluster'] = labels # type: ignore
+        
+        # Находим самый большой кластер (исключая шум для DBSCAN)
+        if cluster_method == 'dbscan':
+            cluster_sizes = valid_data[valid_data['cluster'] != -1]['cluster'].value_counts()
+        else:
+            cluster_sizes = valid_data['cluster'].value_counts()
+        
+        if len(cluster_sizes) > 0:
+            largest_cluster = cluster_sizes.index[0]
+            filtered_data = valid_data[valid_data['cluster'] == largest_cluster]
+        else:
+            filtered_data = valid_data
+    
+    else:
+        raise ValueError(f"Unknown method: {method}")
+    
+    # Визуализация
+    if visualize:
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+        
+        colors = plt.cm.get_cmap('viridis')(np.linspace(0, 1, len(valid_data)))
+        
+        if method == 'kde':
+            scatter_all = ax.scatter(valid_data['O/C'], valid_data['H/C'], 
+                                   c=valid_data['density'], cmap='viridis', 
+                                   s=30, alpha=0.5, label='All points')
+            scatter_filtered = ax.scatter(filtered_data['O/C'], filtered_data['H/C'], 
+                                        c='red', s=50, alpha=0.8, label='Dense region')
+            plt.colorbar(scatter_all, ax=ax, label='Density')
+            
+        elif method in ['clustering', 'percentile']:
+            ax.scatter(valid_data['O/C'], valid_data['H/C'], 
+                      c='gray', alpha=0.3, s=20, label='All points')
+            ax.scatter(filtered_data['O/C'], filtered_data['H/C'], 
+                      c='red', alpha=0.8, s=40, label='Selected region')
+        
+        ax.set_xlim(0, 1.0)
+        ax.set_ylim(0, 2.2)
+        ax.set_xlabel('O/C')
+        ax.set_ylabel('H/C')
+        ax.set_title(f"Filtered: {len(filtered_data)}/{len(valid_data)} points")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    
+    # Очищаем временные колонки
+    result_df = filtered_data.drop(columns=['density', 'cluster'], errors='ignore')
+    
+    if hasattr(spec, 'attrs'):
+        result_df.attrs = spec.attrs.copy()
+    
+    return result_df
+
         
 def spectrum(spec: pd.DataFrame,
              ax = None):
