@@ -253,7 +253,7 @@ def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
     
     return [x for x in spectra_list if x is not None]
 
-def spectra_to_df(spectra_list, metrics, class_filter="ADOM"):
+def spectra_to_df(spectra_list, metrics):
 
     df = pd.DataFrame([{
 
