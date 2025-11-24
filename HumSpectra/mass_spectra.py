@@ -100,7 +100,7 @@ def _mark_assigned_by_brutto(self) -> None:
 def assign(data: pd.DataFrame,
             brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
-            rel_error: float|None = 0.5,
+            rel_error: float|None = None,
             abs_error: float|None = None,
             sign: str ='-',
             mass_min: Optional[float] =  None,
@@ -181,10 +181,12 @@ def assign(data: pd.DataFrame,
         
         if rel_error is not None:
             rel = True
+            
         elif abs_error is not None:
             rel = False
         else:
             rel = True
+            rel_error = 0.5
 
         data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
         table = data.copy(deep=True)
@@ -1789,38 +1791,756 @@ def ChooseColor(row):
         return "blue"
 
 def vk(spec: pd.DataFrame,
-               ax = None,
-               sizes=(7, 30)):
+               ax=None,
+               sizes=(7, 30),
+               plot_type='default',
+               color_palette='viridis',
+               error_type='rel_error',
+               kde_fill=True,
+               kde_levels=10,
+               scatter_kde_enable=False):
     """
-    Возвращает диаграмму Ван-Кревелина для подставленного спектра.
+    Возвращает диаграмму Ван-Кревелена для подставленного спектра.
+    
+    Parameters
+    ----------
+    spec : pd.DataFrame
+        DataFrame с данными спектра
+    ax : matplotlib.axes.Axes, optional
+        Оси для отрисовки, если None - создаются новые
+    sizes : tuple, optional
+        Размеры точек для scatter plot
+    plot_type : str, optional
+        Тип визуализации:
+        - 'default': базовый scatter plot (по умолчанию)
+        - 'heatmap': тепловая карта интенсивности
+        - 'scatter': точечная карта интенсивности
+        - 'error_scatter': точечная карта ошибки
+        - 'error_heatmap': тепловая карта ошибки
+        - 'mass_scatter': точечная карта масс
+        - 'mass_heatmap': тепловая карта масс
+        - 'oxygen_scatter': точечная карта количества кислорода
+        - 'oxygen_heatmap': тепловая карта количества кислорода
+        - 'density': плотность точек (2D KDE)
+    color_palette : str, optional
+        Цветовая палитра для тепловой карты
+    error_type : str, optional
+        Тип ошибки для визуализации: 'rel_error' или 'abs_error'
+    kde_fill : bool, optional
+        Заливать контуры KDE (True) или отображать только линии (False)
+    kde_levels : int, optional
+        Количество уровней для KDE
+    
+    Returns
+    -------
+    matplotlib.axes.Axes
     """
-
     spec = spec.copy(deep=True)
-    spec["Color value"] = spec.apply(lambda x: ChooseColor(x) ,axis=1)
-
+    
+    # Добавляем соотношения O/C и H/C если их нет
     if "O/C" not in list(spec.columns):
-
-        spec["O/C"] = spec["O"]/spec["C"]
-        spec["H/C"] = spec["H"]/spec["C"]
-
+        spec["O/C"] = spec["O"] / spec["C"]
+        spec["H/C"] = spec["H"] / spec["C"]
+    
+    # Создаем оси если не переданы
     if ax is None:
-
-        fig, ax = plt.subplots(1,1,figsize=(6,6))
-
-        ax.set_xlim((0.0,1.0))
-        ax.set_ylim((0.0,2.2))
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+        ax.set_xlim((0.0, 1.0))
+        ax.set_ylim((0.0, 2.2))
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
-
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = "intensity", alpha = 0.7,legend = False,sizes=sizes)
+    
+    # Базовый вариант (оригинальный)
+    if plot_type == 'default':
+        spec["Color value"] = spec.apply(lambda x: ChooseColor(x), axis=1)
+        sns.scatterplot(data=spec, x="O/C", y="H/C", 
+                       hue="Color value", hue_order=["blue","orange","green","red"], 
+                       size="intensity", alpha=0.7, legend=False, 
+                       sizes=sizes, ax=ax)
+    
+    # Тепловая карта интенсивности
+    elif plot_type == 'heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data['intensity']
+        )
+        
+        if heatmap.max() > 0:
+            heatmap = heatmap / heatmap.max()
+        
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette,
+                      alpha=0.8)
+        
+        plt.colorbar(im, ax=ax, label='Normalized Intensity')
+        ax.contour(heatmap.T, levels=5, extent=(0, 1, 0, 2.2), 
+                  colors='white', alpha=0.5, linewidths=0.5)
+    
+    # Точечная карта интенсивности
+    elif plot_type == 'scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'intensity'])
+        
+        intensities = valid_data['intensity']
+        if intensities.max() > intensities.min():
+            normalized_sizes = (intensities - intensities.min()) / (intensities.max() - intensities.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(intensities)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data['intensity'],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        plt.colorbar(scatter, ax=ax, label='Intensity')
+    
+    # Точечная карта ошибки
+    elif plot_type == 'error_scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', error_type])
+        
+        errors = valid_data[error_type]
+        if errors.max() > errors.min():
+            normalized_sizes = (errors - errors.min()) / (errors.max() - errors.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(errors)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data[error_type],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        error_label = 'Relative Error (ppm)' if error_type == 'rel_error' else 'Absolute Error'
+        plt.colorbar(scatter, ax=ax, label=error_label)
+        ax.set_title(f"{spec.attrs['name']} - {error_label}")
+    
+    # Тепловая карта ошибки
+    elif plot_type == 'error_heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', error_type])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data[error_type]
+        )
+        
+        # Для ошибки лучше использовать инверсную палитру - меньшие ошибки лучше
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette + '_r',  # инверсная палитра
+                      alpha=0.8)
+        
+        error_label = 'Relative Error (ppm)' if error_type == 'rel_error' else 'Absolute Error'
+        plt.colorbar(im, ax=ax, label=error_label)
+        ax.set_title(f"{spec.attrs['name']} - {error_label}")
+    
+    # Точечная карта масс
+    elif plot_type == 'mass_scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'mass'])
+        
+        masses = valid_data['mass']
+        if masses.max() > masses.min():
+            normalized_sizes = (masses - masses.min()) / (masses.max() - masses.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(masses)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data['mass'],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        plt.colorbar(scatter, ax=ax, label='Mass')
+        ax.set_title(f"{spec.attrs['name']} - Mass Distribution")
+    
+    # Тепловая карта масс
+    elif plot_type == 'mass_heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'mass'])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data['mass']
+        )
+        
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette,
+                      alpha=0.8)
+        
+        plt.colorbar(im, ax=ax, label='Average Mass')
+        ax.set_title(f"{spec.attrs['name']} - Mass Distribution")
+    
+    # Точечная карта количества кислорода
+    elif plot_type == 'oxygen_scatter':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'O'])
+        
+        oxygen_counts = valid_data['O']
+        if oxygen_counts.max() > oxygen_counts.min():
+            normalized_sizes = (oxygen_counts - oxygen_counts.min()) / (oxygen_counts.max() - oxygen_counts.min())
+            point_sizes = sizes[0] + normalized_sizes * (sizes[1] - sizes[0])
+        else:
+            point_sizes = [sizes[0]] * len(oxygen_counts)
+        
+        scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                           c=valid_data['O'],
+                           s=point_sizes,
+                           alpha=0.7,
+                           cmap=color_palette)
+        
+        plt.colorbar(scatter, ax=ax, label='Oxygen Count')
+        ax.set_title(f"{spec.attrs['name']} - Oxygen Distribution")
+    
+    # Тепловая карта количества кислорода
+    elif plot_type == 'oxygen_heatmap':
+        valid_data = spec.dropna(subset=['O/C', 'H/C', 'O'])
+        
+        x_bins = np.linspace(0, 1, 50)
+        y_bins = np.linspace(0, 2.2, 50)
+        
+        heatmap, xedges, yedges = np.histogram2d(
+            valid_data['O/C'], 
+            valid_data['H/C'], 
+            bins=[x_bins, y_bins],
+            weights=valid_data['O']
+        )
+        
+        im = ax.imshow(heatmap.T, 
+                      extent=(0, 1, 0, 2.2), 
+                      origin='lower', 
+                      aspect='auto',
+                      cmap=color_palette,
+                      alpha=0.8)
+        
+        plt.colorbar(im, ax=ax, label='Average Oxygen Count')
+        ax.set_title(f"{spec.attrs['name']} - Oxygen Distribution")
+    
+    # Плотность точек (2D KDE)
+    elif plot_type == 'density':
+        valid_data = spec.dropna(subset=['O/C', 'H/C'])
+        
+        # Создаем 2D KDE
+        if len(valid_data) > 1:  # Нужно как минимум 2 точки для KDE
+            try:
+                # Используем seaborn для KDE
+                if kde_fill:
+                    sns.kdeplot(data=valid_data, x='O/C', y='H/C',
+                               fill=True, alpha=0.6, levels=kde_levels,
+                               cmap=color_palette, ax=ax)
+                else:
+                    sns.kdeplot(data=valid_data, x='O/C', y='H/C',
+                               fill=False, levels=kde_levels,
+                               cmap=color_palette, ax=ax, linewidths=1.5)
+                
+                # Добавляем scatter plot поверх KDE для лучшей видимости отдельных точек
+                if scatter_kde_enable:
+                    scatter = ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                                    c='black', alpha=0.3, s=10, marker='o')
+                
+            except Exception as e:
+                print(f"KDE plotting failed: {e}. Using scatter plot instead.")
+                # Если KDE не сработал, используем обычный scatter plot
+                ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                          alpha=0.5, s=20, c='blue')
+        else:
+            # Если точек мало, просто рисуем scatter
+            ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                      alpha=0.7, s=30, c='red')
+            ax.text(0.5, 1.1, "Not enough points for KDE", 
+                   ha='center', transform=ax.transAxes, color='red')
+        
+        ax.set_title(f"{spec.attrs['name']} - Point Density (KDE), {len(valid_data)} points")
     
     else:
+        raise ValueError(f"Unknown plot_type: {plot_type}. Available options: 'default', 'heatmap', 'scatter', 'error_scatter', 'error_heatmap', 'mass_scatter', 'mass_heatmap', 'oxygen_scatter', 'oxygen_heatmap', 'density'")
+    
+    # Общие настройки для всех типов графиков
+    ax.set_xlabel('O/C')
+    ax.set_ylabel('H/C')
+    ax.grid(True, alpha=0.3)
+    
+    # Устанавливаем пределы если они не были установлены ранее
+    if ax.get_xlim() == (0.0, 1.0):
+        ax.set_xlim(0.0, 1.0)
+    if ax.get_ylim() == (0.0, 1.0):
+        ax.set_ylim(0.0, 2.2)
+    
+    return ax
 
-        sns.scatterplot(data = spec, x = "O/C", y = "H/C",hue="Color value",hue_order=["blue","orange","green","red"], size = "intensity", alpha = 0.7,legend = False,sizes=sizes,ax=ax)
-
-        ax.set_xlim([0,1])
-        ax.set_ylim([0,2.2])
-        ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
+def filter_dense_region_advanced(spec: pd.DataFrame,
+                                method: str = 'kde',
+                                percentile: float = 50,
+                                cluster_method: str = 'dbscan',
+                                visualize: bool = False,
+                                ax=None,
+                                **kwargs):
+    """
+    Расширенная функция для выделения плотных регионов.
+    
+    Parameters
+    ----------
+    spec : pd.DataFrame
+        DataFrame с данными спектра
+    method : str
+        Метод фильтрации: 'kde' (по умолчанию), 'clustering', 'percentile'
+    percentile : float
+        Процентиль для отбора (для method='kde' и 'percentile')
+    cluster_method : str
+        Метод кластеризации: 'dbscan', 'kmeans'
+    visualize : bool
+        Визуализировать процесс
+    ax : matplotlib.axes.Axes
+        Оси для визуализации
+    **kwargs : dict
+        Дополнительные параметры для методов
+    
+    Returns
+    -------
+    pd.DataFrame
+    """
+    
+    spec = spec.copy(deep=True)
+    
+    # Добавляем соотношения O/C и H/C если их нет
+    if "O/C" not in list(spec.columns):
+        spec["O/C"] = spec["O"] / spec["C"]
+        spec["H/C"] = spec["H"] / spec["C"]
+    
+    valid_data = spec.dropna(subset=['O/C', 'H/C']).copy()
+    
+    if len(valid_data) == 0:
+        return spec
+    
+    X = valid_data[['O/C', 'H/C']].values
+    
+    if method == 'kde':
+        from scipy.stats import gaussian_kde
         
+        bandwidth = kwargs.get('bandwidth', 0.05)
+        kde = gaussian_kde(X.T, bw_method=bandwidth)
+        densities = kde(X.T)
+        valid_data['density'] = densities
+        
+        density_threshold = np.percentile(densities, percentile)
+        filtered_data = valid_data[valid_data['density'] >= density_threshold]
+        
+    elif method == 'percentile':
+        # Простой метод по процентилю координат
+        o_c_threshold = np.percentile(valid_data['O/C'], percentile)
+        h_c_threshold = np.percentile(valid_data['H/C'], percentile)
+        
+        filtered_data = valid_data[
+            (valid_data['O/C'] >= o_c_threshold) & 
+            (valid_data['H/C'] >= h_c_threshold)
+        ]
+        
+    elif method == 'clustering':
+        from sklearn.cluster import DBSCAN, KMeans
+        
+        if cluster_method == 'dbscan':
+            eps = kwargs.get('eps', 0.1)
+            min_samples = kwargs.get('min_samples', 5)
+            clusterer = DBSCAN(eps=eps, min_samples=min_samples)
+            labels = clusterer.fit_predict(X)
+            
+        elif cluster_method == 'kmeans':
+            n_clusters = kwargs.get('n_clusters', 3)
+            clusterer = KMeans(n_clusters=n_clusters, random_state=42)
+            labels = clusterer.fit_predict(X)
+        
+        valid_data['cluster'] = labels # type: ignore
+        
+        # Находим самый большой кластер (исключая шум для DBSCAN)
+        if cluster_method == 'dbscan':
+            cluster_sizes = valid_data[valid_data['cluster'] != -1]['cluster'].value_counts()
+        else:
+            cluster_sizes = valid_data['cluster'].value_counts()
+        
+        if len(cluster_sizes) > 0:
+            largest_cluster = cluster_sizes.index[0]
+            filtered_data = valid_data[valid_data['cluster'] == largest_cluster]
+        else:
+            filtered_data = valid_data
+    
+    else:
+        raise ValueError(f"Unknown method: {method}")
+    
+    # Визуализация
+    if visualize:
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+        
+        colors = plt.cm.get_cmap('viridis')(np.linspace(0, 1, len(valid_data)))
+        
+        if method == 'kde':
+            scatter_all = ax.scatter(valid_data['O/C'], valid_data['H/C'], 
+                                   c=valid_data['density'], cmap='viridis', 
+                                   s=30, alpha=0.5, label='All points')
+            scatter_filtered = ax.scatter(filtered_data['O/C'], filtered_data['H/C'], 
+                                        c='red', s=50, alpha=0.8, label='Dense region')
+            plt.colorbar(scatter_all, ax=ax, label='Density')
+            
+        elif method in ['clustering', 'percentile']:
+            ax.scatter(valid_data['O/C'], valid_data['H/C'], 
+                      c='gray', alpha=0.3, s=20, label='All points')
+            ax.scatter(filtered_data['O/C'], filtered_data['H/C'], 
+                      c='red', alpha=0.8, s=40, label='Selected region')
+        
+        ax.set_xlim(0, 1.0)
+        ax.set_ylim(0, 2.2)
+        ax.set_xlabel('O/C')
+        ax.set_ylabel('H/C')
+        ax.set_title(f"Filtered: {len(filtered_data)}/{len(valid_data)} points")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+    
+    # Очищаем временные колонки
+    result_df = filtered_data.drop(columns=['density', 'cluster'], errors='ignore')
+    
+    if hasattr(spec, 'attrs'):
+        result_df.attrs = spec.attrs.copy()
+    
+    return result_df
+
+def plot_spectra_kde_comparison(spectra_list: list,
+                               classes: list|None = None,
+                               bandwidth: float = 0.05,
+                               n_levels: int = 10,
+                               figsize: tuple = (12, 8),
+                               color_palette: str = 'viridis',
+                               show_contours: bool = True,
+                               show_fill: bool = True,
+                               alpha: float = 0.7,
+                               subplot_layout: tuple|None = None):
+    """
+    Рисует 2D KDE графики для сравнения плотных участков нескольких спектров.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами
+    classes : list, optional
+        Список классов для группировки, если None - используется spec.attrs['Class']
+    bandwidth : float, optional
+        Параметр сглаживания для KDE
+    n_levels : int, optional
+        Количество уровней контуров
+    figsize : tuple, optional
+        Размер фигуры
+    color_palette : str, optional
+        Цветовая палитра
+    show_contours : bool, optional
+        Показывать контурные линии
+    show_fill : bool, optional
+        Заливать области
+    alpha : float, optional
+        Прозрачность заливки
+    subplot_layout : tuple, optional
+        Расположение subplots (rows, cols), если None - определяется автоматически
+    
+    Returns
+    -------
+    matplotlib.figure.Figure, numpy.ndarray of matplotlib.axes.Axes
+    """
+    
+    if not spectra_list:
+        raise ValueError("Список спектров не может быть пустым")
+    
+    # Определяем классы для каждого спектра
+    if classes is None:
+        classes = []
+        for spec in spectra_list:
+            if hasattr(spec, 'attrs') and 'Class' in spec.attrs:
+                classes.append(spec.attrs['Class'])
+            else:
+                classes.append(f"Spectrum_{len(classes)+1}")
+    else:
+        if len(classes) != len(spectra_list):
+            raise ValueError("Длина списка классов должна совпадать с длиной списка спектров")
+    
+    # Группируем спектры по классам
+    from collections import defaultdict
+    class_spectra = defaultdict(list)
+    class_names = []
+    
+    for spec, class_name in zip(spectra_list, classes):
+        class_spectra[class_name].append(spec)
+        if class_name not in class_names:
+            class_names.append(class_name)
+    
+    # Определяем layout subplots
+    if subplot_layout is None:
+        n_classes = len(class_names)
+        n_cols = min(3, n_classes)
+        n_rows = (n_classes + n_cols - 1) // n_cols
+    else:
+        n_rows, n_cols = subplot_layout
+    
+    # Создаем фигуру и оси
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([axes])
+    axes = axes.flatten()
+    
+    # Цветовая схема
+    colors = plt.cm.get_cmap(color_palette, len(class_names))
+    
+    # Для каждого класса строим KDE
+    for idx, (class_name, class_specs) in enumerate(class_spectra.items()):
+        if idx >= len(axes):
+            break
+            
+        ax = axes[idx]
+        
+        # Объединяем все спектры этого класса
+        all_class_data = []
+        for spec in class_specs:
+            spec_copy = spec.copy(deep=True)
+            
+            # Добавляем соотношения O/C и H/C если их нет
+            if "O/C" not in list(spec_copy.columns):
+                spec_copy["O/C"] = spec_copy["O"] / spec_copy["C"]
+                spec_copy["H/C"] = spec_copy["H"] / spec_copy["C"]
+            
+            valid_data = spec_copy.dropna(subset=['O/C', 'H/C'])
+            if len(valid_data) > 0:
+                all_class_data.append(valid_data[['O/C', 'H/C']])
+        
+        if not all_class_data:
+            ax.text(0.5, 0.5, f"No valid data\nfor {class_name}", 
+                   ha='center', va='center', transform=ax.transAxes)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 2.2)
+            continue
+        
+        # Объединяем все данные класса
+        combined_data = pd.concat(all_class_data, ignore_index=True)
+        X = combined_data[['O/C', 'H/C']].values
+        
+        if len(X) < 2:
+            ax.text(0.5, 0.5, f"Not enough data\nfor KDE\n{len(X)} points", 
+                   ha='center', va='center', transform=ax.transAxes)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 2.2)
+            continue
+        
+        # Создаем KDE
+        from scipy.stats import gaussian_kde
+        try:
+            kde = gaussian_kde(X.T, bw_method=bandwidth)
+            
+            # Создаем сетку для KDE
+            x_min, x_max = 0, 1.0
+            y_min, y_max = 0, 2.2
+            xx, yy = np.mgrid[x_min:x_max:100j, y_min:y_max:100j]
+            grid_coords = np.vstack([xx.ravel(), yy.ravel()])
+            
+            # Вычисляем плотность на сетке
+            grid_density = kde(grid_coords).reshape(xx.shape)
+            
+            # Визуализируем KDE
+            if show_fill:
+                contourf = ax.contourf(xx, yy, grid_density, 
+                                     levels=n_levels, 
+                                     alpha=alpha, 
+                                     cmap=color_palette)
+            
+            if show_contours:
+                contour = ax.contour(xx, yy, grid_density, 
+                                   levels=n_levels, 
+                                   colors='black', 
+                                   alpha=0.5, 
+                                   linewidths=0.8)
+                # ax.clabel(contour, inline=True, fontsize=8)
+            
+            # Добавляем цветовую шкалу для каждого subplot
+            if show_fill:
+                plt.colorbar(contourf, ax=ax, label='Density') # type: ignore
+            
+        except Exception as e:
+            print(f"Ошибка при построении KDE для класса {class_name}: {e}")
+            ax.text(0.5, 0.5, f"KDE error\n{class_name}", 
+                   ha='center', va='center', transform=ax.transAxes)
+        
+        # Настройки графика
+        ax.set_xlim(0, 1.0)
+        ax.set_ylim(0, 2.2)
+        ax.set_xlabel('O/C')
+        ax.set_ylabel('H/C')
+        ax.set_title(f'{class_name}\n({len(combined_data)} points, {len(class_specs)} spectra)')
+        ax.grid(True, alpha=0.3)
+    
+    # Скрываем неиспользованные оси
+    for idx in range(len(class_spectra), len(axes)):
+        axes[idx].set_visible(False)
+    
+    plt.tight_layout()
+    return fig, axes
+
+
+def plot_spectra_kde_overlay(spectra_list: list,
+                           classes: list|None = None,
+                           bandwidth: float = 0.05,
+                           n_levels: int = 8,
+                           figsize: tuple = (10, 8),
+                           color_palette: str = 'Set2',
+                           alpha: float = 0.6):
+    """
+    Рисует несколько KDE на одном графике для сравнения.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами
+    classes : list, optional
+        Список классов для группировки
+    bandwidth : float, optional
+        Параметр сглаживания для KDE
+    n_levels : int, optional
+        Количество уровней контуров
+    figsize : tuple, optional
+        Размер фигуры
+    color_palette : str, optional
+        Цветовая палитра
+    alpha : float, optional
+        Прозрачность заливки
+    
+    Returns
+    -------
+    matplotlib.figure.Figure, matplotlib.axes.Axes
+    """
+    
+    if not spectra_list:
+        raise ValueError("Список спектров не может быть пустым")
+    
+    # Определяем классы для каждого спектра
+    if classes is None:
+        classes = []
+        for spec in spectra_list:
+            if hasattr(spec, 'attrs') and 'Class' in spec.attrs:
+                classes.append(spec.attrs['Class'])
+            else:
+                classes.append(f"Spectrum_{len(classes)+1}")
+    
+    # Убираем дубликаты классов
+    unique_classes = []
+    unique_indices = []
+    for i, class_name in enumerate(classes):
+        if class_name not in unique_classes:
+            unique_classes.append(class_name)
+            unique_indices.append(i)
+    
+    # Создаем фигуру
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    # Цветовая схема
+    colors = plt.cm.get_cmap(color_palette, len(unique_classes))
+    
+    # Для каждого уникального класса строим KDE
+    legend_elements = []
+    
+    for idx, class_idx in enumerate(unique_indices):
+        class_name = classes[class_idx]
+        
+        # Собираем все спектры этого класса
+        class_spectra = [spectra_list[i] for i, cls in enumerate(classes) if cls == class_name]
+        
+        # Объединяем данные класса
+        all_class_data = []
+        for spec in class_spectra:
+            spec_copy = spec.copy(deep=True)
+            
+            if "O/C" not in list(spec_copy.columns):
+                spec_copy["O/C"] = spec_copy["O"] / spec_copy["C"]
+                spec_copy["H/C"] = spec_copy["H"] / spec_copy["C"]
+            
+            valid_data = spec_copy.dropna(subset=['O/C', 'H/C'])
+            if len(valid_data) > 0:
+                all_class_data.append(valid_data[['O/C', 'H/C']])
+        
+        if not all_class_data:
+            continue
+        
+        combined_data = pd.concat(all_class_data, ignore_index=True)
+        X = combined_data[['O/C', 'H/C']].values
+        
+        if len(X) < 2:
+            continue
+        
+        # Создаем KDE
+        from scipy.stats import gaussian_kde
+        try:
+            kde = gaussian_kde(X.T, bw_method=bandwidth)
+            
+            # Создаем сетку для KDE
+            x_min, x_max = 0, 1.0
+            y_min, y_max = 0, 2.2
+            xx, yy = np.mgrid[x_min:x_max:100j, y_min:y_max:100j]
+            grid_coords = np.vstack([xx.ravel(), yy.ravel()])
+            
+            # Вычисляем плотность на сетке
+            grid_density = kde(grid_coords).reshape(xx.shape)
+            
+            # Нормализуем плотность для лучшего сравнения
+            if grid_density.max() > 0:
+                grid_density = grid_density / grid_density.max()
+            
+            # Визуализируем контуры
+            color = colors(idx)
+            contourf = ax.contourf(xx, yy, grid_density, 
+                                 levels=n_levels, 
+                                 alpha=alpha, 
+                                 colors=[color])
+            
+            contour = ax.contour(xx, yy, grid_density, 
+                               levels=n_levels, 
+                               colors=[color], 
+                               alpha=0.8, 
+                               linewidths=1.5)
+            
+            # Добавляем в легенду
+            from matplotlib.patches import Patch
+            legend_elements.append(Patch(facecolor=color, alpha=alpha, label=class_name))
+            
+        except Exception as e:
+            print(f"Ошибка при построении KDE для класса {class_name}: {e}")
+    
+    # Настройки графика
+    ax.set_xlim(0, 1.0)
+    ax.set_ylim(0, 2.2)
+    ax.set_xlabel('O/C')
+    ax.set_ylabel('H/C')
+    ax.set_title('KDE Comparison of Different Classes')
+    ax.legend(handles=legend_elements, loc='best')
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    return fig, ax
+       
 def spectrum(spec: pd.DataFrame,
              ax = None):
     
@@ -1835,7 +2555,7 @@ def spectrum(spec: pd.DataFrame,
     ax.set_xlabel("m/z")
     ax.set_ylabel("intensity")
         
-    ax.set_xlim([200,1000])
+    ax.set_xlim((200,1000))
 
 def recallibrate(spec: pd.DataFrame, 
                 error_table: Optional[pd.DataFrame] = None, 
@@ -2259,7 +2979,7 @@ def MolClassesSpectrum(specList,draw=True,ax=None):
         density_class_list.append(data_class["density"])
         sample_list.append(spec.metadata["name"])
         mol_class_list=data_class["class"].to_list()
-    mol_class_data = pd.DataFrame(np.array(density_class_list), index=sample_list, columns=mol_class_list)
+    mol_class_data = pd.DataFrame(np.array(density_class_list), index=sample_list, columns=mol_class_list) # type: ignore
     df_reversed = mol_class_data.sort_index(ascending=False).copy()
     if ax is None:
         fig, ax = plt.subplots(1,1,figsize=(8, 6))
@@ -2286,9 +3006,9 @@ def CalcMetricSpectrum(specList,func="weight",draw=True):
             data_prev = data
             continue
         else:
-            data_prev=data.merge(data_prev, on="metric")
+            data_prev=data.merge(data_prev, on="metric") # type: ignore
 
-    return data_prev
+    return data_prev # type: ignore
 
 def FormulaSpecData(specList, draw=True):
     all_formula_list = []
@@ -2621,6 +3341,206 @@ def assign_tmds(
     
 
     return res
+
+
+def assign_new(data: pd.DataFrame,
+            brutto_dict: Any|None = None,
+            generated_bruttos_table: Optional[pd.DataFrame] = None,
+            rel_error: float|None = None,
+            abs_error: float|None = None,
+            sign: str ='-',
+            mass_min: Optional[float] =  None,
+            mass_max: Optional[float] = None,
+            intensity_min: Optional[float] =  None,
+            intensity_max: Optional[float] = None,
+            charge_max: int = 1,
+            nitrogen_precision_factor: float = 2.0,
+            sulfur_precision_factor: float = 2.0
+    ) -> pd.DataFrame:
+        """
+        Assigning brutto formulas to signal by mass
+        
+        Parameters
+        -----------
+        brutto_dict: dict
+            Optional. Deafault None.
+            Custom Dictonary for generate brutto table.
+            Example: {'C':(4, 51),'H':(4, 101),'O':(0,26), 'N':(0,4), 'C_13':(0,3)}
+        generated_bruttos_table: pandas DataFrame 
+            Optional. Contain column 'mass' and elements, 
+            should be sorted by 'mass'.
+            Can be generated by function brutto_generator.brutto_gen(). 
+            if 'None' generate table with default elemnets and ranges
+            C: 4-50, H 4-100, O 0-25, N 0-3, S 0-2.
+        rel_error: float
+            Optional. default 0.5, permissible error in ppm for assign mass to brutto formulas
+        abs_error: float
+            Optional. default None, permissible absolute error for assign mass to brutto formulas
+        sign: str
+            Optional. Deafult '-'.
+            Mode in which mass spectrum was gotten. 
+            '-' for negative mode
+            '+' for positive mode
+            '0' for neutral
+        mass_min: float
+            Optional. Default None. Minimall mass for assigment
+        mass_max: float
+            Optional. Default None. Maximum mass for assigment
+        intensity_min: float
+            Optional. Default None. Minimall intensity for assigment
+        intensity_max: float
+            Optional. Default None. Maximum intensity for assigment
+        charge_max: int
+            Maximum charge in m/z. Default 1.
+        nitrogen_precision_factor: float
+            Optional. Default 2.0. Factor by which to increase precision for formulas containing nitrogen
+        sulfur_precision_factor: float
+            Optional. Default 2.0. Factor by which to increase precision for formulas containing sulfur
+
+        Return
+        ------
+        pd.DataFrame 
+        """
+
+        name = data.attrs['name']
+
+        if generated_bruttos_table is None:
+            generated_bruttos_table = brutto_gen(brutto_dict)
+
+        if mass_min is None:
+            mass_min = data['mass'].min()
+        if mass_max is None:
+            mass_max = data['mass'].max()
+        if intensity_min is None:
+            intensity_min = data['intensity'].min()
+        if intensity_max is None:
+            intensity_max = data['intensity'].max()
+        
+        if sign == '-':
+            mass_shift = - 0.00054858 + 1.007825  # electron and hydrogen mass
+        elif sign == '+':
+            mass_shift = 0.00054858  # electron mass
+        elif sign == '0':
+            mass_shift = 0
+        else:
+            raise Exception('Sended sign to assign method is not correct. May be "+","-","0"')
+
+        data.attrs['sign'] = sign
+
+        if rel_error is not None and abs_error is not None:
+            raise Exception('one of rel_error or abs_error must be None in assign method')
+        
+        if rel_error is not None:
+            rel = True
+            
+        elif abs_error is not None:
+            rel = False
+        else:
+            rel = True
+            rel_error = 0.5
+
+        data = data.loc[:,['mass', 'intensity']].reset_index(drop=True)
+        table = data.copy(deep=True)
+
+        masses = np.array(generated_bruttos_table["mass"].values)
+
+        elems = list(generated_bruttos_table.drop(columns=["mass"]))
+        bruttos = generated_bruttos_table[elems].values.tolist()
+
+        res = []
+        for index, row in table.iterrows():
+
+            if (row["mass"] < mass_min or 
+                row["mass"] > mass_max or
+                row["intensity"] < intensity_min or 
+                row["intensity"] > intensity_max):
+                res.append({"assign": False})
+                continue 
+            
+            assigned = False
+            for charge in range(1, charge_max + 1):
+                mass = (row["mass"] + mass_shift) * charge
+                idx = np.searchsorted(masses, mass, side='left')
+                if idx > 0 and (idx == len(masses) or np.fabs(mass - masses[idx - 1]) < np.fabs(mass - masses[idx])):
+                    idx -= 1
+
+                # Проверяем, содержит ли формула азот или серу
+                current_brutto = bruttos[idx]
+                has_nitrogen = 'N' in elems and current_brutto[elems.index('N')] > 0
+                has_sulfur = 'S' in elems and current_brutto[elems.index('S')] > 0
+                
+                # Определяем точность для текущей формулы
+                if rel:
+                    current_error = rel_error
+                    if has_nitrogen:
+                        current_error = rel_error / nitrogen_precision_factor # type: ignore
+                    if has_sulfur:
+                        current_error = rel_error / sulfur_precision_factor # type: ignore
+                    
+                    if np.fabs(masses[idx] - mass) / mass * 1e6 <= current_error/charge: # type: ignore
+                        res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
+                        assigned = True
+                        break
+                else:
+                    current_error = abs_error
+                    if has_nitrogen:
+                        current_error = abs_error / nitrogen_precision_factor  # type: ignore
+                    if has_sulfur:
+                        current_error = abs_error / sulfur_precision_factor  # type: ignore
+                    
+                    if np.fabs(masses[idx] - mass) <= current_error/charge: # type: ignore
+                        res.append({**dict(zip(elems, bruttos[idx])), "assign": True, "charge": charge})
+                        assigned = True
+                        break
+            
+            if not assigned:
+                # Если формула с повышенной точностью не приписалась, 
+                # ищем следующую подходящую формулу без азота и серы
+                for charge in range(1, charge_max + 1):
+                    mass = (row["mass"] + mass_shift) * charge
+                    idx = np.searchsorted(masses, mass, side='left')
+                    
+                    # Ищем ближайшие формулы в обе стороны
+                    candidates = []
+                    if idx > 0:
+                        candidates.append(idx - 1)
+                    if idx < len(masses):
+                        candidates.append(idx)
+                    if idx + 1 < len(masses):
+                        candidates.append(idx + 1)
+                    
+                    for candidate_idx in candidates:
+                        candidate_brutto = bruttos[candidate_idx]
+                        has_nitrogen = 'N' in elems and candidate_brutto[elems.index('N')] > 0
+                        has_sulfur = 'S' in elems and candidate_brutto[elems.index('S')] > 0
+                        
+                        # Используем обычную точность для формул без азота и серы
+                        if not has_nitrogen and not has_sulfur:
+                            if rel:
+                                if np.fabs(masses[candidate_idx] - mass) / mass * 1e6 <= rel_error/charge: # type: ignore
+                                    res.append({**dict(zip(elems, bruttos[candidate_idx])), "assign": True, "charge": charge})
+                                    assigned = True
+                                    break
+                            else:
+                                if np.fabs(masses[candidate_idx] - mass) <= abs_error/charge: # type: ignore
+                                    res.append({**dict(zip(elems, bruttos[candidate_idx])), "assign": True, "charge": charge})
+                                    assigned = True
+                                    break
+                    if assigned:
+                        break
+            
+            if not assigned:
+                res.append({"assign": False, "charge": 1})
+
+        res = pd.DataFrame(res)
+
+        table = table.join(res)
+        data = data.merge(table, how='outer', on=list(data.columns))
+        data['assign'] = data['assign'].fillna(False)
+        data['charge'] = data['charge'].fillna(1)
+        data.attrs['name'] = name
+
+        return data
 
 if __name__ == '__main__':
     pass
