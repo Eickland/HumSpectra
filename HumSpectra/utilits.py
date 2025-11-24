@@ -264,7 +264,13 @@ def spectra_to_df(spectra_list, metrics, class_filter="ADOM"):
         **{name: func(s) for name, func in metrics.items()}
     } for s in spectra_list])
 
-    return df[df["Class"] == class_filter] if class_filter else df
+    if class_filter:
+    
+        return df[df["Class"] == class_filter] if class_filter else df
+    
+    else:
+        
+        return df
 
 def analyze_geographical(data):
     """

@@ -64,12 +64,8 @@ def integral_ratio_uv(data: DataFrame,
                       low_wv_right: float,
                       high_wv_left: float,
                       high_wv_right: float,
-          debug: bool=False) -> float:
-    """
-    :param data: DataFrame, уф спектр
-    :return: uv_param: float, значение параметра E2/E3
-    Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 265 к 365 нм.
-    """
+          debug: bool=True) -> float:
+
     if not debug:
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
