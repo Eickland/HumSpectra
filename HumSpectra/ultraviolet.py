@@ -5,6 +5,7 @@ from pandas import DataFrame
 from typing import Optional, Union, List
 from matplotlib.axes import Axes
 from math import ceil, sqrt
+from scipy.optimize import curve_fit 
 
 from HumSpectra import utilits as ut
 
@@ -166,22 +167,45 @@ def suva(data: DataFrame,
     return uv_param
 
 def lambda_UV(data: DataFrame,
-                       short_wave: int = 450,
-                       long_wave: int = 550) -> float:
+              short_wave: int = 450,
+              long_wave: int = 550,
+              debug: bool = True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :param short_wave: int, длина волны, с которого будет производится аппроксимация
+    :param long_wave: int, длина волны, до которой будет производится аппроксимация
+    :return: uv_param: float, значение дескриптора лямбда
+    Функция проверяет наличие рекалибровки и рассчитывает параметр лямбда при длине волны от 450 до 550 нм
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
     
-    series = pd.Series(data.index, index=data.index)
-    index_short = series.sub(short_wave).abs().idxmin()
-    index_long = series.sub(long_wave).abs().idxmin()
+    # Получаем длины волн и значения оптической плотности
+    wavelengths = data.index.values
+    absorbance = data[data.columns[0]].values
     
-    # Правильное использование переменных
-    wavelengths = data.loc[index_short:index_long].index.values
-    absorbance = data.loc[index_short:index_long][data.columns[0]].values
+    # Находим индексы для диапазона [450, 550] нм
+    series = pd.Series(wavelengths, index=range(len(wavelengths)))
+    idx_short = series.sub(short_wave).abs().idxmin()
+    idx_long = series.sub(long_wave).abs().idxmin()
     
-    # Аппроксимация: ln(λ) vs OD
-    p = np.polyfit(np.log(wavelengths), absorbance, 1)
-    a, b = p
+    # Извлекаем данные в нужном диапазоне
+    x_data = wavelengths[idx_short:idx_long+1]
+    y_data = absorbance[idx_short:idx_long+1]
+    
+    # ТОЧНО как в первом случае: линейная аппроксимация y = a*x + b
+    # где x - длины волн, y - оптические плотности
+    def fit_linear(x, a, b):
+        return a * x + b
+    
+    # Используем curve_fit как в первом случае
+    popt, pcov = curve_fit(fit_linear, x_data, y_data)
+    a, b = popt
+    
+    # ТОЧНО как в первом случае: LAMBDA = 1/|a|
     uv_param = 1 / abs(a)
-    
+
     return uv_param
 
 def plot_uv(data: DataFrame,
