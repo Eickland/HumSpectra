@@ -167,39 +167,24 @@ def suva(data: DataFrame,
     return uv_param
 
 def lambda_UV(data: DataFrame,
-              short_wave: int = None,
-              long_wave: int = None,
-              debug: bool = True) -> float:
-    """
-    :param data: DataFrame, уф спектр (длины волн в индексе)
-    :param short_wave: int, начальная длина волны для аппроксимации (если None - берется минимальная)
-    :param long_wave: int, конечная длина волны для аппроксимации (если None - берется максимальная)
-    :param debug: bool, флаг отладки
-    :return: uv_param: float, значение дескриптора лямбда
-    Функция рассчитывает параметр лямбда через линейную аппроксимацию ln(интенсивности) от длины волны
-    """
+                       short_wave: int = 450,
+                       long_wave: int = 550,
+                       debug: bool = True) -> float:
+    
     if not debug:
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
     
-    # Определяем диапазон длин волн
-    wavelengths = data.index.to_numpy()
-    intensities = data[data.columns[0]].to_numpy()
+    series = pd.Series(data.index, index=data.index)
+    index_short = series.sub(short_wave).abs().idxmin()
+    index_long = series.sub(long_wave).abs().idxmin()
     
-    # Если заданы границы - фильтруем данные
-    if short_wave is not None or long_wave is not None:
-        if short_wave is None:
-            short_wave = wavelengths.min()
-        if long_wave is None:
-            long_wave = wavelengths.max()
-        
-        mask = (wavelengths >= short_wave) & (wavelengths <= long_wave)
-        wavelengths = wavelengths[mask]
-        intensities = intensities[mask]
+    # Исправление: берем интенсивность, а не длины волн
+    wavelengths = data.loc[index_short:index_long].index.to_numpy()
+    intensities = data.loc[index_short:index_long][data.columns[0]].to_numpy()
     
-    # Линейная аппроксимация: ln(intensity) = a * wavelength + b
-    ln_intensities = np.log(intensities)
-    p, *rest = np.polyfit(wavelengths, ln_intensities, 1, full=True)
+    # Правильная аппроксимация: ln(интенсивность) ~ длина волны
+    p, *rest = np.polyfit(wavelengths, np.log(intensities), 1, full=True)
     a, b = p
     uv_param = 1 / abs(a)
 
