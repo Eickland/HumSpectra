@@ -167,43 +167,40 @@ def suva(data: DataFrame,
     return uv_param
 
 def lambda_UV(data: DataFrame,
-              short_wave: int = 450,
-              long_wave: int = 550,
+              short_wave: int = None,
+              long_wave: int = None,
               debug: bool = True) -> float:
     """
-    :param data: DataFrame, уф спектр
-    :param short_wave: int, длина волны, с которого будет производится аппроксимация
-    :param long_wave: int, длина волны, до которой будет производится аппроксимация
+    :param data: DataFrame, уф спектр (длины волн в индексе)
+    :param short_wave: int, начальная длина волны для аппроксимации (если None - берется минимальная)
+    :param long_wave: int, конечная длина волны для аппроксимации (если None - берется максимальная)
+    :param debug: bool, флаг отладки
     :return: uv_param: float, значение дескриптора лямбда
-    Функция проверяет наличие рекалибровки и рассчитывает параметр лямбда при длине волны от 450 до 550 нм
+    Функция рассчитывает параметр лямбда через линейную аппроксимацию ln(интенсивности) от длины волны
     """
     if not debug:
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
     
-    # Получаем длины волн и значения оптической плотности
-    wavelengths = data.index.values
-    absorbance = data[data.columns[0]].values
+    # Определяем диапазон длин волн
+    wavelengths = data.index.to_numpy()
+    intensities = data[data.columns[0]].to_numpy()
     
-    # Находим индексы для диапазона [450, 550] нм
-    series = pd.Series(wavelengths, index=range(len(wavelengths)))
-    idx_short = series.sub(short_wave).abs().idxmin()
-    idx_long = series.sub(long_wave).abs().idxmin()
+    # Если заданы границы - фильтруем данные
+    if short_wave is not None or long_wave is not None:
+        if short_wave is None:
+            short_wave = wavelengths.min()
+        if long_wave is None:
+            long_wave = wavelengths.max()
+        
+        mask = (wavelengths >= short_wave) & (wavelengths <= long_wave)
+        wavelengths = wavelengths[mask]
+        intensities = intensities[mask]
     
-    # Извлекаем данные в нужном диапазоне
-    x_data = wavelengths[idx_short:idx_long+1]
-    y_data = absorbance[idx_short:idx_long+1]
-    
-    # ТОЧНО как в первом случае: линейная аппроксимация y = a*x + b
-    # где x - длины волн, y - оптические плотности
-    def fit_linear(x, a, b):
-        return a * x + b
-    
-    # Используем curve_fit как в первом случае
-    popt, pcov = curve_fit(fit_linear, x_data, y_data)
-    a, b = popt
-    
-    # ТОЧНО как в первом случае: LAMBDA = 1/|a|
+    # Линейная аппроксимация: ln(intensity) = a * wavelength + b
+    ln_intensities = np.log(intensities)
+    p, *rest = np.polyfit(wavelengths, ln_intensities, 1, full=True)
+    a, b = p
     uv_param = 1 / abs(a)
 
     return uv_param
