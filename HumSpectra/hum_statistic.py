@@ -954,7 +954,8 @@ def create_rf_html_report(console_output, results_df, feature_importance,
 def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
                                test_size=0.2, random_state=42, 
                                output_html_path='lda_analysis_report.html',
-                               save=False, vif_threshold=10.0):
+                               save=False, vif_threshold=10.0,
+                               index_level=1):
     """
     Анализ данных с помощью Linear Discriminant Analysis (LDA)
     с выводом результатов в HTML файл и проверкой на мультиколлинеарность
@@ -975,9 +976,9 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         # Определяем целевую переменную
         if target_column is None:
             # Используем второй уровень индекса как целевую переменную
-            target = df.index.get_level_values(1)
+            target = df.index.get_level_values(index_level)
             features_df = df.reset_index(drop=True)
-            target_name = "Второй уровень индекса"
+            target_name = f"{index_level} уровень индекса"
         else:
             target = df[target_column]
             features_df = df.drop(columns=[target_column])
