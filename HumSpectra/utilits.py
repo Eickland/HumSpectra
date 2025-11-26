@@ -94,7 +94,10 @@ def extract_class_from_name(file_name: str) -> str:
        """
     sample_class = "SampleClassError"
     str_name = file_name.replace(" ", "-")
-    if "ADOM" in str_name:
+    if 'SLB' in str_name:
+        sample_class = 'Baikal'
+    
+    elif "ADOM" in str_name:
         sample_class = "ADOM"
     else:
         str_class = str_name.split(sep="-")[0]
