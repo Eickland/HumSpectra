@@ -110,7 +110,7 @@ def extract_class_from_name(file_name: str) -> str:
         elif "K" == symbol_class:
             sample_class = "ADOM"
         elif "B" == symbol_class:
-            sample_class = "ADOM"
+            sample_class = "Baikal"
         else:
             raise ValueError("Имя образца не соответствует ни одному представленному классу")
     return sample_class
@@ -129,6 +129,10 @@ def extract_subclass_from_name(file_name: str) -> str:
 
     str_name = file_name.replace(" ", "-")
 
+    if 'Baikal' == sample_class:
+        
+        return 'Baikal'
+    
     if "ADOM" == sample_class:
         
         split_name = str_name.split(sep="-")
