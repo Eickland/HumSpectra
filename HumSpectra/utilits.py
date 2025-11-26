@@ -136,7 +136,7 @@ def extract_subclass_from_name(file_name: str) -> str:
         
         return 'Baikal'
     
-    if "ADOM" == sample_class:
+    elif "ADOM" == sample_class:
         
         split_name = str_name.split(sep="-")
 
