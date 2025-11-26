@@ -855,7 +855,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
     def plot_all_components_eem(self,figsize=(8, 8)):
             """Построение EEM для всех компонентов"""
             if self.n_components == 4:
-                fig, axes = plt.subplots(self.n_components/2, 2, figsize=figsize,dpi=300)
+                fig, axes = plt.subplots(int(self.n_components/2), 2, figsize=figsize,dpi=300)
             else:    
                 fig, axes = plt.subplots(self.n_components, 1, figsize=figsize)
             
