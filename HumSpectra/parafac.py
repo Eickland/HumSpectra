@@ -852,14 +852,19 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.xticks(rotation=45)
             plt.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
          
-    def plot_all_components_eem(self):
+    def plot_all_components_eem(self,figsize=(8, 8)):
             """Построение EEM для всех компонентов"""
-            fig, axes = plt.subplots(self.n_components, 1, figsize=(10, 16))
-            
+            if self.n_components == 40:
+                fig, axes = plt.subplots(int(self.n_components/2), 2, figsize=figsize,dpi=300)
+                i_list = [[0,0],[0,1],[1,0],[1,1]]
+            else:    
+                fig, axes = plt.subplots(self.n_components, 1, figsize=figsize)
+                i_list = False
             if self.n_components == 1:
                 axes = [axes]
             
             for i in range(self.n_components):
+
                 component_eem = self.get_component_eem_matrix(i)
                 component_eem = component_eem / np.max(component_eem)
                 
