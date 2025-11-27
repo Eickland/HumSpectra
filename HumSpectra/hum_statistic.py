@@ -445,7 +445,7 @@ def random_forest_analysis_with_subclasses(df, target_column=None, problem_type=
                                          test_size=0.2, random_state=42, 
                                          output_html_path='random_forest_analysis_report.html',
                                          n_estimators=100, max_depth=None,
-                                         save=False):
+                                         save=False,index_level=1):
     """
     Анализ данных с помощью Random Forest и анализ подклассов
     с выводом результатов в HTML файл
@@ -466,7 +466,7 @@ def random_forest_analysis_with_subclasses(df, target_column=None, problem_type=
         # Определяем целевую переменную
         if target_column is None:
             # Используем второй уровень индекса как целевую переменную
-            target = df.index.get_level_values(1)
+            target = df.index.get_level_values(index_level)
             features_df = df.reset_index(drop=True)
             target_name = "Второй уровень индекса"  # Исправлено с "Первый уровень индекса"
         else:
