@@ -99,6 +99,10 @@ def extract_class_from_name(file_name: str) -> str:
     
     elif "ADOM" in str_name:
         sample_class = "ADOM"
+        
+    elif "LST" in str_name:
+        sample_class = 'Lst'
+    
     else:
         str_class = str_name.split(sep="-")[0]
         symbol_class = str_class[0]
@@ -135,6 +139,9 @@ def extract_subclass_from_name(file_name: str) -> str:
     if 'Baikal' == sample_class:
         
         return 'Baikal'
+    
+    if 'Lst' == sample_class:
+        return 'Lst'
     
     elif "ADOM" == sample_class:
         
