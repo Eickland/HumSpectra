@@ -407,7 +407,7 @@ class OpticalDataAnalyzer:
             pass
         else:
             raise ValueError(f"Неизвестный метод нормализации: {normalization}")
-        
+        loadings_df["Class"] = [ut.extract_class_from_name(sample) for sample in self.sample_names]
         loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names]
         return loadings_df
     
@@ -796,7 +796,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.ylabel('Индекс испускания')
             plt.title(f'EEM матрица: Образец {sample_idx+1}')
         
-    def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True):
+    def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True,group_type = 'Class'):
         """
         Визуализация нагрузок компонентов с группировкой по классам
         
@@ -808,9 +808,9 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         
         loadings_df = self.get_component_loadings(normalization=normalization)
         
-        if group_by_subclass and 'Subclass' in loadings_df.columns:
+        if group_by_subclass and group_type in loadings_df.columns:
             # Группируем по подклассам
-            subclass_groups = loadings_df.groupby('Subclass')
+            subclass_groups = loadings_df.groupby(group_type)
             
             # Вычисляем средние значения для каждого подкласса
             component_columns = [col for col in loadings_df.columns if col.startswith('Component_')]
@@ -827,12 +827,12 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             ax1.tick_params(axis='x', rotation=45)
             
             # 2. Box plot для распределения по подклассам
-            melted_data = loadings_df.melt(id_vars=['Subclass'], 
+            melted_data = loadings_df.melt(id_vars=[group_type], 
                                         value_vars=component_columns,
                                         var_name='Component', 
                                         value_name='Loading')
             
-            sns.boxplot(data=melted_data, x='Subclass', y='Loading', hue='Component', ax=ax2)
+            sns.boxplot(data=melted_data, x=group_type, y='Loading', hue='Component', ax=ax2)
             ax2.set_ylabel('Доля компонента, %')
             ax2.set_title('Распределение вкладов компонентов по подклассам')
             ax2.tick_params(axis='x', rotation=45)
