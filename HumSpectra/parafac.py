@@ -796,7 +796,10 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             plt.ylabel('Индекс испускания')
             plt.title(f'EEM матрица: Образец {sample_idx+1}')
         
-    def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), group_by_subclass=True,group_type = 'Class'):
+    def plot_component_loadings(self, normalization='percentage', figsize=(12, 6), 
+                            group_by_subclass=True, group_type='Class',
+                            show_outlier_labels=False, outlier_labels_column=None, 
+                            outlier_labels_list=None, outlier_whis=1.5):
         """
         Визуализация нагрузок компонентов с группировкой по классам
         
@@ -804,6 +807,10 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             normalization: метод нормализации
             figsize: размер фигуры
             group_by_subclass: если True, группирует образцы по подклассам
+            show_outlier_labels: если True, показывает labels для выбросов
+            outlier_labels_column: имя столбца с labels для выбросов
+            outlier_labels_list: список labels для выбросов (альтернатива столбцу)
+            outlier_whis: параметр для определения выбросов в boxplot (по умолчанию 1.5)
         """
         
         loadings_df = self.get_component_loadings(normalization=normalization)
@@ -832,13 +839,52 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                                         var_name='Component', 
                                         value_name='Loading')
             
-            sns.boxplot(data=melted_data, x=group_type, y='Loading', hue='Component', ax=ax2)
+            # Создаем новый столбец для группировки: Component + Class
+            melted_data['Component_Class'] = melted_data['Component'] + '_' + melted_data[group_type].astype(str)
+            
+            # Определяем порядок отображения: сначала все классы с Component_1, потом Component_2 и т.д.
+            component_order = sorted(melted_data['Component'].unique())
+            class_order = sorted(melted_data[group_type].unique())
+            
+            # Создаем правильный порядок для boxplot
+            plot_order = []
+            for comp in component_order:
+                for cls in class_order:
+                    plot_order.append(f"{comp}_{cls}")
+            
+            # Создаем boxplot с правильным порядком
+            boxplot = sns.boxplot(data=melted_data, x='Component_Class', y='Loading', 
+                                hue='Component', ax=ax2, order=plot_order, whis=outlier_whis)
+            
             ax2.set_ylabel('Доля компонента, %')
             ax2.set_title('Распределение вкладов компонентов по подклассам')
             ax2.tick_params(axis='x', rotation=45)
             ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             
+            # Добавляем вертикальные пунктирные линии между компонентами
+            n_classes = len(class_order)
+            for i in range(1, len(component_order)):
+                # Позиция линии между компонентами
+                line_pos = i * n_classes - 0.5
+                ax2.axvline(x=line_pos, color='gray', linestyle='--', alpha=0.7)
             
+            # Улучшаем подписи на оси X
+            x_labels = [f"{cls}" for comp in component_order for cls in class_order]
+            ax2.set_xticklabels(x_labels)
+            
+            # Добавляем заголовки для групп компонентов
+            for i, comp in enumerate(component_order):
+                # Позиция середины группы
+                mid_pos = i * n_classes + (n_classes - 1) / 2
+                ax2.text(mid_pos, ax2.get_ylim()[1] * 1.02, comp, 
+                        ha='center', va='bottom', fontweight='bold')
+            
+            # Функция для отображения выбросов с labels
+            if show_outlier_labels:
+                self._add_outlier_labels(ax2, melted_data, plot_order, 
+                                    outlier_labels_column, outlier_labels_list,
+                                    loadings_df, group_type)
+                
         else:
             # Исходный вариант без группировки
             plt.figure(figsize=figsize)
@@ -851,6 +897,64 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             
             plt.xticks(rotation=45)
             plt.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    def _add_outlier_labels(self, ax, melted_data, plot_order, labels_column, labels_list, original_df, group_type):
+        """
+        Добавляет labels для выбросов на boxplot
+        """
+        # Получаем информацию о выбросах из boxplot
+        boxes = ax.artists
+        outliers = []
+        
+        # Собираем информацию о выбросах для каждой группы
+        for i, group_name in enumerate(plot_order):
+            # Фильтруем данные для текущей группы
+            group_data = melted_data[melted_data['Component_Class'] == group_name]
+            
+            if len(group_data) > 0:
+                # Вычисляем статистику для boxplot вручную
+                q1 = group_data['Loading'].quantile(0.25)
+                q3 = group_data['Loading'].quantile(0.75)
+                iqr = q3 - q1
+                lower_whisker = q1 - 1.5 * iqr
+                upper_whisker = q3 + 1.5 * iqr
+                
+                # Находим выбросы
+                group_outliers = group_data[
+                    (group_data['Loading'] < lower_whisker) | 
+                    (group_data['Loading'] > upper_whisker)
+                ]
+                
+                # Добавляем информацию о позиции для аннотации
+                for _, outlier in group_outliers.iterrows():
+                    outliers.append({
+                        'x': i,  # позиция на оси X
+                        'y': outlier['Loading'],
+                        'group_type': outlier[group_type],
+                        'component': outlier['Component'],
+                        'index': outlier.name  # индекс в оригинальном DataFrame
+                    })
+        
+        # Добавляем labels для выбросов
+        for outlier in outliers:
+            # Определяем текст для label
+            if labels_column and labels_column in original_df.columns:
+                label_text = original_df.loc[outlier['index'], labels_column]
+            elif labels_list and outlier['index'] < len(labels_list):
+                label_text = labels_list[outlier['index']]
+            else:
+                # Если не указаны labels, используем индекс
+                label_text = f"Sample_{outlier['index']}"
+            
+            # Добавляем аннотацию
+            ax.annotate(label_text, 
+                    xy=(outlier['x'], outlier['y']),
+                    xytext=(5, 5),
+                    textcoords='offset points',
+                    fontsize=8,
+                    alpha=0.7,
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.5),
+                    arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0', alpha=0.7))
          
     def plot_all_components_eem(self,figsize=(8, 8)):
             """Построение EEM для всех компонентов"""
