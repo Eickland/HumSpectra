@@ -824,7 +824,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             grouped_data = subclass_groups[component_columns].mean()
             
             # Создаем фигуру с двумя subplots
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] + 4))
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] + 4),dpi=300)
             
             # 1. Столбчатая диаграмма для группированных данных
             grouped_data.plot(kind='bar', stacked=True, ax=ax1)
