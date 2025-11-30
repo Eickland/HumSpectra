@@ -857,7 +857,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                                 hue='Component', ax=ax2, order=plot_order, whis=outlier_whis)
             
             ax2.set_ylabel('Доля компонента, %')
-            ax2.set_title('Распределение вкладов компонентов по подклассам')
+            #ax2.set_title('Распределение вкладов компонентов по подклассам')
             ax2.tick_params(axis='x', rotation=45)
             ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             
