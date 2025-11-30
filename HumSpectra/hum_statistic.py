@@ -1209,6 +1209,10 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             )
             clf_report_df = pd.DataFrame(clf_report).transpose()
             print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
+            
+            weighted_avg_precision = clf_report_df.loc['weighted avg', 'precision']
+            macro_avg_precision = clf_report_df.loc['macro avg', 'precision']
+            
         except ValueError as e:
             print(f"   Ошибка при создании classification report: {e}")
             print("   Используем числовые метки классов...")
@@ -1219,7 +1223,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             )
             clf_report_df = pd.DataFrame(clf_report).transpose()
             print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-        
+
         # Шаг 6: Анализ важности признаков через коэффициенты LDA
         print("\n6. Анализ важности признаков...")
         
@@ -1291,7 +1295,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
         
         return (results_df, lda_model, scaler, feature_importance, 
-                X_train, X_test, y_train, y_test, le, accuracy, X_train_lda, X_test_lda, vif_results)
+                X_train, X_test, y_train, y_test, le, accuracy,weighted_avg_precision,macro_avg_precision, X_train_lda, X_test_lda, vif_results)
         
     except Exception as e:
         # Восстанавливаем stdout в случае ошибки
