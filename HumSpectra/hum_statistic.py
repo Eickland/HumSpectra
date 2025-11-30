@@ -1253,6 +1253,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         results_df['actual'] = target_encoded
         results_df['predicted'] = lda_model.predict(features_scaled)
         results_df['is_correct'] = (results_df['actual'] == results_df['predicted'])
+        results_df['Class'] = df.index.get_level_values(1) #TODO пиздец!!!
         
         # Добавляем LDA компоненты
         lda_components = lda_model.transform(features_scaled)
