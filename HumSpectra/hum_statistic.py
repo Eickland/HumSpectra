@@ -1149,6 +1149,45 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         print(f"   Размерность после LDA (тест): {X_test_lda.shape}")
         print(f"   Объясненная дисперсия: {lda_model.explained_variance_ratio_.sum():.4f}")
         
+        # Шаг 4.1: Вывод уравнений LDA
+        print("\n4.1. Уравнения классификации LDA:")
+        print("   " + "-" * 50)
+        
+        def print_lda_equations(lda_model, feature_names, class_names):
+            """Выводит уравнения дискриминантных функций LDA"""
+            n_classes = len(class_names)
+            n_features = len(feature_names)
+            
+            # Для первых K-1 классов используем coef_ и intercept_
+            for i in range(n_classes - 1):
+                equation = f"   δ_{class_names[i]}(x) = "
+                parts = []
+                for j in range(n_features):
+                    coef_val = lda_model.coef_[i, j]
+                    parts.append(f"{coef_val:+.4f}*{feature_names[j]}")
+                
+                equation += " ".join(parts)
+                equation += f" {lda_model.intercept_[i]:+.4f}"
+                print(equation)
+            
+            # Для последнего класса коэффициенты - это отрицательная сумма всех остальных
+            last_coef = -np.sum(lda_model.coef_, axis=0)
+            last_intercept = -np.sum(lda_model.intercept_[:-1])
+            
+            equation = f"   δ_{class_names[-1]}(x) = "
+            parts = []
+            for j in range(n_features):
+                parts.append(f"{last_coef[j]:+.4f}*{feature_names[j]}")
+            
+            equation += " ".join(parts)
+            equation += f" {last_intercept:+.4f}"
+            print(equation)
+            
+            print("\n   📝 Примечание: Объект относится к классу с НАИБОЛЬШИМ значением δₖ(x)")
+        
+        # Выводим уравнения
+        print_lda_equations(lda_model, numeric_columns, class_names)
+        
         # Шаг 5: Предсказания и оценка модели
         print("5. Оценка модели...")
         
@@ -1247,7 +1286,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         if save:
             create_lda_html_report(console_output, results_df, feature_importance, 
                                  lda_model, class_names, le, X_test, y_test, y_pred, 
-                                 X_train_lda, y_train, output_html_path, vif_results)
+                                 X_train_lda, y_train, output_html_path, vif_results, numeric_columns)
             
             print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
         
@@ -1262,7 +1301,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
 
 def create_lda_html_report(console_output, results_df, feature_importance, 
                           lda_model, class_names, label_encoder,
-                          X_test, y_test, y_pred, X_lda, y_train, output_html_path, vif_results=None):
+                          X_test, y_test, y_pred, X_lda, y_train, output_html_path, vif_results=None, feature_names=None):
     """Создание HTML отчета с результатами анализа LDA"""
     
     # Создаем визуализации
@@ -1329,6 +1368,45 @@ def create_lda_html_report(console_output, results_df, feature_importance,
     buffer3.seek(0)
     lda_projection_plot = base64.b64encode(buffer3.getvalue()).decode()
     plt.close(fig3)
+    
+    # Создаем секцию уравнений LDA
+    equations_section = ""
+    if feature_names is not None:
+        equations_html = []
+        n_classes = len(class_names)
+        n_features = len(feature_names)
+        
+        # Для первых K-1 классов
+        for i in range(n_classes - 1):
+            equation_parts = []
+            for j in range(n_features):
+                coef_val = lda_model.coef_[i, j]
+                equation_parts.append(f"{coef_val:+.4f}×{feature_names[j]}")
+            equation = " + ".join(equation_parts)
+            equation += f" {lda_model.intercept_[i]:+.4f}"
+            equations_html.append(f"<p><strong>δ<sub>{class_names[i]}</sub>(x)</strong> = {equation}</p>")
+        
+        # Для последнего класса
+        last_coef = -np.sum(lda_model.coef_, axis=0)
+        last_intercept = -np.sum(lda_model.intercept_[:-1])
+        
+        equation_parts = []
+        for j in range(n_features):
+            equation_parts.append(f"{last_coef[j]:+.4f}×{feature_names[j]}")
+        equation = " + ".join(equation_parts)
+        equation += f" {last_intercept:+.4f}"
+        equations_html.append(f"<p><strong>δ<sub>{class_names[-1]}</sub>(x)</strong> = {equation}</p>")
+        
+        equations_section = f"""
+        <div class="section">
+            <h2>🧮 Уравнения классификации LDA</h2>
+            <p><em>Дискриминантные функции для каждого класса</em></p>
+            <div class="coefficient-info">
+                {"".join(equations_html)}
+                <p><strong>📝 Правило классификации:</strong> Объект относится к классу с НАИБОЛЬШИМ значением δₖ(x)</p>
+            </div>
+        </div>
+        """
     
     # Создаем секцию VIF если есть результаты
     vif_section = ""
@@ -1486,6 +1564,13 @@ def create_lda_html_report(console_output, results_df, feature_importance,
                 margin: 15px 0;
                 border-left: 4px solid #ffc107;
             }}
+            .equations {{
+                font-family: 'Courier New', monospace;
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                margin: 10px 0;
+            }}
         </style>
     </head>
     <body>
@@ -1521,6 +1606,8 @@ def create_lda_html_report(console_output, results_df, feature_importance,
                 <p><strong>Объясненная дисперсия:</strong> {lda_model.explained_variance_ratio_.sum():.4f}</p>
                 <p><strong>Количество классов:</strong> {len(class_names)}</p>
             </div>
+            
+            {equations_section}
             
             <div class="coefficient-info">
                 <h3>ℹ️ Интерпретация коэффициентов LDA</h3>
