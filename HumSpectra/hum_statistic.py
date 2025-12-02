@@ -684,9 +684,6 @@ def random_forest_classification(
         # Восстанавливаем stdout
         sys.stdout = old_stdout
         
-        # Выводим результаты в консоль
-        print(console_output)
-        
         # Создание HTML отчета (опционально)
         if output_html_path:
             try:
