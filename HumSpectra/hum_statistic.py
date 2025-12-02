@@ -443,7 +443,7 @@ def get_subclass_cluster_mapping(result_df):
     
     return subclass_cluster_map
 
-def random_forest_classification_analysis(
+def random_forest_classification(
     data: pd.DataFrame,
     target_column: Optional[str] = None,
     test_size: float = 0.2,
@@ -653,10 +653,6 @@ def random_forest_classification_analysis(
             print(f"      {i:2d}. {row['Признак']:30s}: {row['Важность']:.4f}")
             
         
-        # 7. АНАЛИЗ ПОДКЛАССОВ (если есть многоуровневый индекс)
-        print("\n7. АНАЛИЗ ПОДКЛАССОВ")
-        print("-" * 40)
-        
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
         
@@ -672,36 +668,7 @@ def random_forest_classification_analysis(
         overall_accuracy = results_df['Верно_предсказано'].mean()
         print(f"   Общая точность на всем датасете: {overall_accuracy:.4f}")
         
-        # Анализ по подклассам (если есть второй уровень индекса)
-        if data.index.nlevels > 1:
-            
-            subclass_accuracy = {}
-            subclasses = data.index.get_level_values(1).unique()
-            
-            for subclass in subclasses:
-                subclass_mask = data.index.get_level_values(1) == subclass
-                
-                if subclass_mask.sum() > 0:
-                    
-                    subclass_correct = results_df.loc[subclass_mask, 'Верно_предсказано'].mean()# type: ignore #
-                    subclass_accuracy[subclass] = subclass_correct
-            
-            if subclass_accuracy:
-                
-                subclass_acc_df = pd.DataFrame.from_dict(
-                    subclass_accuracy, 
-                    orient='index', 
-                    columns=['Точность']
-                ).sort_values('Точность', ascending=False)
-                
-                print(f"\n   Точность по подклассам:")
-                print("   " + "-" * 40)
-                
-                top_subclasses = min(10, len(subclass_acc_df))
-                for i, (subclass, row) in enumerate(subclass_acc_df.head(top_subclasses).iterrows(), 1):
-                    print(f"      {i:2d}. {str(subclass):20s}: {row['Точность']:.4f}")
-        
-        # 8. СВОДКА
+        # 7. СВОДКА
         print("\n" + "=" * 70)
         print("СВОДКА РЕЗУЛЬТАТОВ")
         print("=" * 70)
@@ -1295,8 +1262,6 @@ def lda_classifaction(data:pd.DataFrame,
         for i, row in feature_importance.head(10).iterrows():
             print(f"      {row['feature']}: {row[importance_column]:.4f}")
         
-        # Шаг 7: Анализ подклассов
-        print("\n7. Анализ распределения подклассов...")
         
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
