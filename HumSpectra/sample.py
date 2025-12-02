@@ -14,8 +14,8 @@ class SampleData:
     sample_id: str
     
     # Основные спектральные данные
-    fluorescence_eem: Optional[np.ndarray] = None  # EEM спектр
-    uv_vis_absorption: Optional[np.ndarray] = None  # УФ-видимый спектр
+    fluorescence_eem: Optional[pd.DataFrame] = None
+    uv_vis_absorption: Optional[pd.DataFrame] = None
     
     #Дополнительные данные
     org_carbon: Optional[float] = None
@@ -45,9 +45,9 @@ class SampleData:
         """Вычисляет хеш основных данных для отслеживания изменений"""
         data_string = ""
         if self.fluorescence_eem is not None:
-            data_string += self.fluorescence_eem.tobytes().hex()
+            data_string += pickle.dumps(self.fluorescence_eem).hex()
         if self.uv_vis_absorption is not None:
-            data_string += self.uv_vis_absorption.tobytes().hex()
+            data_string += pickle.dumps(self.uv_vis_absorption).hex()
         
         return hashlib.md5(data_string.encode()).hexdigest()
     
@@ -87,8 +87,8 @@ class SampleCollection:
     def create_sample_from_data(
         self,
         sample_id: str,
-        fluorescence_eem: np.ndarray|None = None,
-        uv_vis_absorption: np.ndarray|None = None,
+        fluorescence_eem: pd.DataFrame|None = None,
+        uv_vis_absorption: pd.DataFrame|None = None,
         measurement_params: Dict|None = None,
         **kwargs
     ) -> SampleData:
@@ -200,8 +200,8 @@ if __name__ == "__main__":
     collection = SampleCollection(cache_dir=Path("./data_cache"))
     
     # Загрузка данных (пример)
-    sample_data = np.random.rand(100, 100)  # EEM спектр
-    uv_data = np.random.rand(200)  # УФ-видимый спектр
+    sample_data = None
+    uv_data = None # УФ-видимый спектр
     
     # Создание образца
     sample = collection.create_sample_from_data(
@@ -218,14 +218,6 @@ if __name__ == "__main__":
         comments="Первый тестовый образец"
     )
     
-    # Расчет дескрипторов (пример)
-    descriptors = {
-        "total_fluorescence": np.sum(sample_data),
-        "max_intensity": np.max(sample_data),
-        "peak_wavelength": np.argmax(uv_data),
-        "fwhm": 50.2  # ширина на полувысоте
-    }
-    sample.update_descriptors(descriptors)
     
     # Сохранение образца
     collection.save_sample("sample_001")
