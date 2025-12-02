@@ -738,9 +738,9 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     # График важности признаков
     fig1, ax1 = plt.subplots(figsize=(10, 6))
     top_features = feature_importance.head(15)
-    ax1.barh(top_features['feature'], top_features['importance'])
+    ax1.barh(top_features['Признак'], top_features['Важность'])
     ax1.set_xlabel('Важность признака')
-    ax1.set_title('Топ-15 самых важных признаков')
+    ax1.set_title('Топ самых важных признаков')
     ax1.grid(axis='x', alpha=0.3)
     plt.tight_layout()
     
