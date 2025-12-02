@@ -454,7 +454,7 @@ def random_forest_classification(
     index_level: Optional[int] = None,
     **kwargs
 ) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
-           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float]:
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float]:
     """
     Анализ данных с помощью Random Forest для задач классификации.
     
@@ -559,6 +559,37 @@ def random_forest_classification(
             print(f"   Заполняем {missing_values} пропущенных значений средними")
             features_numeric = features_numeric.fillna(features_numeric.mean())
         
+        
+        # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
+        print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
+        
+        # Проверяем, достаточно ли признаков для VIF анализа
+        if len(features_numeric.columns) > 1:
+            features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
+            
+            # Выводим результаты VIF анализа
+            print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
+            print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
+            print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
+            
+            if len(vif_results) > 0:
+                print(f"\n   Топ признаков по VIF (после фильтрации):")
+                for i, row in vif_results.head(10).iterrows():
+                    status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
+                    print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
+            
+            # Используем отфильтрованные признаки
+            features_numeric = features_after_vif
+            
+            # Обновляем список числовых колонок
+            numeric_columns = features_numeric.columns
+            
+            if len(numeric_columns) == 0:
+                raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
+        else:
+            print("   Недостаточно признаков для VIF анализа (требуется > 1)")
+            vif_results = pd.DataFrame()        
+        
         # Масштабирование признаков
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(features_numeric)
@@ -626,17 +657,34 @@ def random_forest_classification(
         print("\n   Отчет по классификации:")
         print("   " + "-" * 35)
         
-        report = classification_report(
-            y_test, y_pred,
-            target_names=class_names,
-            output_dict=False,
-            zero_division=0
-        )
-        
-        # Выводим отчет построчно для лучшего форматирования
-        if isinstance(report, str):
-            for line in report.split('\n'):
-                print(f"   {line}")
+        try:
+            clf_report = classification_report(
+                y_test, y_pred, 
+                target_names=class_names, 
+                output_dict=True,
+                zero_division=0
+            )
+            clf_report_df = pd.DataFrame(clf_report).transpose()
+            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
+            
+            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
+            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
+            
+        except ValueError as e:
+            
+            print(f"   Ошибка при создании classification report: {e}")
+            print("   Используем числовые метки классов...")
+            
+            clf_report = classification_report(
+                y_test, y_pred, 
+                output_dict=True,
+                zero_division=0
+            )
+            clf_report_df = pd.DataFrame(clf_report).transpose()
+            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
+            
+            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
+            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
         
         # 6. ВАЖНОСТЬ ПРИЗНАКОВ
         print("\n6. АНАЛИЗ ВАЖНОСТИ ПРИЗНАКОВ")
@@ -697,7 +745,8 @@ def random_forest_classification(
                     X_test=X_test,
                     y_test=y_test,
                     y_pred=y_pred,
-                    output_html_path=output_html_path
+                    output_html_path=output_html_path,
+                    vif_results = vif_results
                 )
                 print(f"\n✅ HTML отчет сохранен: {output_html_path}")
             except Exception as e:
@@ -710,7 +759,9 @@ def random_forest_classification(
             feature_importance,
             X_train, X_test, y_train, y_test,
             label_encoder,
-            float(accuracy)
+            float(accuracy),
+            weighted_avg_accuracy,
+            macro_avg_accuracy
         )
         
     except Exception as e:
@@ -721,7 +772,7 @@ def random_forest_classification(
 
 def create_rf_classification_html_report(console_output, results_df, feature_importance, 
                          rf_model, class_names, label_encoder,
-                         X_test, y_test, y_pred, output_html_path,problem_type = 'classification'):
+                         X_test, y_test, y_pred, output_html_path,vif_results,problem_type = 'classification'):
     """Создание HTML отчета с результатами анализа Random Forest"""
     
     # Создаем визуализации
@@ -770,7 +821,25 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
         buffer2.seek(0)
         confusion_matrix_plot = base64.b64encode(buffer2.getvalue()).decode()
         plt.close(fig2)
-    
+        
+    # Создаем секцию VIF если есть результаты
+    vif_section = ""
+    if vif_results is not None and len(vif_results) > 0:
+        vif_table = vif_results.to_html(classes='dataframe', border=0, index=False)
+        vif_section = f"""
+        <div class="section">
+            <h2>📊 Анализ мультиколлинеарности (VIF)</h2>
+            <p><em>Variance Inflation Factor для признаков после фильтрации</em></p>
+            {vif_table}
+            <div class="coefficient-info">
+                <h3>ℹ️ Интерпретация VIF</h3>
+                <p><strong>VIF < 5</strong>: Нет мультиколлинеарности</p>
+                <p><strong>5 ≤ VIF < 10</strong>: Умеренная мультиколлинеарность</p>
+                <p><strong>VIF ≥ 10</strong>: Высокая мультиколлинеарность (требует внимания)</p>
+            </div>
+        </div>
+        """
+            
     # Создаем стилизованный HTML
     html_content = f"""
     <!DOCTYPE html>
@@ -1093,7 +1162,8 @@ def lda_classifaction(data:pd.DataFrame,
             print("   Недостаточно признаков для VIF анализа (требуется > 1)")
             vif_results = pd.DataFrame()
         
-        # Масштабирование признаков (важно для LDA)
+        # Масштабирование признаков
+        
         scaler = StandardScaler()
         features_scaled = scaler.fit_transform(features_numeric)
         
@@ -1105,6 +1175,7 @@ def lda_classifaction(data:pd.DataFrame,
         
         # Проверяем распределение классов перед разделением
         unique_classes, class_counts = np.unique(target_encoded, return_counts=True)
+        
         print(f"   Распределение классов перед разделением:")
         for cls, count in zip(unique_classes, class_counts):
             print(f"      Класс {cls} ({class_names[cls]}): {count} samples")
