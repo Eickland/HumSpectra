@@ -258,7 +258,7 @@ def read_csv_uv(path: str,
             index_col: int = 0,
             ignore_name: bool = False,
             baseline: bool = False,
-            spectra_type: str|None = None) -> DataFrame:
+            spectra_type: str|None = None) -> DataFrame|None:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -289,7 +289,7 @@ def read_csv_uv(path: str,
     if spectra_type:
         if check_uv_spectra_type_by_path(path) != spectra_type:
             
-            raise KeyError(f"Ошибка приписывания класса для образца {path}")
+            return None
     
     else:
         spectra_type = check_uv_spectra_type_by_path(path)
