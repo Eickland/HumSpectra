@@ -32,7 +32,7 @@ class EEMDataLoader:
         self.sample_names = []  # Очищаем имена образцов
         
         for data_folder in data_folders:
-            data_folder = Path(data_folder)
+            data_folder = Path(str(data_folder))
             
             # Находим все CSV файлы в папке
             csv_files = list(data_folder.glob("*.csv"))
@@ -66,7 +66,7 @@ class EEMDataLoader:
                     
                     if (not np.array_equal(self.excitation_wavelengths, current_ex_wavelengths) or
                         not np.array_equal(self.emission_wavelengths, current_em_wavelengths)):
-                        print(f"Предупреждение: Размерности в файле {file_path.name} не совпадают с предыдущими. Файл пропущен.")
+                        print(f"Предупреждение: Размерности в файле {file_path} не совпадают с предыдущими. Файл пропущен.")
                         continue
                     
                     # Преобразуем в numpy array
@@ -77,7 +77,7 @@ class EEMDataLoader:
                     self.sample_names.append(sample_name)
                     
                 except Exception as e:
-                    print(f"Ошибка при загрузке файла {file_path}: {e}")
+                    print(f"Ошибка при загрузке файла {window_path}: {e}")
                     continue
         
         if not eem_matrices:
@@ -86,11 +86,21 @@ class EEMDataLoader:
         # Создаем 3D тензор: образцы × испускание × возбуждение
         self.tensor = np.stack(eem_matrices, axis=0)
         
+        if self.excitation_wavelengths is not None:
+            exc_length = len(self.excitation_wavelengths)
+        else:
+            exc_length = 0
+
+        if self.emission_wavelengths is not None:
+            ems_length = len(self.emission_wavelengths)
+        else:
+            ems_length = 0
+        
         print(f"\nРезультат загрузки:")
         print(f"Создан тензор размерности: {self.tensor.shape}")
         print(f"Образцы: {len(self.sample_names)}")
-        print(f"Длины волн испускания: {len(self.emission_wavelengths)}")
-        print(f"Длины волн возбуждения: {len(self.excitation_wavelengths)}")
+        print(f"Длины волн испускания: {ems_length}")
+        print(f"Длины волн возбуждения: {exc_length}")
         print(f"Загружено из папок: {len(data_folders)}")
         
         return (tl.tensor(self.tensor), self.emission_wavelengths, 
@@ -407,6 +417,11 @@ class OpticalDataAnalyzer:
             pass
         else:
             raise ValueError(f"Неизвестный метод нормализации: {normalization}")
+        
+        if self.sample_names is None:
+            
+            raise ValueError('Нулевое к-во имен спектров')
+        
         loadings_df["Class"] = [ut.extract_class_from_name(sample) for sample in self.sample_names]
         loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names]
         return loadings_df
@@ -568,8 +583,13 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         fig, ax = plt.subplots(figsize=figsize)
         
         # Контурный график
-        X, Y = np.meshgrid(self.excitation_wavelengths, 
-                          self.emission_wavelengths)
+        if self.excitation_wavelengths is not None and self.emission_wavelengths is not None:
+            X, Y = np.meshgrid(self.excitation_wavelengths, self.emission_wavelengths)
+            
+        else:
+            X, Y = None, None
+
+            raise ValueError("excitation_wavelengths или emission_wavelengths не инициализированы")    
         
         # Уровни для контурных линий
         levels = np.linspace(np.min(component_eem), np.max(component_eem), 20)
@@ -586,9 +606,12 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         ax.set_ylabel('Длина волны испускания, нм')
         
         sample_info = ""
+        
         if sample_idx is not None:
+            
             if self.sample_names:
                 sample_info = f" (масштабировано для {self.sample_names[sample_idx]})"
+                
             else:
                 sample_info = f" (масштабировано для образца {sample_idx})"
         
@@ -940,6 +963,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             # Определяем текст для label
             if labels_column and labels_column in original_df.columns:
                 label_text = original_df.loc[outlier['index'], labels_column]
+                
             elif labels_list and outlier['index'] < len(labels_list):
                 label_text = labels_list[outlier['index']]
             else:
@@ -972,8 +996,13 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 component_eem = self.get_component_eem_matrix(i)
                 component_eem = component_eem / np.max(component_eem)
                 
-                X, Y = np.meshgrid(self.excitation_wavelengths, 
-                                self.emission_wavelengths)
+                if self.excitation_wavelengths is not None and self.emission_wavelengths is not None:
+                    X, Y = np.meshgrid(self.excitation_wavelengths, self.emission_wavelengths)
+                    
+                else:
+                    X, Y = None, None
+
+                    raise ValueError("excitation_wavelengths или emission_wavelengths не инициализированы")  
                 
                 im = axes[i].contourf(X, Y, component_eem, levels=50, cmap='viridis')
                 axes[i].contour(X, Y, component_eem, levels=10, colors='black', linewidths=0.3)

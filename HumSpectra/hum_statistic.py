@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import StringIO, BytesIO
+from typing import Optional, Union, List, Tuple
 import base64
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -441,260 +442,330 @@ def get_subclass_cluster_mapping(result_df):
     
     return subclass_cluster_map
 
-def random_forest_analysis_with_subclasses(df, target_column=None, problem_type='auto', 
-                                         test_size=0.2, random_state=42, 
-                                         output_html_path='random_forest_analysis_report.html',
-                                         n_estimators=100, max_depth=None,
-                                         save=False,index_level=1):
+def random_forest_classification_analysis(
+    df: pd.DataFrame,
+    target_column: Optional[str] = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    output_html_path: str = 'rf_classification_report.html',
+    n_estimators: int = 100,
+    max_depth: Optional[int] = None,
+    save_report: bool = False,
+    index_level: int = 1
+) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float]:
     """
-    Анализ данных с помощью Random Forest и анализ подклассов
-    с выводом результатов в HTML файл
+    Анализ данных с помощью Random Forest для задач классификации.
+    
+    Parameters:
+    -----------
+    df : pd.DataFrame
+        Входной DataFrame с данными
+    target_column : str, optional
+        Название целевой колонки. Если None, используется index_level индекс
+    test_size : float
+        Доля тестовой выборки
+    random_state : int
+        Seed для воспроизводимости
+    output_html_path : str
+        Путь для сохранения HTML отчета
+    n_estimators : int
+        Количество деревьев в Random Forest
+    max_depth : int, optional
+        Максимальная глубина деревьев
+    save_report : bool
+        Сохранять ли HTML отчет
+    index_level : int
+        Уровень индекса для использования в качестве цели (если target_column=None)
+    
+    Returns:
+    --------
+    Tuple containing:
+    - results_df: DataFrame с результатами предсказаний
+    - rf_model: обученная модель Random Forest
+    - scaler: обученный скейлер
+    - feature_importance: важность признаков
+    - X_train, X_test, y_train, y_test: разделенные данные
+    - label_encoder: обученный LabelEncoder
+    - accuracy: точность модели
     """
     
-    # Перехватываем вывод в консоль
+    # Сохраняем оригинальный stdout
     old_stdout = sys.stdout
     sys.stdout = captured_output = StringIO()
     
     try:
         print("=" * 70)
-        print("АНАЛИЗ С ПОМОЩЬЮ RANDOM FOREST")
+        print("RANDOM FOREST АНАЛИЗ КЛАССИФИКАЦИИ")
         print("=" * 70)
         
-        # Шаг 1: Подготовка данных
-        print("1. Подготовка данных...")
+        # 1. ПОДГОТОВКА ДАННЫХ
+        print("\n1. ПОДГОТОВКА ДАННЫХ")
+        print("-" * 40)
         
         # Определяем целевую переменную
         if target_column is None:
-            # Используем второй уровень индекса как целевую переменную
+            
             target = df.index.get_level_values(index_level)
+            
             features_df = df.reset_index(drop=True)
-            target_name = "Второй уровень индекса"  # Исправлено с "Первый уровень индекса"
+            
+            target_name = f"Индекс уровня {index_level}"
+            
+            print(f"   Целевая переменная: {target_name}")
+            
         else:
+            if target_column not in df.columns:
+                
+                raise ValueError(f"Колонка '{target_column}' не найдена в DataFrame")
+            
             target = df[target_column]
+            
             features_df = df.drop(columns=[target_column])
+            
             target_name = target_column
+            print(f"   Целевая переменная: {target_name}")
         
-        # Определяем тип задачи
-        if problem_type == 'auto':
-            if target.dtype == 'object' or target.nunique() < 20:
-                problem_type = 'classification'
-            else:
-                problem_type = 'regression'
+        # Проверяем, что задача действительно классификация
+        unique_values = target.nunique()
+        print(f"   Уникальных классов: {unique_values}")
         
-        print(f"   Тип задачи: {problem_type.upper()}")
-        print(f"   Целевая переменная: {target_name}")
-        print(f"   Уникальных значений в целевой переменной: {target.nunique()}")
+        if unique_values < 2:
+            raise ValueError("Для классификации необходимо минимум 2 класса")
         
-        # Кодируем целевую переменную для классификации
-        if problem_type == 'classification':
-            le = LabelEncoder()
-            target_encoded = le.fit_transform(target)
-            class_names = le.classes_
-            print(f"   Классы: {list(class_names)}")
-            print(f"   Количество классов: {len(class_names)}")
-        else:
-            target_encoded = target
-            le = None
-            class_names = None
+        # Кодируем целевую переменную
+        label_encoder = LabelEncoder()
+        y_encoded = label_encoder.fit_transform(target)
+        class_names = label_encoder.classes_
         
-        # Шаг 2: Предобработка признаков
-        print("2. Предобработка признаков...")
+        print(f"   Классы: {list(class_names)}")
+        print(f"   Размер датасета: {len(df)} наблюдений")
         
-        # Удаляем нечисловые колонки если есть
+        # 2. ПРЕДОБРАБОТКА ПРИЗНАКОВ
+        print("\n2. ПРЕДОБРАБОТКА ПРИЗНАКОВ")
+        print("-" * 40)
+        
+        # Выбираем только числовые признаки
         numeric_columns = features_df.select_dtypes(include=[np.number]).columns
-        features_numeric = features_df[numeric_columns].copy()
         
-        # Проверяем наличие пропущенных значений
-        if features_numeric.isnull().sum().sum() > 0:
-            missing_count = features_numeric.isnull().sum().sum()
-            print(f"   Обнаружено пропущенных значений: {missing_count}")
+        if len(numeric_columns) == 0:
+            raise ValueError("Не найдено числовых признаков для обучения")
+        
+        features_numeric = features_df[numeric_columns].copy()
+        print(f"   Числовых признаков: {len(numeric_columns)}")
+        
+        # Обработка пропущенных значений
+        missing_values = features_numeric.isnull().sum().sum()
+        
+        if missing_values > 0:
+            
+            print(f"   Заполняем {missing_values} пропущенных значений средними")
             features_numeric = features_numeric.fillna(features_numeric.mean())
         
         # Масштабирование признаков
         scaler = StandardScaler()
-        features_scaled = scaler.fit_transform(features_numeric)
+        X_scaled = scaler.fit_transform(features_numeric)
+        print(f"   Размерность данных: {X_scaled.shape}")
         
-        print(f"   Размерность данных: {features_scaled.shape}")
-        print(f"   Количество признаков: {features_scaled.shape[1]}")
+        # 3. РАЗДЕЛЕНИЕ НА ВЫБОРКИ
+        print("\n3. РАЗДЕЛЕНИЕ НА ОБУЧАЮЩУЮ И ТЕСТОВУЮ ВЫБОРКИ")
+        print("-" * 40)
         
-        # Шаг 3: Разделение на train/test с контролем стратификации
-        print("3. Разделение на обучающую и тестовую выборки...")
+        # Проверяем распределение классов для стратификации
+        unique_classes, class_counts = np.unique(y_encoded, return_counts=True)
         
-        # Для стратификации убедимся, что все классы присутствуют в обеих выборках
-        if problem_type == 'classification':
-            # Проверяем распределение классов перед разделением
-            unique_classes, class_counts = np.unique(target_encoded, return_counts=True)
-            print(f"   Распределение классов перед разделением:")
-            for cls, count in zip(unique_classes, class_counts):
-                print(f"      Класс {cls} ({class_names[cls]}): {count} samples")
+        print("   Распределение классов:")
+        for cls, count, name in zip(unique_classes, class_counts, class_names):
+            print(f"      {name} (класс {cls}): {count} наблюдений")
+        
+        # Определяем стратификацию
+        min_samples = class_counts.min()
+        
+        if min_samples < 2:
             
-            # Используем стратификацию только если все классы имеют достаточное количество образцов
-            min_samples_per_class = class_counts.min()
-            if min_samples_per_class < 2:
-                print("   Предупреждение: некоторые классы имеют менее 2 образцов, стратификация отключена")
-                stratify = None
-            else:
-                stratify = target_encoded
-        else:
+            print("   ⚠️  Некоторые классы имеют <2 наблюдений, стратификация отключена")
             stratify = None
+            
+        else:
+            stratify = y_encoded
         
+        # Разделение данных
         X_train, X_test, y_train, y_test, indices_train, indices_test = train_test_split(
-            features_scaled, target_encoded, features_df.index, 
-            test_size=test_size, random_state=random_state, stratify=stratify
+            X_scaled, y_encoded, features_df.index,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=stratify
         )
         
         print(f"   Обучающая выборка: {X_train.shape[0]} наблюдений")
         print(f"   Тестовая выборка: {X_test.shape[0]} наблюдений")
         
-        # Проверяем наличие всех классов в обучающей и тестовой выборках
-        if problem_type == 'classification':
-            train_classes = np.unique(y_train)
-            test_classes = np.unique(y_test)
-            print(f"   Классы в обучающей выборке: {len(train_classes)}")
-            print(f"   Классы в тестовой выборке: {len(test_classes)}")
-            
-            # Если в тестовой выборке не все классы, используем только присутствующие
-            if len(test_classes) < len(class_names):
-                print("   Предупреждение: не все классы присутствуют в тестовой выборке")
-                # Создаем маску для присутствующих классов
-                present_classes_mask = np.isin(np.arange(len(class_names)), test_classes)
-                present_class_names = class_names[present_classes_mask]
-                print(f"   Используемые классы для отчета: {list(present_class_names)}")
-            else:
-                present_class_names = class_names
+        # 4. ОБУЧЕНИЕ МОДЕЛИ
+        print("\n4. ОБУЧЕНИЕ RANDOM FOREST")
+        print("-" * 40)
         
-        # Шаг 4: Обучение Random Forest
-        print("4. Обучение Random Forest...")
-        
-        if problem_type == 'classification':
-            rf_model = RandomForestClassifier(
-                n_estimators=n_estimators,
-                max_depth=max_depth,
-                random_state=random_state,
-                n_jobs=-1,
-                class_weight='balanced'  # Добавляем балансировку классов
-            )
-        else:
-            rf_model = RandomForestRegressor(
-                n_estimators=n_estimators,
-                max_depth=max_depth,
-                random_state=random_state,
-                n_jobs=-1
-            )
+        rf_model = RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            random_state=random_state,
+            n_jobs=-1,
+            class_weight='balanced'
+        )
         
         rf_model.fit(X_train, y_train)
         
-        # Шаг 5: Предсказания и оценка модели
-        print("5. Оценка модели...")
+        print(f"   Модель обучена: {n_estimators} деревьев")
+        
+        # 5. ОЦЕНКА МОДЕЛИ
+        print("\n5. ОЦЕНКА МОДЕЛИ НА ТЕСТОВОЙ ВЫБОРКЕ")
+        print("-" * 40)
         
         y_pred = rf_model.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
         
-        # Метрики в зависимости от типа задачи
-        if problem_type == 'classification':
-            accuracy = accuracy_score(y_test, y_pred)
-            print(f"   Accuracy: {accuracy:.4f}")
-            print(f"\n   Classification Report:")
-            print("   " + "-" * 50)
-            
-            # Используем только классы, присутствующие в тестовой выборке
-            try:
-                clf_report = classification_report(
-                    y_test, y_pred, 
-                    target_names=present_class_names, 
-                    output_dict=True,
-                    zero_division=0
-                )
-                clf_report_df = pd.DataFrame(clf_report).transpose()
-                print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            except ValueError as e:
-                print(f"   Ошибка при создании classification report: {e}")
-                print("   Используем числовые метки классов...")
-                clf_report = classification_report(
-                    y_test, y_pred, 
-                    output_dict=True,
-                    zero_division=0
-                )
-                clf_report_df = pd.DataFrame(clf_report).transpose()
-                print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-        else:
-            mse = mean_squared_error(y_test, y_pred)
-            mae = mean_absolute_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
-            print(f"   Mean Squared Error: {mse:.4f}")
-            print(f"   Mean Absolute Error: {mae:.4f}")
-            print(f"   R² Score: {r2:.4f}")
+        print(f"   Точность (Accuracy): {accuracy:.4f}")
         
-        # Остальной код остается без изменений...
-        # [Шаги 6-8 остаются такими же как в оригинальной функции]
+        # Детальный отчет по классам
+        print("\n   Отчет по классификации:")
+        print("   " + "-" * 35)
         
-        # Шаг 6: Анализ важности признаков
-        print("\n6. Анализ важности признаков...")
+        report = classification_report(
+            y_test, y_pred,
+            target_names=class_names,
+            output_dict=False,
+            zero_division=0
+        )
+        
+        # Выводим отчет построчно для лучшего форматирования
+        if isinstance(report, str):
+            for line in report.split('\n'):
+                print(f"   {line}")
+        
+        # 6. ВАЖНОСТЬ ПРИЗНАКОВ
+        print("\n6. АНАЛИЗ ВАЖНОСТИ ПРИЗНАКОВ")
+        print("-" * 40)
         
         feature_importance = pd.DataFrame({
-            'feature': numeric_columns,
-            'importance': rf_model.feature_importances_
-        }).sort_values('importance', ascending=False)
+            'Признак': numeric_columns,
+            'Важность': rf_model.feature_importances_
+        }).sort_values('Важность', ascending=False)
         
-        print("   Топ-10 самых важных признаков:")
-        for i, row in feature_importance.head(10).iterrows():
-            print(f"      {row['feature']}: {row['importance']:.4f}")
+        print("   Топ-10 важнейших признаков:")
         
-        # Шаг 7: Анализ подклассов
-        print("\n7. Анализ распределения подклассов...")
+        for i, (_, row) in enumerate(feature_importance.head(10).iterrows(), 1):
+            print(f"      {i:2d}. {row['Признак']:30s}: {row['Важность']:.4f}")
+            
+        
+        # 7. АНАЛИЗ ПОДКЛАССОВ (если есть многоуровневый индекс)
+        print("\n7. АНАЛИЗ ПОДКЛАССОВ")
+        print("-" * 40)
         
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
-        results_df['actual'] = target_encoded
-        results_df['predicted'] = rf_model.predict(features_scaled)
-        results_df['is_correct'] = (results_df['actual'] == results_df['predicted']) if problem_type == 'classification' else None
         
-        # Анализ точности по подклассам
-        if problem_type == 'classification' and df.index.nlevels > 1:
+        results_df['Истинный_класс'] = y_encoded
+        
+        results_df['Предсказанный_класс'] = rf_model.predict(X_scaled)
+        
+        results_df['Верно_предсказано'] = (
+            results_df['Истинный_класс'] == results_df['Предсказанный_класс']
+        )
+        
+        # Общая точность на всем датасете
+        overall_accuracy = results_df['Верно_предсказано'].mean()
+        print(f"   Общая точность на всем датасете: {overall_accuracy:.4f}")
+        
+        # Анализ по подклассам (если есть второй уровень индекса)
+        if df.index.nlevels > 1:
+            
             subclass_accuracy = {}
             subclasses = df.index.get_level_values(1).unique()
             
             for subclass in subclasses:
                 subclass_mask = df.index.get_level_values(1) == subclass
+                
                 if subclass_mask.sum() > 0:
-                    subclass_actual = results_df.loc[subclass_mask, 'actual']
-                    subclass_pred = results_df.loc[subclass_mask, 'predicted']
-                    acc = accuracy_score(subclass_actual, subclass_pred)
-                    subclass_accuracy[subclass] = acc
+                    
+                    subclass_correct = results_df.loc[subclass_mask, 'Верно_предсказано'].mean()# type: ignore #
+                    subclass_accuracy[subclass] = subclass_correct
             
-            subclass_acc_df = pd.DataFrame.from_dict(subclass_accuracy, orient='index', columns=['Accuracy'])
-            subclass_acc_df = subclass_acc_df.sort_values('Accuracy', ascending=False)
-            
-            print(f"\n   Точность по подклассам:")
-            print("   " + "-" * 40)
-            for subclass, acc in subclass_acc_df.head(10).iterrows():
-                print(f"      {subclass}: {acc['Accuracy']:.4f}")
+            if subclass_accuracy:
+                
+                subclass_acc_df = pd.DataFrame.from_dict(
+                    subclass_accuracy, 
+                    orient='index', 
+                    columns=['Точность']
+                ).sort_values('Точность', ascending=False)
+                
+                print(f"\n   Точность по подклассам:")
+                print("   " + "-" * 40)
+                
+                top_subclasses = min(10, len(subclass_acc_df))
+                for i, (subclass, row) in enumerate(subclass_acc_df.head(top_subclasses).iterrows(), 1):
+                    print(f"      {i:2d}. {str(subclass):20s}: {row['Точность']:.4f}")
         
-        # Получаем весь вывод
+        # 8. СВОДКА
+        print("\n" + "=" * 70)
+        print("СВОДКА РЕЗУЛЬТАТОВ")
+        print("=" * 70)
+        print(f"   Классов: {len(class_names)}")
+        print(f"   Признаков: {len(numeric_columns)}")
+        print(f"   Точность на тесте: {accuracy:.4f}")
+        print(f"   Самый важный признак: {feature_importance.iloc[0]['Признак']}")
+        print("=" * 70)
+        
+        # Получаем вывод консоли
         console_output = captured_output.getvalue()
         
         # Восстанавливаем stdout
         sys.stdout = old_stdout
         
-        # Создаем HTML отчет
-        if save:
-            create_rf_html_report(console_output, results_df, feature_importance, 
-                                rf_model, problem_type, class_names, le,
-                                X_test, y_test, y_pred, output_html_path)
-            
-            print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
+        # Выводим результаты в консоль
+        print(console_output)
         
-        return (results_df, rf_model, scaler, feature_importance, 
-                X_train, X_test, y_train, y_test, le,accuracy)
+        # Создание HTML отчета (опционально)
+        if save_report:
+            try:
+                create_rf_classification_html_report(
+                    console_output=console_output,
+                    results_df=results_df,
+                    feature_importance=feature_importance,
+                    rf_model=rf_model,
+                    class_names=class_names,
+                    label_encoder=label_encoder,
+                    X_test=X_test,
+                    y_test=y_test,
+                    y_pred=y_pred,
+                    output_html_path=output_html_path
+                )
+                print(f"\n✅ HTML отчет сохранен: {output_html_path}")
+            except Exception as e:
+                print(f"⚠️  Не удалось создать HTML отчет: {e}")
+        
+        return (
+            results_df,
+            rf_model,
+            scaler,
+            feature_importance,
+            X_train, X_test, y_train, y_test,
+            label_encoder,
+            float(accuracy)
+        )
         
     except Exception as e:
         # Восстанавливаем stdout в случае ошибки
         sys.stdout = old_stdout
-        print(f"Ошибка при выполнении анализа: {e}")
+        print(f"❌ Ошибка при выполнении анализа: {e}")
         raise
+        
+    finally:
+        # Гарантируем восстановление stdout
+        if sys.stdout is captured_output:
+            sys.stdout = old_stdout
 
-def create_rf_html_report(console_output, results_df, feature_importance, 
-                         rf_model, problem_type, class_names, label_encoder,
-                         X_test, y_test, y_pred, output_html_path):
+def create_rf_classification_html_report(console_output, results_df, feature_importance, 
+                         rf_model, class_names, label_encoder,
+                         X_test, y_test, y_pred, output_html_path,problem_type = 'classification'):
     """Создание HTML отчета с результатами анализа Random Forest"""
     
     # Создаем визуализации

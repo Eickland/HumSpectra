@@ -106,18 +106,25 @@ def extract_class_from_name(file_name: str) -> str:
     else:
         str_class = str_name.split(sep="-")[0]
         symbol_class = str_class[0]
+        
         if "C" == symbol_class:
             sample_class = "Coal"
+            
         elif "L" == symbol_class:
             sample_class = "Lg"
+            
         elif "P" == symbol_class:
             sample_class = "Peat"
+            
         elif "S" == symbol_class:
             sample_class = "Soil"
+            
         elif "K" == symbol_class:
             sample_class = "ADOM"
+            
         elif "B" == symbol_class:
             sample_class = "Baikal"
+            
         else:
             raise ValueError("Имя образца не соответствует ни одному представленному классу")
     return sample_class
@@ -137,7 +144,6 @@ def extract_subclass_from_name(file_name: str) -> str:
     str_name = file_name.replace(" ", "-")
 
     if 'Baikal' == sample_class:
-        
         return 'Baikal'
     
     if 'Lst' == sample_class:
@@ -147,23 +153,16 @@ def extract_subclass_from_name(file_name: str) -> str:
         
         split_name = str_name.split(sep="-")
 
-        if "B" in split_name[1]  or "В" in split_name[1]:
-            sample_subclass = "Baikal"
-            
-        else:
-
-            if len(split_name) == 2:
+        if len(split_name) == 2:
                 str_name = split_name[0][:1]+"-"+split_name[0][1:]
 
-            str_subclass = str_name.split(sep="-")[1]
-            sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
+                str_subclass = str_name.split(sep="-")[1]
+                sample_subclass = "Storage " + str(extract_and_combine_digits_re(str_subclass))
         
 
     elif "L" == str_name[0]:
-        if "G" == str_name[1]:
-            sample_subclass = "Lg"
-        else:
-            sample_subclass = "Lst"
+        sample_subclass = "Lg"
+
     else:
         sample_subclass = str_name.split(sep="-")[0]
 

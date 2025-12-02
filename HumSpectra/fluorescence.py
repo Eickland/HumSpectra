@@ -23,7 +23,6 @@ def asm_350(data: pd.DataFrame) -> float:
 
     return float(fluo_param)
 
-
 def asm_280(data: pd.DataFrame) -> float:
     """
     :param data: DataFrame, спектр флуоресценции
@@ -50,7 +49,6 @@ def fluo_index(data: pd.DataFrame)-> float:
     
     return float(fluo_param)
 
-
 def humin_index(data: pd.DataFrame)-> float:
     """
     :param data: DataFrame, спектр флуоресценции
@@ -64,7 +62,6 @@ def humin_index(data: pd.DataFrame)-> float:
     fluo_param = high / low
 
     return float(fluo_param) 
-
 
 def cut_spectra(data: pd.DataFrame,
                 ex_low_limit: int | None=None,
@@ -97,7 +94,6 @@ def cut_spectra(data: pd.DataFrame,
     cut_data = data.loc[em_low_limit:em_high_limit, ex_low_limit:ex_high_limit]
 
     return cut_data
-
 
 def plot_heat_map(data: pd.DataFrame,
                   ax: Union[Axes, None] = None,
@@ -136,7 +132,6 @@ def plot_heat_map(data: pd.DataFrame,
         ax.set_title(f"{name}")
 
     return ax
-
 
 def plot_2d(data: pd.DataFrame,
             ex_wave: int,
@@ -297,6 +292,9 @@ def read_fluo_3d(path: str,
                 unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
                 if unnamed_columns:
                     data = data.drop(unnamed_columns, axis=1)
+        
+        else:
+            raise KeyError(f"Недопустимое расширение спектра {path}")
 
     except FileNotFoundError:
         raise FileNotFoundError(f"Файл не найден: {path}")
@@ -323,6 +321,7 @@ def read_fluo_3d(path: str,
         data = data.astype("float64")
         data.columns = data.columns.astype(int)
         data.index = data.index.astype(int)
+        
     except (ValueError, TypeError) as e:
         if debug:
             print(f"Предупреждение: ошибка преобразования типов: {e}")

@@ -85,7 +85,7 @@ def integral_ratio_uv(data: DataFrame,
         data.loc[index_low_left:index_low_right]
     )
     
-    uv_param = high / low
+    uv_param = float(high / low)
 
     return uv_param
 
@@ -194,7 +194,7 @@ def plot_uv(data: DataFrame,
             xlabel: bool = True,
             ylabel: bool = True,
             title: bool = True,
-            ylim: float = None,
+            ylim: Optional[float] = None,
             norm_by_TOC: bool = False,
             ax: Union[Axes, None] = None,
             name: Optional[str] = None) -> Axes:
@@ -223,7 +223,7 @@ def plot_uv(data: DataFrame,
     # Нормализация по TOC
     if norm_by_TOC:
         if "TOC" not in data_copy.attrs:
-            raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
+            raise KeyError("В метаданных спектра должно быть значения содержания органического углерода")
         data_copy = data_copy / data_copy.attrs['TOC']
 
     # Создаем ось если не передана
@@ -289,7 +289,7 @@ def read_csv_uv(path: str,
     if spectra_type:
         if check_uv_spectra_type_by_path(path) != spectra_type:
             
-            return None
+            raise KeyError(f"Ошибка приписывания класса для образца{data.attrs['name']}")
     
     else:
         spectra_type = check_uv_spectra_type_by_path(path)
@@ -349,7 +349,7 @@ def read_excel_uv(path: str,
         if spectra_type:
             if check_uv_spectra_type_by_path(path) != spectra_type:
             
-                return None 
+                raise KeyError(f"Ошибка приписывания класса для образца{data.attrs['name']}") 
         else:
             spectra_type = check_uv_spectra_type_by_path(path)
             
@@ -383,7 +383,7 @@ def read_excel_uv(path: str,
             if spectra_type:
                 if check_uv_spectra_type_by_path(path) != spectra_type:
                 
-                    return None 
+                    raise KeyError(f"Ошибка приписывания класса для образца{data.attrs['name']}")
             else:
                 spectra_type = check_uv_spectra_type_by_path(path)
 
