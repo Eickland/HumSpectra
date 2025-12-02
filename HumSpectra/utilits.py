@@ -740,36 +740,70 @@ def add_median_labels(ax, fmt='.3f'):
 def calculate_vif(X, threshold=10.0, drop=False, max_iterations=5):
     """
     Рассчитывает VIF для признаков и удаляет сильно коррелированные
+    
+    Parameters:
+    -----------
+    X : DataFrame
+        Входные признаки
+    threshold : float
+        Порог VIF для удаления (по умолчанию 10)
+    drop : bool
+        Если True - удаляет признаки с высоким VIF итеративно
+        Если False - только рассчитывает VIF без удаления
+    max_iterations : int
+        Максимальное количество итераций удаления
+        
+    Returns:
+    --------
+    X_result : DataFrame
+        Отфильтрованные признаки (если drop=True) или копия исходных
+    vif_data : DataFrame
+        DataFrame с VIF значений, отсортированный по убыванию
+    removed_features : list
+        Список удаленных признаков (пустой если drop=False)
     """
     X_temp = X.copy()
+    removed_features = []
+    
+    # Первоначальный расчет VIF
     vif_data = pd.DataFrame()
     vif_data["feature"] = X_temp.columns
     vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
-                        for i in range(X_temp.shape[1])]
-    vif_data = vif_data.sort_values("VIF", ascending=False)
+                       for i in range(X_temp.shape[1])]
     
-    # Удаляем признаки с высоким VIF итеративно
-    high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
-    iterations = 0
-    max_iterations = max_iterations
-    
-    while high_vif_features and iterations < max_iterations and drop:
-        # Удаляем признак с наибольшим VIF
-        feature_to_remove = high_vif_features[0]
-        X_temp = X_temp.drop(columns=[feature_to_remove])
+    if drop:
+        iterations = 0
+        removed_features = []
         
-        # Пересчитываем VIF
-        if X_temp.shape[1] > 1:
-            vif_data = pd.DataFrame()
-            vif_data["feature"] = X_temp.columns
-            vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
-                                for i in range(X_temp.shape[1])]
-            vif_data = vif_data.sort_values("VIF", ascending=False)
+        # Сортируем по VIF для определения, какой признак удалять первым
+        vif_data = vif_data.sort_values("VIF", ascending=False)
+        high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
+        
+        # Итеративное удаление
+        while high_vif_features and iterations < max_iterations:
+            # Удаляем признак с наибольшим VIF
+            feature_to_remove = high_vif_features[0]
+            X_temp = X_temp.drop(columns=[feature_to_remove])
+            removed_features.append(feature_to_remove)
             
-            high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
-        else:
-            break
+            # Пересчитываем VIF только если остались признаки
+            if X_temp.shape[1] > 1:
+                vif_data = pd.DataFrame()
+                vif_data["feature"] = X_temp.columns
+                vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
+                                   for i in range(X_temp.shape[1])]
+                vif_data = vif_data.sort_values("VIF", ascending=False)
+                high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
+            else:
+                break
+                
+            iterations += 1
             
-        iterations += 1
-                    
-    return X_temp, vif_data, threshold
+        # После удалений сортируем финальный результат
+        vif_data = vif_data.sort_values("VIF", ascending=False)
+        
+    else:
+        # Если drop=False, просто сортируем по убыванию VIF
+        vif_data = vif_data.sort_values("VIF", ascending=False)
+    
+    return X_temp, vif_data, threshold, removed_features

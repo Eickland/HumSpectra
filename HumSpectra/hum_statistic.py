@@ -1107,7 +1107,7 @@ def lda_classifaction_with_subclasses(data:pd.DataFrame,
         
         # Проверяем, достаточно ли признаков для VIF анализа
         if len(features_numeric.columns) > 1:
-            features_after_vif, vif_results, vif_threshold = ut.calculate_vif(features_numeric, **kwargs)
+            features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
             
             # Выводим результаты VIF анализа
             print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
