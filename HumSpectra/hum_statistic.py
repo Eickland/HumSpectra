@@ -721,11 +721,6 @@ def random_forest_classification(
         sys.stdout = old_stdout
         print(f"❌ Ошибка при выполнении анализа: {e}")
         raise
-        
-    finally:
-        # Гарантируем восстановление stdout
-        if sys.stdout is captured_output:
-            sys.stdout = old_stdout
 
 def create_rf_classification_html_report(console_output, results_df, feature_importance, 
                          rf_model, class_names, label_encoder,
@@ -756,15 +751,21 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     
     # Матрица ошибок для классификации
     confusion_matrix_plot = ""
+    
     if problem_type == 'classification':
+        
         from sklearn.metrics import confusion_matrix
+        
         cm = confusion_matrix(y_test, y_pred)
         fig2, ax2 = plt.subplots(figsize=(8, 6))
+        
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
                    xticklabels=class_names, yticklabels=class_names)
+        
         ax2.set_xlabel('Предсказанные')
         ax2.set_ylabel('Фактические')
         ax2.set_title('Матрица ошибок')
+        
         plt.tight_layout()
         
         buffer2 = BytesIO()
