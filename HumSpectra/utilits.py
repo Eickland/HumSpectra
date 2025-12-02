@@ -10,6 +10,7 @@ from typing import Any, Dict
 import warnings
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
 def extract_and_combine_digits_re(text: str) -> int:
@@ -736,3 +737,39 @@ def add_median_labels(ax, fmt='.3f'):
             path_effects.Normal(),
         ])
     
+def calculate_vif(X, threshold=10.0, drop=False, max_iterations=5):
+    """
+    Рассчитывает VIF для признаков и удаляет сильно коррелированные
+    """
+    X_temp = X.copy()
+    vif_data = pd.DataFrame()
+    vif_data["feature"] = X_temp.columns
+    vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
+                        for i in range(X_temp.shape[1])]
+    vif_data = vif_data.sort_values("VIF", ascending=False)
+    
+    # Удаляем признаки с высоким VIF итеративно
+    high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
+    iterations = 0
+    max_iterations = max_iterations
+    
+    while high_vif_features and iterations < max_iterations and drop:
+        # Удаляем признак с наибольшим VIF
+        feature_to_remove = high_vif_features[0]
+        X_temp = X_temp.drop(columns=[feature_to_remove])
+        
+        # Пересчитываем VIF
+        if X_temp.shape[1] > 1:
+            vif_data = pd.DataFrame()
+            vif_data["feature"] = X_temp.columns
+            vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
+                                for i in range(X_temp.shape[1])]
+            vif_data = vif_data.sort_values("VIF", ascending=False)
+            
+            high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
+        else:
+            break
+            
+        iterations += 1
+                    
+    return X_temp, vif_data, threshold

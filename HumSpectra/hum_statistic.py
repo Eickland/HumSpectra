@@ -13,7 +13,8 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+import HumSpectra.utilits as ut
 
 def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None, save=False):
     """
@@ -447,7 +448,7 @@ def random_forest_classification_analysis(
     target_column: Optional[str] = None,
     test_size: float = 0.2,
     random_state: int = 42,
-    output_html_path: str = 'rf_classification_report.html',
+    output_html_path: str|None = None,
     n_estimators: int = 100,
     max_depth: Optional[int] = None,
     save_report: bool = False,
@@ -1022,11 +1023,16 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
-                               test_size=0.2, random_state=42, 
-                               output_html_path='lda_analysis_report.html',
-                               save=False, vif_threshold=10.0,
-                               index_level=1):
+def lda_classifaction_with_subclasses(data:pd.DataFrame,
+                                target_column:str|None = None,
+                                index_level:int|None = None,
+                                n_components:int|None = None,
+                               test_size:float = 0.2,
+                               random_state:int = 42, 
+                               output_html_path:str|None = None,
+                               **kwargs
+                               ) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, pd.DataFrame, LabelEncoder,
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float, float]:
     """
     Анализ данных с помощью Linear Discriminant Analysis (LDA)
     с выводом результатов в HTML файл и проверкой на мультиколлинеарность
@@ -1045,14 +1051,18 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         print("1. Подготовка данных...")
         
         # Определяем целевую переменную
-        if target_column is None:
-            # Используем второй уровень индекса как целевую переменную
-            target = df.index.get_level_values(index_level)
-            features_df = df.reset_index(drop=True)
+        if target_column is None and index_level:
+            
+            # Используем уровень индекса как целевую переменную
+            target = data.index.get_level_values(index_level)
+            
+            features_df = data.reset_index(drop=True)
             target_name = f"{index_level} уровень индекса"
+            
         else:
-            target = df[target_column]
-            features_df = df.drop(columns=[target_column])
+            
+            target = data[target_column]
+            features_df = data.drop(columns=[target_column])
             target_name = target_column
         
         print(f"   Целевая переменная: {target_name}")
@@ -1095,46 +1105,9 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
         print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
         
-        def calculate_vif(X, threshold=10.0):
-            """
-            Рассчитывает VIF для признаков и удаляет сильно коррелированные
-            """
-            X_temp = X.copy()
-            vif_data = pd.DataFrame()
-            vif_data["feature"] = X_temp.columns
-            vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
-                              for i in range(X_temp.shape[1])]
-            vif_data = vif_data.sort_values("VIF", ascending=False)
-            
-            # Удаляем признаки с высоким VIF итеративно
-            high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
-            iterations = 0
-            max_iterations = 20
-            
-            while high_vif_features and iterations < max_iterations:
-                # Удаляем признак с наибольшим VIF
-                feature_to_remove = high_vif_features[0]
-                X_temp = X_temp.drop(columns=[feature_to_remove])
-                
-                # Пересчитываем VIF
-                if X_temp.shape[1] > 1:
-                    vif_data = pd.DataFrame()
-                    vif_data["feature"] = X_temp.columns
-                    vif_data["VIF"] = [variance_inflation_factor(X_temp.values, i) 
-                                      for i in range(X_temp.shape[1])]
-                    vif_data = vif_data.sort_values("VIF", ascending=False)
-                    
-                    high_vif_features = vif_data[vif_data["VIF"] > threshold]["feature"].tolist()
-                else:
-                    break
-                    
-                iterations += 1
-            
-            return X_temp, vif_data
-        
         # Проверяем, достаточно ли признаков для VIF анализа
         if len(features_numeric.columns) > 1:
-            features_after_vif, vif_results = calculate_vif(features_numeric, vif_threshold)
+            features_after_vif, vif_results, vif_threshold = ut.calculate_vif(features_numeric, **kwargs)
             
             # Выводим результаты VIF анализа
             print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
@@ -1142,7 +1115,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
             
             if len(vif_results) > 0:
-                print(f"\n   Топ-10 признаков по VIF (после фильтрации):")
+                print(f"\n   Топ признаков по VIF (после фильтрации):")
                 for i, row in vif_results.head(10).iterrows():
                     status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
                     print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
@@ -1177,9 +1150,12 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         
         # Используем стратификацию только если все классы имеют достаточное количество образцов
         min_samples_per_class = class_counts.min()
+        
         if min_samples_per_class < 2:
+            
             print("   Предупреждение: некоторые классы имеют менее 2 образцов, стратификация отключена")
             stratify = None
+            
         else:
             stratify = target_encoded
         
@@ -1199,10 +1175,12 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         
         # Если в тестовой выборке не все классы, используем только присутствующие
         if len(test_classes) < len(class_names):
+            
             print("   Предупреждение: не все классы присутствуют в тестовой выборке")
             present_classes_mask = np.isin(np.arange(len(class_names)), test_classes)
             present_class_names = class_names[present_classes_mask]
             print(f"   Используемые классы для отчета: {list(present_class_names)}")
+            
         else:
             present_class_names = class_names
         
@@ -1281,12 +1259,14 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             clf_report_df = pd.DataFrame(clf_report).transpose()
             print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
             
-            weighted_avg_precision = clf_report_df.loc['weighted avg', 'precision']
-            macro_avg_precision = clf_report_df.loc['macro avg', 'precision']
+            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
+            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
             
         except ValueError as e:
+            
             print(f"   Ошибка при создании classification report: {e}")
             print("   Используем числовые метки классов...")
+            
             clf_report = classification_report(
                 y_test, y_pred, 
                 output_dict=True,
@@ -1294,7 +1274,10 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
             )
             clf_report_df = pd.DataFrame(clf_report).transpose()
             print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-
+            
+            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
+            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
+            
         # Шаг 6: Анализ важности признаков через коэффициенты LDA
         print("\n6. Анализ важности признаков...")
         
@@ -1324,34 +1307,14 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         results_df['actual'] = target_encoded
         results_df['predicted'] = lda_model.predict(features_scaled)
         results_df['is_correct'] = (results_df['actual'] == results_df['predicted'])
-        results_df['Class'] = df.index.get_level_values(1) #TODO пиздец!!!
-        results_df['Subclass'] = df.index.get_level_values(2) #TODO пиздец!!!
+        
+        results_df['Class'] = data.index.get_level_values('Class')
+        results_df['Subclass'] = data.index.get_level_values('Subclass')
         
         # Добавляем LDA компоненты
         lda_components = lda_model.transform(features_scaled)
         for i in range(lda_components.shape[1]):
             results_df[f'LDA_Component_{i+1}'] = lda_components[:, i]
-        
-        # Анализ точности по подклассам
-        if df.index.nlevels > 1:
-            subclass_accuracy = {}
-            subclasses = df.index.get_level_values(1).unique()
-            
-            for subclass in subclasses:
-                subclass_mask = df.index.get_level_values(1) == subclass
-                if subclass_mask.sum() > 0:
-                    subclass_actual = results_df.loc[subclass_mask, 'actual']
-                    subclass_pred = results_df.loc[subclass_mask, 'predicted']
-                    acc = accuracy_score(subclass_actual, subclass_pred)
-                    subclass_accuracy[subclass] = acc
-            
-            subclass_acc_df = pd.DataFrame.from_dict(subclass_accuracy, orient='index', columns=['Accuracy'])
-            subclass_acc_df = subclass_acc_df.sort_values('Accuracy', ascending=False)
-            
-            print(f"\n   Точность по подклассам:")
-            print("   " + "-" * 40)
-            for subclass, acc in subclass_acc_df.head(10).iterrows():
-                print(f"      {subclass}: {acc['Accuracy']:.4f}")
         
         # Получаем весь вывод
         console_output = captured_output.getvalue()
@@ -1360,15 +1323,17 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         sys.stdout = old_stdout
         
         # Создаем HTML отчет
-        if save:
-            create_lda_html_report(console_output, results_df, feature_importance, 
+        if output_html_path:
+            create_lda_classifaction_html_report(console_output, results_df, feature_importance, 
                                  lda_model, class_names, le, X_test, y_test, y_pred, 
                                  X_train_lda, y_train, output_html_path, vif_results, numeric_columns)
             
             print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
         
-        return (results_df, lda_model, scaler, feature_importance, 
-                X_train, X_test, y_train, y_test, le, accuracy,weighted_avg_precision,macro_avg_precision, X_train_lda, X_test_lda, vif_results)
+        return (results_df, lda_model, scaler, feature_importance,le,
+                X_train, X_test, y_train, y_test, X_train_lda, X_test_lda,
+                float(accuracy), weighted_avg_accuracy, macro_avg_accuracy,
+                )
         
     except Exception as e:
         # Восстанавливаем stdout в случае ошибки
@@ -1376,7 +1341,7 @@ def lda_analysis_with_subclasses(df, target_column=None, n_components=None,
         print(f"Ошибка при выполнении анализа: {e}")
         raise
 
-def create_lda_html_report(console_output, results_df, feature_importance, 
+def create_lda_classifaction_html_report(console_output, results_df, feature_importance, 
                           lda_model, class_names, label_encoder,
                           X_test, y_test, y_pred, X_lda, y_train, output_html_path, vif_results=None, feature_names=None):
     """Создание HTML отчета с результатами анализа LDA"""
@@ -1680,7 +1645,6 @@ def create_lda_html_report(console_output, results_df, feature_importance,
                 <h3>📊 Информация о модели LDA</h3>
                 <p><strong>Тип модели:</strong> Linear Discriminant Analysis</p>
                 <p><strong>Количество компонентов:</strong> {lda_model.n_components}</p>
-                <p><strong>Объясненная дисперсия:</strong> {lda_model.explained_variance_ratio_.sum():.4f}</p>
                 <p><strong>Количество классов:</strong> {len(class_names)}</p>
             </div>
             
@@ -1743,62 +1707,3 @@ def create_lda_html_report(console_output, results_df, feature_importance,
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-def compare_lda_pca(df, target_column=None, n_components=None, random_state=42):
-    """
-    Сравнительный анализ LDA и PCA
-    """
-    # Подготовка данных
-    if target_column is None:
-        target = df.index.get_level_values(1)
-        features_df = df.reset_index(drop=True)
-    else:
-        target = df[target_column]
-        features_df = df.drop(columns=[target_column])
-    
-    # Кодирование целевой переменной
-    le = LabelEncoder()
-    target_encoded = le.fit_transform(target)
-    class_names = le.classes_
-    
-    # Масштабирование
-    scaler = StandardScaler()
-    features_scaled = scaler.fit_transform(features_df.select_dtypes(include=[np.number]))
-    
-    # LDA
-    if n_components is None:
-        n_components = min(len(class_names) - 1, features_scaled.shape[1])
-    
-    lda = LinearDiscriminantAnalysis(n_components=n_components)
-    lda_features = lda.fit_transform(features_scaled, target_encoded)
-    
-    # PCA
-    pca = PCA(n_components=n_components, random_state=random_state)
-    pca_features = pca.fit_transform(features_scaled)
-    
-    # Визуализация сравнения
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-    
-    # LDA plot
-    if lda_features.shape[1] >= 2:
-        scatter1 = ax1.scatter(lda_features[:, 0], lda_features[:, 1], c=target_encoded, cmap='viridis', alpha=0.7)
-        ax1.set_xlabel(f'LDA Component 1 ({lda.explained_variance_ratio_[0]:.2%})')
-        ax1.set_ylabel(f'LDA Component 2 ({lda.explained_variance_ratio_[1]:.2%})')
-        ax1.set_title('LDA Projection')
-        plt.colorbar(scatter1, ax=ax1, label='Класс')
-    
-    # PCA plot
-    if pca_features.shape[1] >= 2:
-        scatter2 = ax2.scatter(pca_features[:, 0], pca_features[:, 1], c=target_encoded, cmap='viridis', alpha=0.7)
-        ax2.set_xlabel(f'PCA Component 1 ({pca.explained_variance_ratio_[0]:.2%})')
-        ax2.set_ylabel(f'PCA Component 2 ({pca.explained_variance_ratio_[1]:.2%})')
-        ax2.set_title('PCA Projection')
-        plt.colorbar(scatter2, ax=ax2, label='Класс')
-    
-    plt.tight_layout()
-    plt.show()
-    
-    print("Сравнение LDA и PCA:")
-    print(f"LDA - Объясненная дисперсия: {lda.explained_variance_ratio_.sum():.4f}")
-    print(f"PCA - Объясненная дисперсия: {pca.explained_variance_ratio_.sum():.4f}")
-    
-    return lda, pca, lda_features, pca_features
