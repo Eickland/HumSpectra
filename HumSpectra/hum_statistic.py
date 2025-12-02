@@ -16,7 +16,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 
 import HumSpectra.utilits as ut
 
-def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output_html_path=None, save=False):
+def kmeans_clustering(df, n_clusters=None, random_state=42, output_html_path=None, save=False):
     """
     Кластеризация данных с многоуровневым индексом и анализ подклассов
     с выводом результатов в HTML файл
@@ -195,7 +195,7 @@ def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output
         
         if save:
             # Создаем HTML отчет
-            create_html_report(console_output, result_df, contingency_table, 
+            create_kmeans_html_report(console_output, result_df, contingency_table, 
                             percentage_table, cluster_summary_df, cluster_means, 
                             subclass_cluster_map, n_clusters, output_html_path)
             
@@ -209,7 +209,7 @@ def kmeans_analysis_with_subclasses(df, n_clusters=None, random_state=42, output
         print(f"Ошибка при выполнении анализа: {e}")
         raise
 
-def create_html_report(console_output, result_df, contingency_table, percentage_table, 
+def create_kmeans_html_report(console_output, result_df, contingency_table, percentage_table, 
                       cluster_summary_df, cluster_means, subclass_cluster_map, 
                       n_clusters, output_html_path):
     """Создание HTML отчета с результатами анализа"""
@@ -417,31 +417,6 @@ def create_html_report(console_output, result_df, contingency_table, percentage_
     # Сохраняем HTML файл
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
-
-def analyze_cluster_characteristics(result_df, n_clusters):
-    """Анализ характеристик кластеров"""
-    print(f"\nХАРАКТЕРИСТИКИ КЛАСТЕРОВ (средние значения):")
-    print("-" * 60)
-    
-    numeric_columns = result_df.select_dtypes(include=[np.number]).columns
-    numeric_columns = numeric_columns[numeric_columns != 'cluster']  # Исключаем колонку с кластерами
-    
-    cluster_means = result_df.groupby('cluster')[numeric_columns].mean()
-    print(cluster_means.round(3))
-
-def get_subclass_cluster_mapping(result_df):
-    """Получить маппинг подклассов на основные кластеры"""
-    subclass_cluster_map = {}
-    
-    for subclass in result_df.index.get_level_values(1).unique():
-        subclass_data = result_df.xs(subclass, level=1)
-        if len(subclass_data) > 0:
-            # Определяем основной кластер для подкласса
-            main_cluster = subclass_data['cluster'].mode()
-            if len(main_cluster) > 0:
-                subclass_cluster_map[subclass] = main_cluster[0]
-    
-    return subclass_cluster_map
 
 def random_forest_classification(
     data: pd.DataFrame,
