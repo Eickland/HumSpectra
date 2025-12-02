@@ -1023,7 +1023,7 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-def lda_classifaction_with_subclasses(data:pd.DataFrame,
+def lda_classifaction(data:pd.DataFrame,
                                 target_column:str|None = None,
                                 index_level:int|None = None,
                                 n_components:int|None = None,
