@@ -444,15 +444,15 @@ def get_subclass_cluster_mapping(result_df):
     return subclass_cluster_map
 
 def random_forest_classification_analysis(
-    df: pd.DataFrame,
+    data: pd.DataFrame,
     target_column: Optional[str] = None,
     test_size: float = 0.2,
     random_state: int = 42,
     output_html_path: str|None = None,
     n_estimators: int = 100,
     max_depth: Optional[int] = None,
-    save_report: bool = False,
-    index_level: int = 1
+    index_level: Optional[int] = None,
+    **kwargs
 ) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
            np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float]:
     """
@@ -460,7 +460,7 @@ def random_forest_classification_analysis(
     
     Parameters:
     -----------
-    df : pd.DataFrame
+    data : pd.DataFrame
         Входной DataFrame с данными
     target_column : str, optional
         Название целевой колонки. Если None, используется index_level индекс
@@ -505,27 +505,23 @@ def random_forest_classification_analysis(
         print("-" * 40)
         
         # Определяем целевую переменную
-        if target_column is None:
+        # Определяем целевую переменную
+        if target_column is None and index_level:
             
-            target = df.index.get_level_values(index_level)
+            # Используем уровень индекса как целевую переменную
+            target = data.index.get_level_values(index_level)
             
-            features_df = df.reset_index(drop=True)
-            
-            target_name = f"Индекс уровня {index_level}"
-            
-            print(f"   Целевая переменная: {target_name}")
+            features_df = data.reset_index(drop=True)
+            target_name = f"{index_level} уровень индекса"
             
         else:
-            if target_column not in df.columns:
-                
-                raise ValueError(f"Колонка '{target_column}' не найдена в DataFrame")
             
-            target = df[target_column]
-            
-            features_df = df.drop(columns=[target_column])
-            
+            target = data[target_column]
+            features_df = data.drop(columns=[target_column])
             target_name = target_column
-            print(f"   Целевая переменная: {target_name}")
+        
+        print(f"   Целевая переменная: {target_name}")
+        print(f"   Уникальных значений в целевой переменной: {target.nunique()}")
         
         # Проверяем, что задача действительно классификация
         unique_values = target.nunique()
@@ -540,7 +536,7 @@ def random_forest_classification_analysis(
         class_names = label_encoder.classes_
         
         print(f"   Классы: {list(class_names)}")
-        print(f"   Размер датасета: {len(df)} наблюдений")
+        print(f"   Размер датасета: {len(data)} наблюдений")
         
         # 2. ПРЕДОБРАБОТКА ПРИЗНАКОВ
         print("\n2. ПРЕДОБРАБОТКА ПРИЗНАКОВ")
@@ -677,13 +673,13 @@ def random_forest_classification_analysis(
         print(f"   Общая точность на всем датасете: {overall_accuracy:.4f}")
         
         # Анализ по подклассам (если есть второй уровень индекса)
-        if df.index.nlevels > 1:
+        if data.index.nlevels > 1:
             
             subclass_accuracy = {}
-            subclasses = df.index.get_level_values(1).unique()
+            subclasses = data.index.get_level_values(1).unique()
             
             for subclass in subclasses:
-                subclass_mask = df.index.get_level_values(1) == subclass
+                subclass_mask = data.index.get_level_values(1) == subclass
                 
                 if subclass_mask.sum() > 0:
                     
@@ -725,7 +721,7 @@ def random_forest_classification_analysis(
         print(console_output)
         
         # Создание HTML отчета (опционально)
-        if save_report:
+        if output_html_path:
             try:
                 create_rf_classification_html_report(
                     console_output=console_output,

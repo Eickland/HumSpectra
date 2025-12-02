@@ -289,7 +289,7 @@ def read_csv_uv(path: str,
     if spectra_type:
         if check_uv_spectra_type_by_path(path) != spectra_type:
             
-            raise KeyError(f"Ошибка приписывания класса для образца{data.attrs['name']}")
+            raise KeyError(f"Ошибка приписывания класса для образца {path}")
     
     else:
         spectra_type = check_uv_spectra_type_by_path(path)
