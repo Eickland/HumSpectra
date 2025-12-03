@@ -565,3 +565,58 @@ def plot_uv_spectra_by_subclass(spectra_list: List[pd.DataFrame],
     print(f"Всего подклассов: {n_subclasses}")
     for subclass, spectra in spectra_by_subclass.items():
         print(f"  {subclass}: {len(spectra)} спектров")
+        
+def add_toc_to_spectra(spectra: List[pd.DataFrame], 
+                            toc_table: pd.DataFrame, 
+                            name_col: str = 'Sample', 
+                            toc_col: str = 'C_org',
+                            verbose: bool = True) -> List[pd.DataFrame]:
+    """
+    Добавляет параметр 'TOC' в attrs каждого спектра и удаляет спектры без TOC
+    
+    Args:
+        spectra: Список DataFrame спектров
+        toc_table: DataFrame с таблицей соответствия имен и значений TOC
+        name_col: Название столбца с именами в toc_table (по умолчанию 'Sample')
+        toc_col: Название столбца со значениями TOC в toc_table (по умолчанию 'C_org')
+        verbose: Выводить ли информацию об удаленных спектрах
+        
+    Returns:
+        List[pd.DataFrame]: Список спектров с добавленным параметром 'TOC' в attrs
+                            (спектры без TOC удалены)
+    """
+    
+            # Создаем словарь для быстрого поиска TOC по имени
+    toc_dict = dict(zip(toc_table[name_col], toc_table[toc_col]))
+    
+    updated_spectra = []
+    removed_count = 0
+    
+    for spectrum in spectra:
+        # Создаем копию DataFrame
+        spectrum_copy = spectrum.copy()
+        
+        # Проверяем наличие атрибута 'name'
+        if hasattr(spectrum, 'attrs') and 'name' in spectrum.attrs:
+            spectrum_name = spectrum.attrs['name']
+            
+            # Ищем соответствие в таблице TOC
+            if spectrum_name in toc_dict:
+                # Создаем копию attrs и добавляем TOC
+                new_attrs = spectrum.attrs.copy()
+                new_attrs['TOC'] = toc_dict[spectrum_name]
+                spectrum_copy.attrs = new_attrs
+                updated_spectra.append(spectrum_copy)
+            else:
+                removed_count += 1
+                if verbose:
+                    print(f"Удален спектр: '{spectrum_name}' - TOC не найден")
+        else:
+            removed_count += 1
+            if verbose:
+                print(f"Удален спектр: отсутствует атрибут 'name'")
+    
+    if verbose:
+        print(f"Обработка завершена. Удалено спектров: {removed_count}, осталось: {len(updated_spectra)}")
+    
+    return updated_spectra
