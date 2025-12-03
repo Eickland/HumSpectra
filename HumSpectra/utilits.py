@@ -807,3 +807,46 @@ def calculate_vif(X, threshold=10.0, drop=False, max_iterations=5):
         vif_data = vif_data.sort_values("VIF", ascending=False)
     
     return X_temp, vif_data, threshold, removed_features
+
+def split_dataframes_by_class(dataframes: List[pd.DataFrame], type='subclass') -> List[List[pd.DataFrame]]:
+    """
+    Разделяет список DataFrame по классам, указанным в df.attrs['class']
+    
+    Args:
+        dataframes: Список DataFrame для разделения
+        
+    Returns:
+        List[List[pd.DataFrame]]: Список списков DataFrame, сгруппированных по классам
+    """
+    # Собираем все уникальные классы
+    all_classes = set()
+    
+    for df in dataframes:
+        if hasattr(df, 'attrs') and type in df.attrs:
+            class_value = df.attrs[type]
+            # Если класс - это список, добавляем все элементы
+            if isinstance(class_value, list):
+                all_classes.update(class_value)
+            else:
+                all_classes.add(class_value)
+    
+    # Создаем словарь для группировки
+    class_groups = {cls: [] for cls in all_classes}
+    
+    # Распределяем DataFrame по классам
+    for df in dataframes:
+        if hasattr(df, 'attrs') and type in df.attrs:
+            class_value = df.attrs[type]
+            
+            if isinstance(class_value, list):
+                # Если несколько классов, добавляем DataFrame во все соответствующие группы
+                for cls in class_value:
+                    if cls in class_groups:
+                        class_groups[cls].append(df)
+            else:
+                # Если один класс, добавляем в соответствующую группу
+                if class_value in class_groups:
+                    class_groups[class_value].append(df)
+    
+    # Преобразуем словарь в список списков
+    return list(class_groups.values())
