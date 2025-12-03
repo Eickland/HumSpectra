@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, Set, Optional, Any, List
 import json
 import hashlib
 from datetime import datetime
@@ -12,6 +12,8 @@ from datetime import datetime
 class Sample:
     """Класс для хранения всех данных образца"""
     sample_id: str
+    sample_subclass: str
+    sample_class: str
     
     # Основные спектральные данные
     fluorescence_eem: Optional[pd.DataFrame] = None
@@ -35,7 +37,7 @@ class Sample:
     # Метаданные
     file_path: Optional[Path] = None
     measurement_date: Optional[str] = None
-    sample_type: str = ""
+    sample_tags: Set[str] = field(default_factory=set)
     comments: str = ""
     
     # Вспомогательные данные
@@ -59,6 +61,8 @@ class Sample:
         """Конвертирует в словарь для сериализации"""
         return {
             'sample_id': self.sample_id,
+            'sample_subclass': self.sample_subclass,
+            'sample_class': self.sample_class,
             'fluorescence_eem': self.fluorescence_eem,
             'uv_vis_absorption': self.uv_vis_absorption,
             'org_carbon': self.org_carbon,
@@ -70,7 +74,7 @@ class Sample:
             'descriptors': self.descriptors,
             'file_path': str(self.file_path) if self.file_path else None,
             'measurement_date': self.measurement_date,
-            'sample_type': self.sample_type,
+            'sample_tags': self.sample_tags,
             'comments': self.comments,
             '_data_hash': self._data_hash
         }
@@ -83,6 +87,8 @@ class Sample:
         
         return cls(
             sample_id=data['sample_id'],
+            sample_subclass=data['sample_subclass'],
+            sample_class=data['sample_class'],
             fluorescence_eem=data.get('fluorescence_eem'),
             uv_vis_absorption=data.get('uv_vis_absorption'),
             org_carbon=data.get('org_carbon'),
@@ -94,10 +100,34 @@ class Sample:
             descriptors=data.get('descriptors', {}),
             file_path=file_path,
             measurement_date=data.get('measurement_date'),
-            sample_type=data.get('sample_type', ''),
+            sample_tags=data.get('sample_tags', []),
             comments=data.get('comments', ''),
             _data_hash=data.get('_data_hash')
         )
+        
+    def add_tag(self, *tags: str):
+        """Добавляет один или несколько тегов"""
+        self.sample_tags.update(tags)
+    
+    def remove_tag(self, tag: str):
+        """Удаляет тег"""
+        self.sample_tags.discard(tag)
+    
+    def has_tag(self, tag: str) -> bool:
+        """Проверяет наличие тега"""
+        return tag in self.sample_tags
+    
+    def has_all_tags(self, *tags: str) -> bool:
+        """Проверяет наличие всех указанных тегов"""
+        return all(tag in self.sample_tags for tag in tags)
+    
+    def has_any_tag(self, *tags: str) -> bool:
+        """Проверяет наличие хотя бы одного из тегов"""
+        return any(tag in self.sample_tags for tag in tags)
+    
+    def clear_tags(self):
+        """Очищает все теги"""
+        self.sample_tags.clear()
 
 class SampleCollection:
     """Коллекция образцов с возможностью сохранения/загрузки"""
@@ -106,12 +136,14 @@ class SampleCollection:
         self.samples: Dict[str, Sample] = {}
         self.cache_dir = cache_dir or Path("./sample_cache")
         self.cache_dir.mkdir(exist_ok=True)
+        self._tag_index: Dict[str, Set[str]] = {}
         
     def add_sample(self, sample: Sample):
         """Добавляет образец в коллекцию"""
         if sample._data_hash is None:
             sample._data_hash = sample.calculate_hash()
         self.samples[sample.sample_id] = sample
+        self._update_tag_index(sample)
     
     def create_sample_from_data(
         self,
@@ -152,6 +184,13 @@ class SampleCollection:
         }
         with open(json_path, 'w') as f:
             json.dump(json_data, f, indent=2, default=str)
+            
+    def _update_tag_index(self, sample: Sample):
+        """Обновляет индекс тегов"""
+        for tag in sample.sample_tags:
+            if tag not in self._tag_index:
+                self._tag_index[tag] = set()
+            self._tag_index[tag].add(sample.sample_id)
     
     def load_sample(self, sample_id: str) -> Sample:
         """Загружает образец из файла"""
@@ -185,6 +224,64 @@ class SampleCollection:
             # Используем фабричный метод
             sample = Sample.from_dict(data)
             self.samples[sample.sample_id] = sample
+            
+        # Методы фильтрации
+    def filter_by_tag(self, tag: str) -> List[Sample]:
+        """Возвращает все образцы с указанным тегом"""
+        sample_ids = self._tag_index.get(tag, set())
+        return [self.samples[sid] for sid in sample_ids]
+    
+    def filter_by_tags_all(self, *tags: str) -> List[Sample]:
+        """Возвращает образцы, имеющие ВСЕ указанные теги"""
+        if not tags:
+            return list(self.samples.values())
+        
+        # Находим пересечение ID образцов по тегам
+        common_ids = None
+        for tag in tags:
+            tag_ids = self._tag_index.get(tag, set())
+            if common_ids is None:
+                common_ids = tag_ids
+            else:
+                common_ids = common_ids.intersection(tag_ids)
+            
+            if not common_ids:  # Нет пересечения
+                return []
+        
+        return [self.samples[sid] for sid in common_ids] if common_ids else []
+    
+    def filter_by_tags_any(self, *tags: str) -> List[Sample]:
+        """Возвращает образцы, имеющие ХОТЯ БЫ ОДИН из указанных тегов"""
+        if not tags:
+            return list(self.samples.values())
+        
+        # Объединяем ID образцов по всем тегам
+        all_ids = set()
+        for tag in tags:
+            all_ids.update(self._tag_index.get(tag, set()))
+        
+        return [self.samples[sid] for sid in all_ids]
+    
+    def filter_by_tags_none(self, *tags: str) -> List[Sample]:
+        """Возвращает образцы, НЕ имеющие ни одного из указанных тегов"""
+        if not tags:
+            return list(self.samples.values())
+        
+        # Собираем все ID с любым из тегов
+        excluded_ids = set()
+        for tag in tags:
+            excluded_ids.update(self._tag_index.get(tag, set()))
+        
+        return [s for sid, s in self.samples.items() 
+                if sid not in excluded_ids]
+    
+    def get_all_tags(self) -> Set[str]:
+        """Возвращает все уникальные теги в коллекции"""
+        return set(self._tag_index.keys())
+    
+    def get_samples_without_tags(self) -> List[Sample]:
+        """Возвращает образцы без тегов"""
+        return [s for s in self.samples.values() if not s.sample_tags]
 
 # Пример использования
 if __name__ == "__main__":

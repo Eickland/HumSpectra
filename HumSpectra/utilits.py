@@ -6,7 +6,7 @@ from transliterate import translit
 import numpy as np
 from scipy.spatial import ConvexHull
 from scipy import stats
-from typing import Any, Dict
+from typing import Any, List
 import warnings
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
