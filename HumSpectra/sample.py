@@ -61,6 +61,11 @@ class Sample:
             'sample_id': self.sample_id,
             'fluorescence_eem': self.fluorescence_eem,
             'uv_vis_absorption': self.uv_vis_absorption,
+            'org_carbon': self.org_carbon,
+            'pH': self.pH,
+            'Eh': self.Eh,
+            'latitude': self.latitude,
+            'lonitude': self.lonitude,
             'measurement_params': self.measurement_params,
             'descriptors': self.descriptors,
             'file_path': str(self.file_path) if self.file_path else None,
@@ -69,6 +74,30 @@ class Sample:
             'comments': self.comments,
             '_data_hash': self._data_hash
         }
+        
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Sample':
+        """Создает объект Sample из словаря (альтернативный конструктор)"""
+        # Обрабатываем специальные поля
+        file_path = Path(data['file_path']) if data.get('file_path') else None
+        
+        return cls(
+            sample_id=data['sample_id'],
+            fluorescence_eem=data.get('fluorescence_eem'),
+            uv_vis_absorption=data.get('uv_vis_absorption'),
+            org_carbon=data.get('org_carbon'),
+            pH=data.get('pH'),
+            Eh=data.get('Eh'),
+            latitude=data.get('latitude'),
+            lonitude=data.get('lonitude'),
+            measurement_params=data.get('measurement_params', {}),
+            descriptors=data.get('descriptors', {}),
+            file_path=file_path,
+            measurement_date=data.get('measurement_date'),
+            sample_type=data.get('sample_type', ''),
+            comments=data.get('comments', ''),
+            _data_hash=data.get('_data_hash')
+        )
 
 class SampleCollection:
     """Коллекция образцов с возможностью сохранения/загрузки"""
@@ -134,20 +163,8 @@ class SampleCollection:
         with open(file_path, 'rb') as f:
             data = pickle.load(f)
         
-        # Восстанавливаем объект Sample
-        sample = Sample(
-            sample_id=data['sample_id'],
-            fluorescence_eem=data['fluorescence_eem'],
-            uv_vis_absorption=data['uv_vis_absorption'],
-            measurement_params=data.get('measurement_params', {}),
-            descriptors=data.get('descriptors', {}),
-            file_path=Path(data['file_path']) if data.get('file_path') else None,
-            measurement_date=data.get('measurement_date'),
-            sample_type=data.get('sample_type', ''),
-            comments=data.get('comments', ''),
-            _data_hash=data.get('_data_hash')
-        )
-        
+        # Используем фабричный метод
+        sample = Sample.from_dict(data)
         self.samples[sample_id] = sample
         return sample
     
@@ -165,34 +182,9 @@ class SampleCollection:
         
         self.samples.clear()
         for data in samples_data:
-            sample = Sample(
-                sample_id=data['sample_id'],
-                fluorescence_eem=data['fluorescence_eem'],
-                uv_vis_absorption=data['uv_vis_absorption'],
-                measurement_params=data.get('measurement_params', {}),
-                descriptors=data.get('descriptors', {}),
-                file_path=Path(data['file_path']) if data.get('file_path') else None,
-                measurement_date=data.get('measurement_date'),
-                sample_type=data.get('sample_type', ''),
-                comments=data.get('comments', ''),
-                _data_hash=data.get('_data_hash')
-            )
+            # Используем фабричный метод
+            sample = Sample.from_dict(data)
             self.samples[sample.sample_id] = sample
-    
-    def get_dataframe(self) -> pd.DataFrame:
-        """Возвращает дескрипторы и метаданные как DataFrame"""
-        rows = []
-        for sample in self.samples.values():
-            row = {
-                'sample_id': sample.sample_id,
-                **sample.descriptors,
-                'sample_type': sample.sample_type,
-                'measurement_date': sample.measurement_date,
-                'file_path': sample.file_path
-            }
-            rows.append(row)
-        
-        return pd.DataFrame(rows)
 
 # Пример использования
 if __name__ == "__main__":
@@ -230,6 +222,3 @@ if __name__ == "__main__":
     if current_hash != loaded_sample._data_hash:
         print("Данные изменились, нужно пересчитать дескрипторы!")
     
-    # Получение всех данных как DataFrame
-    df = collection.get_dataframe()
-    print(df.head())
