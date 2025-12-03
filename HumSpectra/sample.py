@@ -9,7 +9,7 @@ import hashlib
 from datetime import datetime
 
 @dataclass
-class SampleData:
+class Sample:
     """Класс для хранения всех данных образца"""
     sample_id: str
     
@@ -74,11 +74,11 @@ class SampleCollection:
     """Коллекция образцов с возможностью сохранения/загрузки"""
     
     def __init__(self, cache_dir: Optional[Path] = None):
-        self.samples: Dict[str, SampleData] = {}
+        self.samples: Dict[str, Sample] = {}
         self.cache_dir = cache_dir or Path("./sample_cache")
         self.cache_dir.mkdir(exist_ok=True)
         
-    def add_sample(self, sample: SampleData):
+    def add_sample(self, sample: Sample):
         """Добавляет образец в коллекцию"""
         if sample._data_hash is None:
             sample._data_hash = sample.calculate_hash()
@@ -91,9 +91,9 @@ class SampleCollection:
         uv_vis_absorption: pd.DataFrame|None = None,
         measurement_params: Dict|None = None,
         **kwargs
-    ) -> SampleData:
+    ) -> Sample:
         """Создает образец из исходных данных"""
-        sample = SampleData(
+        sample = Sample(
             sample_id=sample_id,
             fluorescence_eem=fluorescence_eem,
             uv_vis_absorption=uv_vis_absorption,
@@ -124,7 +124,7 @@ class SampleCollection:
         with open(json_path, 'w') as f:
             json.dump(json_data, f, indent=2, default=str)
     
-    def load_sample(self, sample_id: str) -> SampleData:
+    def load_sample(self, sample_id: str) -> Sample:
         """Загружает образец из файла"""
         file_path = self.cache_dir / f"{sample_id}.pkl"
         
@@ -134,8 +134,8 @@ class SampleCollection:
         with open(file_path, 'rb') as f:
             data = pickle.load(f)
         
-        # Восстанавливаем объект SampleData
-        sample = SampleData(
+        # Восстанавливаем объект Sample
+        sample = Sample(
             sample_id=data['sample_id'],
             fluorescence_eem=data['fluorescence_eem'],
             uv_vis_absorption=data['uv_vis_absorption'],
@@ -165,7 +165,7 @@ class SampleCollection:
         
         self.samples.clear()
         for data in samples_data:
-            sample = SampleData(
+            sample = Sample(
                 sample_id=data['sample_id'],
                 fluorescence_eem=data['fluorescence_eem'],
                 uv_vis_absorption=data['uv_vis_absorption'],
