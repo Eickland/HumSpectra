@@ -4,8 +4,8 @@ import pandas as pd
 from pandas import DataFrame
 from typing import Optional, Union, List
 from matplotlib.axes import Axes
-from math import ceil, sqrt
-from scipy.optimize import curve_fit 
+from scipy import signal
+from scipy.ndimage import uniform_filter1d
 
 from HumSpectra import utilits as ut
 
@@ -455,126 +455,6 @@ def check_uv_spectra_type_by_path(path: str):
         spectra_type = "absorption"
         
     return spectra_type
-    
-def plot_uv_spectra_by_subclass(spectra_list: List[pd.DataFrame],
-                            plot_func, 
-                           figsize_multiplier: int = 4,
-                           sharey: bool = True, 
-                           sharex: bool = True,
-                           norm_by_TOC: bool = False,
-                           show_titles: bool = True,
-                           show_xlabels: bool = True,
-                           show_ylabels: bool = True) -> None:
-    """
-    Отображает спектры по подклассам на отдельных графиках с использованием функции.
-    
-    Parameters:
-    -----------
-    spectra_list : list of DataFrame
-        Список спектров (DataFrame) с атрибутами 'name' и 'subclass' в .attrs
-    figsize_multiplier : int, default=4
-        Множитель для размера фигуры
-    sharey : bool, default=True
-        Общий масштаб по оси Y для всех подграфиков
-    sharex : bool, default=True
-        Общий масштаб по оси X для всех подграфиков
-    norm_by_TOC : bool, default=False
-        Нормализовать по TOC (передается в plot_uv)
-    show_titles : bool, default=True
-        Показывать заголовки графиков
-    show_xlabels : bool, default=True
-        Показывать подписи оси X
-    show_ylabels : bool, default=True
-        Показывать подписи оси Y
-    """
-    
-    # Группируем спектры по подклассам
-    spectra_by_subclass = {}
-    for spectrum in spectra_list:
-        subclass = spectrum.attrs.get('subclass', 'Unknown')
-        name = spectrum.attrs.get('name', 'Unnamed')
-        
-        if subclass not in spectra_by_subclass:
-            spectra_by_subclass[subclass] = []
-        
-        spectra_by_subclass[subclass].append({
-            'data': spectrum,
-            'name': name
-        })
-    
-    # Получаем список подклассов
-    subclasses = list(spectra_by_subclass.keys())
-    n_subclasses = len(subclasses)
-    
-    if n_subclasses == 0:
-        print("Нет спектров для отображения")
-        return
-    
-    # Определяем оптимальную размерность subplots
-    n_cols = ceil(sqrt(n_subclasses))
-    n_rows = ceil(n_subclasses / n_cols)
-    
-    # Создаем фигуру с оптимальным размером
-    fig, axes = plt.subplots(n_rows, n_cols, 
-                            figsize=(n_cols * figsize_multiplier, n_rows * figsize_multiplier),
-                            sharey=sharey, sharex=sharex,
-                            squeeze=False)
-    
-    # Выравниваем axes в плоский массив для удобства итерации
-    axes_flat = axes.flatten()
-    
-    # Отрисовываем спектры для каждого подкласса с использованием plot_uv
-    for idx, subclass in enumerate(subclasses):
-        ax = axes_flat[idx]
-        spectra_data = spectra_by_subclass[subclass]
-        
-        # Рисуем все спектры этого подкласса
-        for spectrum_info in spectra_data:
-            spectrum_df = spectrum_info['data']
-            name = spectrum_info['name']
-            
-            # Используем функцию plot для отрисовки каждого спектра
-            plot_func(data=spectrum_df,
-                   xlabel=False,  # Убираем xlabel для отдельных графиков
-                   ylabel=False,  # Убираем ylabel для отдельных графиков
-                   title=False,   # Убираем title для отдельных графиков
-                   ax=ax,
-                   name=name)
-        
-        # Добавляем заголовок подкласса
-        if show_titles:
-            ax.set_title(f'Подкласс: {subclass}\n(спектров: {len(spectra_data)})', 
-                        fontsize=12, fontweight='bold')
-        
-        # Добавляем подписи осей только если нужно
-        if show_xlabels:
-            ax.set_xlabel("λ поглощения, нм")
-        if show_ylabels:
-            if norm_by_TOC:
-                ax.set_ylabel("SUVA, $см^{-1}*мг^{-1}*л$")
-            else:
-                ax.set_ylabel("Интенсивность")
-        
-        ax.grid(True, alpha=0.3)
-        
-        # Настраиваем легенду в зависимости от количества спектров
-        if len(spectra_data) <= 8:
-            ax.legend(fontsize=8)
-        else:
-            # Для большого количества спектров уменьшаем шрифт или выносим легенду
-            ax.legend(fontsize=6, loc='upper right')
-    
-    # Скрываем пустые subplots
-    for idx in range(len(subclasses), len(axes_flat)):
-        axes_flat[idx].set_visible(False)
-    
-    plt.tight_layout()
-    plt.show()
-    
-    # Выводим статистику
-    print(f"Всего подклассов: {n_subclasses}")
-    for subclass, spectra in spectra_by_subclass.items():
-        print(f"  {subclass}: {len(spectra)} спектров")
         
 def add_toc_to_spectra(spectra: List[pd.DataFrame], 
                             toc_table: pd.DataFrame, 
@@ -630,3 +510,77 @@ def add_toc_to_spectra(spectra: List[pd.DataFrame],
         print(f"Обработка завершена. Удалено спектров: {removed_count}, осталось: {len(updated_spectra)}")
     
     return updated_spectra
+
+def smooth_uv_spectrum(df, window_size=5, threshold_factor=2.0, min_peak_height=0.0001):
+    """
+    Находит и сглаживает участки с резкими перепадами интенсивности в УФ спектре
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        DataFrame с колонками 'nm' (длина волны) и 'absorption' (интенсивность)
+    window_size : int
+        Размер окна для скользящего среднего (по умолчанию 5)
+    threshold_factor : float
+        Коэффициент для определения порога перепадов (по умолчанию 2.0)
+    min_peak_height : float
+        Минимальная высота пика для обнаружения (по умолчанию 0.01)
+    
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame с исходными данными и дополнительной колонкой 'absorption_smooth'
+        содержащей сглаженный спектр
+    """
+    
+    # Создаем копию DataFrame чтобы не изменять исходные данные
+    result_df = df.copy()
+    absorption = df['absorption'].values
+    
+    # 1. Вычисляем первую производную (градиент) для обнаружения резких изменений
+    gradient = np.gradient(absorption)
+    
+    # 2. Находим точки с резкими изменениями интенсивности
+    threshold = threshold_factor * np.std(gradient)
+    
+    # Находим индексы где производная превышает порог (резкие изменения)
+    sharp_changes = np.where(np.abs(gradient) > threshold)[0]
+    
+    # 3. Обнаруживаем пики в исходном сигнале для идентификации проблемных зон
+    peaks, _ = signal.find_peaks(absorption, height=min_peak_height, distance=10)
+    valleys, _ = signal.find_peaks(-absorption, height=-max(absorption), distance=10)
+    
+    # Объединяем все проблемные точки
+    problematic_indices = np.unique(np.concatenate([sharp_changes, peaks, valleys]))
+    
+    # 4. Создаем маску для участков с перепадами
+    mask = np.zeros(len(absorption), dtype=bool)
+    if len(problematic_indices) > 0:
+        # Расширяем область вокруг проблемных точек
+        for idx in problematic_indices:
+            start = max(0, idx - window_size)
+            end = min(len(absorption), idx + window_size + 1)
+            mask[start:end] = True
+    
+    # 5. Применяем сглаживание только к проблемным участкам
+    smoothed = absorption.copy()
+    
+    if np.any(mask):
+        # Для проблемных участков применяем сглаживание
+        smoothed_mask = uniform_filter1d(absorption, size=window_size)
+        smoothed[mask] = smoothed_mask[mask]
+        
+        # Дополнительное сглаживание для очень резких перепадов
+        extreme_changes = np.where(np.abs(gradient) > 2 * threshold)[0]
+        if len(extreme_changes) > 0:
+            for idx in extreme_changes:
+                start = max(0, idx - window_size * 2)
+                end = min(len(absorption), idx + window_size * 2 + 1)
+                # Используем более сильное сглаживание для экстремальных перепадов
+                extreme_smooth = uniform_filter1d(absorption[start:end], size=window_size * 2)
+                smoothed[start:end] = extreme_smooth
+    
+    # 6. Добавляем сглаженные данные в DataFrame
+    result_df[result_df.columns[0]] = smoothed
+    
+    return result_df
