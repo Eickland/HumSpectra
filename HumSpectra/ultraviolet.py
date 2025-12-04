@@ -215,15 +215,19 @@ def plot_uv(data: DataFrame,
 
     # Определяем имя спектра
     if name is None:
+        
         if "name" in data_copy.attrs:
             name = data_copy.attrs["name"]
+            
         else:
             name = "uv_spectra"
 
     # Нормализация по TOC
     if norm_by_TOC:
+        
         if "TOC" not in data_copy.attrs:
             raise KeyError("В метаданных спектра должно быть значения содержания органического углерода")
+        
         data_copy = data_copy / data_copy.attrs['TOC']
 
     # Создаем ось если не передана
@@ -241,15 +245,21 @@ def plot_uv(data: DataFrame,
     # Добавляем подписи
     if title:
         ax.set_title(str(name))
+        
     if ylim:
         ax.set_ylim((0,ylim))
+        
     if xlabel:
         ax.set_xlabel("λ поглощения, нм")
+        
     if ylabel:
+        
         if norm_by_TOC:
             ax.set_ylabel("SUVA, $см^{-1}*мг^{-1}*л$")
+            
         else:
-            ax.set_ylabel("Интенсивность")
+            
+            ax.set_ylabel("Оптическая плотность")
 
     return ax
 

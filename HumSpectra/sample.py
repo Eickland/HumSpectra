@@ -20,6 +20,11 @@ class Sample:
     uv_vis_absorption: Optional[pd.DataFrame] = None
     uv_vis_reflection: Optional[pd.DataFrame] = None
     
+    cutted_fluo_eem: Optional[pd.DataFrame] = None
+    
+    uv_vis_absorption_smooth: Optional[pd.DataFrame] = None
+    uv_vis_reflection_smooth: Optional[pd.DataFrame] = None
+    
     #Дополнительные данные
     org_carbon: Optional[float] = None
     pH: Optional[float] = None
@@ -67,6 +72,9 @@ class Sample:
             'fluorescence_eem': self.fluorescence_eem,
             'uv_vis_absorption': self.uv_vis_absorption,
             'uv_vis_reflection': self.uv_vis_reflection,
+            'cutted_fluo_eem': self.cutted_fluo_eem,
+            'uv_vis_absorption_smooth': self.uv_vis_absorption_smooth,
+            'uv_vis_reflection_smooth': self.uv_vis_reflection_smooth,
             'org_carbon': self.org_carbon,
             'pH': self.pH,
             'Eh': self.Eh,
@@ -94,6 +102,9 @@ class Sample:
             fluorescence_eem=data.get('fluorescence_eem'),
             uv_vis_absorption=data.get('uv_vis_absorption'),
             uv_vis_reflection=data.get('uv_vis_reflection'),
+            cutted_fluo_eem=data.get('cutted_fluo_eem'),
+            uv_vis_absorption_smooth=data.get('uv_vis_absorption_smooth'),
+            uv_vis_reflection_smooth=data.get('uv_vis_reflection_smooth'),
             org_carbon=data.get('org_carbon'),
             pH=data.get('pH'),
             Eh=data.get('Eh'),
