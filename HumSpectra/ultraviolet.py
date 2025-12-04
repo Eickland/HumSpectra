@@ -240,6 +240,10 @@ def calc_ir_19_20(data: DataFrame,
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
     
+    # Предполагаем, что data - это DataFrame с одним столбцом (поглощение)
+    # и индексом, представляющим длины волн
+    
+    # Находим ближайшие индексы для заданных диапазонов
     series = pd.Series(data.index, index=data.index)
     
     index_low_left = series.sub(low_wv_left).abs().idxmin()
@@ -247,12 +251,25 @@ def calc_ir_19_20(data: DataFrame,
     index_high_left = series.sub(high_wv_left).abs().idxmin()
     index_high_right = series.sub(high_wv_right).abs().idxmin()
     
-    high = np.trapezoid(
-        data.loc[index_high_left:index_high_right]
-    )
-    low = np.trapezoid(
-        data.loc[index_low_left:index_low_right]
-    )
+    # Извлекаем данные для каждого диапазона
+    # Используем .iloc для гарантии правильного порядка
+    high_data = data.loc[index_high_left:index_high_right]
+    low_data = data.loc[index_low_left:index_low_right]
+    
+    # Если data имеет несколько столбцов, нужно указать конкретный столбец
+    # или проинтегрировать каждый столбец отдельно
+    if len(data.columns) > 1:
+        # Вариант 1: интегрируем первый столбец
+        high = np.trapezoid(high_data.iloc[:, 0], x=high_data.index)
+        low = np.trapezoid(low_data.iloc[:, 0], x=low_data.index)
+    else:
+        # Вариант 2: интегрируем единственный столбец
+        high = np.trapezoid(high_data.values.flatten(), x=high_data.index)
+        low = np.trapezoid(low_data.values.flatten(), x=low_data.index)
+    
+    # Проверяем деление на ноль
+    if low == 0:
+        raise ValueError("Знаменатель (интеграл низкого диапазона) равен нулю")
     
     uv_param = float(high / low)
 
