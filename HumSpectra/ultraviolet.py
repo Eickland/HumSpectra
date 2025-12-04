@@ -535,10 +535,10 @@ def smooth_uv_spectrum(df, window_size=5, threshold_factor=2.0, min_peak_height=
     
     # Создаем копию DataFrame чтобы не изменять исходные данные
     result_df = df.copy()
-    absorption = df['absorption'].values
+    intensity = df[df.columns[0]].values
     
     # 1. Вычисляем первую производную (градиент) для обнаружения резких изменений
-    gradient = np.gradient(absorption)
+    gradient = np.gradient(intensity)
     
     # 2. Находим точки с резкими изменениями интенсивности
     threshold = threshold_factor * np.std(gradient)
@@ -547,27 +547,27 @@ def smooth_uv_spectrum(df, window_size=5, threshold_factor=2.0, min_peak_height=
     sharp_changes = np.where(np.abs(gradient) > threshold)[0]
     
     # 3. Обнаруживаем пики в исходном сигнале для идентификации проблемных зон
-    peaks, _ = signal.find_peaks(absorption, height=min_peak_height, distance=10)
-    valleys, _ = signal.find_peaks(-absorption, height=-max(absorption), distance=10)
+    peaks, _ = signal.find_peaks(intensity, height=min_peak_height, distance=10)
+    valleys, _ = signal.find_peaks(-intensity, height=-max(intensity), distance=10)
     
     # Объединяем все проблемные точки
     problematic_indices = np.unique(np.concatenate([sharp_changes, peaks, valleys]))
     
     # 4. Создаем маску для участков с перепадами
-    mask = np.zeros(len(absorption), dtype=bool)
+    mask = np.zeros(len(intensity), dtype=bool)
     if len(problematic_indices) > 0:
         # Расширяем область вокруг проблемных точек
         for idx in problematic_indices:
             start = max(0, idx - window_size)
-            end = min(len(absorption), idx + window_size + 1)
+            end = min(len(intensity), idx + window_size + 1)
             mask[start:end] = True
     
     # 5. Применяем сглаживание только к проблемным участкам
-    smoothed = absorption.copy()
+    smoothed = intensity.copy()
     
     if np.any(mask):
         # Для проблемных участков применяем сглаживание
-        smoothed_mask = uniform_filter1d(absorption, size=window_size)
+        smoothed_mask = uniform_filter1d(intensity, size=window_size)
         smoothed[mask] = smoothed_mask[mask]
         
         # Дополнительное сглаживание для очень резких перепадов
@@ -575,9 +575,9 @@ def smooth_uv_spectrum(df, window_size=5, threshold_factor=2.0, min_peak_height=
         if len(extreme_changes) > 0:
             for idx in extreme_changes:
                 start = max(0, idx - window_size * 2)
-                end = min(len(absorption), idx + window_size * 2 + 1)
+                end = min(len(intensity), idx + window_size * 2 + 1)
                 # Используем более сильное сглаживание для экстремальных перепадов
-                extreme_smooth = uniform_filter1d(absorption[start:end], size=window_size * 2)
+                extreme_smooth = uniform_filter1d(intensity[start:end], size=window_size * 2)
                 smoothed[start:end] = extreme_smooth
     
     # 6. Добавляем сглаженные данные в DataFrame
