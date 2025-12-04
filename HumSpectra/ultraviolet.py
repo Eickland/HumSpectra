@@ -458,7 +458,7 @@ def calc_ag(absorbance_series, path_length_cm=1.0):
     ag_values = 2.303 * absorbance_series / path_length_m
     return ag_values
 
-def calc_spectral_slope(ag_series, lambda1, lambda2):
+def calc_spectral_slope(ag_series, lambda1, lambda2) -> float:
     """
     Calculate spectral slope S between two wavelengths
     
@@ -483,7 +483,7 @@ def calc_spectral_slope(ag_series, lambda1, lambda2):
     S = - (np.log(ag1) - np.log(ag2)) / (lambda1 - lambda2)
     return S
 
-def calc_B1_band(ag_series):
+def calc_B1_band(ag_series) -> float:
     """
     Calculate B1' band intensity
     
@@ -519,7 +519,7 @@ def calc_B1_band(ag_series):
     
     return B1_prime
 
-def calc_B2_band(ag_series):
+def calc_B2_band(ag_series) -> float:
     """
     Calculate B2' band intensity
     
