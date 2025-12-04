@@ -234,10 +234,23 @@ class SampleCollection:
             samples_data = pickle.load(f)
         
         self.samples.clear()
+        self._tag_index.clear()  # Очищаем индекс
+        
         for data in samples_data:
-            # Используем фабричный метод
             sample = Sample.from_dict(data)
             self.samples[sample.sample_id] = sample
+            
+        # ВАЖНО: перестраиваем индекс после загрузки всех образцов
+        self._rebuild_tag_index()
+
+    def _rebuild_tag_index(self):
+        """Перестраивает индекс тегов с нуля"""
+        self._tag_index.clear()
+        for sample_id, sample in self.samples.items():
+            for tag in sample.sample_tags:
+                if tag not in self._tag_index:
+                    self._tag_index[tag] = set()
+                self._tag_index[tag].add(sample_id)
             
         # Методы фильтрации
     def filter_by_tag(self, tag: str) -> List[Sample]:
