@@ -5,12 +5,14 @@ import pandas as pd
 import numpy as np
 import tensorly as tl
 from tensorly.decomposition import non_negative_parafac_hals
+from typing import Dict, Set, Optional, Any, List, Union, Tuple
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import seaborn as sns
 
 import HumSpectra.fluorescence as fl
 import HumSpectra.utilits as ut
+from HumSpectra.sample import SampleCollection, Sample
 
 class EEMDataLoader:
     def __init__(self):
@@ -18,10 +20,245 @@ class EEMDataLoader:
         self.sample_names = []
         self.excitation_wavelengths = None
         self.emission_wavelengths = None
+    
+    def load_eem_from_samples(
+        self,
+        samples: Union[List[Sample], Dict[str, Sample], 'SampleCollection'],
+        data_field: str = 'cutted_fluo',  # или 'fluorescence_eem', 'cutted_fluo'
+        filter_tags: Optional[List[str]] = ['cutted_fluo'],
+        filter_mode: str = 'all',  # 'all', 'any', 'none'
+        require_all_tags: bool = True,  # Устаревший параметр, для обратной совместимости
+        min_shape: Optional[Tuple[int, int]] = None,
+        max_shape: Optional[Tuple[int, int]] = None,
+        normalize: bool = False,
+        fill_missing: bool = False,
+        fill_value: float = 0.0
+    ) -> Tuple[tl.tensor, np.ndarray, np.ndarray, List[str], List[Sample]]:
+        """
+        Загружает EEM данные из коллекции Sample в тензор.
         
-    def load_eem_data(self, data_folders=None, index_col=None):
+        Parameters:
+        -----------
+        samples : Union[List[Sample], Dict[str, Sample], SampleCollection]
+            Коллекция образцов
+        data_field : str
+            Поле с EEM данными:
+            - 'fluorescence_eem': сырые флуоресцентные данные
+            - 'cutted_fluo_eem': обрезанные флуоресцентные данные
+            - 'uv_vis_absorption': UV-Vis поглощение
+            - 'uv_vis_reflection': UV-Vis отражение
+        filter_tags : Optional[List[str]]
+            Список тегов для фильтрации
+        filter_mode : str
+            Режим фильтрации:
+            - 'all': образцы должны содержать ВСЕ теги
+            - 'any': образцы должны содержать ХОТЯ БЫ ОДИН тег
+            - 'none': образцы не должны содержать НИ ОДНОГО тега
+        require_all_tags : bool
+            Устаревший параметр, используйте filter_mode='all'
+        min_shape : Optional[Tuple[int, int]]
+            Минимальный размер матрицы (rows, cols)
+        max_shape : Optional[Tuple[int, int]]
+            Максимальный размер матрицы (rows, cols)
+        normalize : bool
+            Нормализовать каждый спектр по максимуму
+        fill_missing : bool
+            Заполнять отсутствующие данные
+        fill_value : float
+            Значение для заполнения отсутствующих данных
+            
+        Returns:
+        --------
+        Tuple[tl.tensor, np.ndarray, np.ndarray, List[str], List[Sample]]
+            (тензор, emission_wavelengths, excitation_wavelengths, 
+             sample_names, filtered_samples)
+        """
+        # Конвертируем входные данные в список
+        if isinstance(samples, dict):
+            sample_list = list(samples.values())
+        elif isinstance(samples, list):
+            sample_list = samples
+        elif hasattr(samples, 'samples'):  # SampleCollection
+            sample_list = list(samples.samples.values())
+        else:
+            raise TypeError(f"Неподдерживаемый тип данных: {type(samples)}")
+        
+        # Фильтрация по тегам
+        if filter_tags:
+            filtered_samples = []
+            for sample in sample_list:
+                if filter_mode == 'all' or require_all_tags:
+                    if sample.has_all_tags(*filter_tags):
+                        filtered_samples.append(sample)
+                elif filter_mode == 'any':
+                    if sample.has_any_tag(*filter_tags):
+                        filtered_samples.append(sample)
+                elif filter_mode == 'none':
+                    if not sample.has_any_tag(*filter_tags):
+                        filtered_samples.append(sample)
+                else:
+                    raise ValueError(f"Неизвестный режим фильтрации: {filter_mode}")
+            sample_list = filtered_samples
+        
+        print(f"Образцов после фильтрации: {len(sample_list)}")
+        
+        if not sample_list:
+            raise ValueError("Нет образцов для загрузки после фильтрации")
+        
+        # Загрузка данных
+        eem_matrices = []
+        valid_samples = []
+        self.sample_names = []
+        self.sample_objects = []
+        
+        # Проверяем доступные поля данных
+        available_fields = []
+        sample_data_counts = {field: 0 for field in 
+                             ['fluorescence_eem', 'cutted_fluo_eem', 
+                              'uv_vis_absorption', 'uv_vis_reflection',
+                              'uv_vis_absorption_smooth', 'uv_vis_reflection_smooth']}
+        
+        for sample in sample_list:
+            for field in sample_data_counts.keys():
+                if getattr(sample, field) is not None:
+                    sample_data_counts[field] += 1
+        
+        print("Доступные поля данных:")
+        for field, count in sample_data_counts.items():
+            if count > 0:
+                print(f"  {field}: {count} образцов")
+        
+        # Основная загрузка
+        for i, sample in enumerate(sample_list):
+            try:
+                # Получаем данные из указанного поля
+                data = getattr(sample, data_field)
+                
+                if data is None:
+                    # Попробуем альтернативные поля если основное пустое
+                    if data_field == 'cutted_fluo' and sample.fluorescence_eem is not None:
+                        print(f"Предупреждение: У образца {sample.sample_id} нет {data_field}, "
+                              f"используем fluorescence_eem")
+                        data = sample.fluorescence_eem
+                    elif data_field == 'fluorescence_eem' and sample.cutted_fluo_eem is not None:
+                        print(f"Предупреждение: У образца {sample.sample_id} нет {data_field}, "
+                              f"используем cutted_fluo_eem")
+                        data = sample.cutted_fluo_eem
+                    else:
+                        print(f"Пропускаем образец {sample.sample_id}: нет данных в поле {data_field}")
+                        continue
+                
+                # Проверяем тип данных
+                if not isinstance(data, pd.DataFrame):
+                    print(f"Пропускаем образец {sample.sample_id}: данные не являются DataFrame")
+                    continue
+                
+                # Проверяем размерность
+                if data.empty or data.shape[0] < 2 or data.shape[1] < 2:
+                    print(f"Пропускаем образец {sample.sample_id}: некорректная размерность {data.shape}")
+                    continue
+                
+                # Проверяем размеры если указаны ограничения
+                if min_shape and (data.shape[0] < min_shape[0] or data.shape[1] < min_shape[1]):
+                    print(f"Пропускаем образец {sample.sample_id}: размер {data.shape} меньше минимального {min_shape}")
+                    continue
+                
+                if max_shape and (data.shape[0] > max_shape[0] or data.shape[1] > max_shape[1]):
+                    print(f"Пропускаем образец {sample.sample_id}: размер {data.shape} больше максимального {max_shape}")
+                    continue
+                
+                # Преобразуем в numpy array
+                eem_matrix = data.values.astype(float)
+                
+                # Проверяем на NaN/Inf
+                if np.any(np.isnan(eem_matrix)) or np.any(np.isinf(eem_matrix)):
+                    if fill_missing:
+                        eem_matrix = np.nan_to_num(eem_matrix, nan=fill_value, posinf=fill_value, neginf=fill_value)
+                        print(f"Заполнены пропущенные значения в образце {sample.sample_id}")
+                    else:
+                        print(f"Пропускаем образец {sample.sample_id}: обнаружены NaN/Inf значения")
+                        continue
+                
+                # Нормализация
+                if normalize:
+                    max_val = np.max(eem_matrix)
+                    if max_val > 0:
+                        eem_matrix = eem_matrix / max_val
+                    else:
+                        print(f"Предупреждение: нулевая матрица в образце {sample.sample_id}")
+                
+                # Извлекаем длины волн (только при первой успешной загрузке)
+                if self.excitation_wavelengths is None:
+                    try:
+                        self.excitation_wavelengths = np.array(data.columns, dtype=float)
+                    except:
+                        self.excitation_wavelengths = np.arange(data.shape[1])
+                
+                if self.emission_wavelengths is None:
+                    try:
+                        self.emission_wavelengths = np.array(data.index, dtype=float)
+                    except:
+                        self.emission_wavelengths = np.arange(data.shape[0])
+                
+                # Проверяем совместимость размерностей
+                try:
+                    current_ex_wavelengths = np.array(data.columns, dtype=float)
+                    current_em_wavelengths = np.array(data.index, dtype=float)
+                    
+                    if (not np.array_equal(self.excitation_wavelengths, current_ex_wavelengths) or
+                        not np.array_equal(self.emission_wavelengths, current_em_wavelengths)):
+                        print(f"Предупреждение: Размерности образца {sample.sample_id} не совпадают. Образец пропущен.")
+                        continue
+                except:
+                    # Если не удалось получить длины волн, проверяем только размер
+                    if (self.excitation_wavelengths is not None and 
+                        len(self.excitation_wavelengths) != data.shape[1]):
+                        print(f"Предупреждение: Размерность по excitation образца {sample.sample_id} не совпадает.")
+                        continue
+                    if (self.emission_wavelengths is not None and 
+                        len(self.emission_wavelengths) != data.shape[0]):
+                        print(f"Предупреждение: Размерность по emission образца {sample.sample_id} не совпадает.")
+                        continue
+                
+                # Все проверки пройдены
+                eem_matrices.append(eem_matrix)
+                valid_samples.append(sample)
+                self.sample_names.append(sample.sample_id)
+                self.sample_objects.append(sample)
+                
+                if len(eem_matrices) % 10 == 0:
+                    print(f"Загружено образцов: {len(eem_matrices)}")
+                    
+            except Exception as e:
+                print(f"Ошибка при загрузке образца {sample.sample_id}: {e}")
+                continue
+        
+        if not eem_matrices:
+            available_fields_str = ', '.join([f for f, c in sample_data_counts.items() if c > 0])
+            raise ValueError(f"Не удалось загрузить ни одного спектра. "
+                           f"Доступные поля данных: {available_fields_str}")
+        
+        # Создаем 3D тензор
+        self.tensor = np.stack(eem_matrices, axis=0)
+        
+        print(f"\nРезультат загрузки:")
+        print(f"Создан тензор размерности: {self.tensor.shape}")
+        print(f"Образцы: {len(self.sample_names)}")
+        print(f"Длины волн испускания: {len(self.emission_wavelengths) if self.emission_wavelengths is not None else 0}")
+        print(f"Длины волн возбуждения: {len(self.excitation_wavelengths) if self.excitation_wavelengths is not None else 0}")
+        print(f"Поле данных: {data_field}")
+        print(f"Фильтр тегов: {filter_tags if filter_tags else 'нет'}")
+        print(f"Режим фильтрации: {filter_mode}")
+        
+        return (tl.tensor(self.tensor), 
+                self.emission_wavelengths, 
+                self.excitation_wavelengths, 
+                self.sample_names,
+                valid_samples)   # type: ignore
+        
+    def load_eem_data(self, data_folders=None, index_col=None, 
+                      ):
         """Загрузка всех EEM спектров из одной или нескольких папок"""
-        
 
         if data_folders is None:
             data_folders = [self.data_folder]
@@ -864,7 +1101,7 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                                         value_name='Loading')
             
             # Создаем новый столбец для группировки: Component + Class
-            melted_data['Component_Class'] = melted_data['Component'] + '_' + melted_data[group_type].astype(str)
+            melted_data['Component_Class'] = melted_data['Component'] + '_' + melted_data[group_type].astype(str) # type: ignore
             
             # Определяем порядок отображения: сначала все классы с Component_1, потом Component_2 и т.д.
             component_order = sorted(melted_data['Component'].unique())
