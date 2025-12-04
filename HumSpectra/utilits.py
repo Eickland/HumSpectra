@@ -6,12 +6,11 @@ from transliterate import translit
 import numpy as np
 from scipy.spatial import ConvexHull
 from scipy import stats
-from typing import Any, List
 import warnings
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as path_effects
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-
+from typing import Dict, Set, Optional, Any, List, Union, Literal
 
 def extract_and_combine_digits_re(text: str) -> int:
     """Извлекает все цифры из строки и объединяет их в одно целое число.

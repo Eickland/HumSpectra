@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, Set, Optional, Any, List
+from typing import Dict, Set, Optional, Any, List, Union, Literal
 import json
 import hashlib
 from datetime import datetime
@@ -310,39 +310,226 @@ class SampleCollection:
         """Возвращает образцы без тегов"""
         return [s for s in self.samples.values() if not s.sample_tags]
 
-# Пример использования
-if __name__ == "__main__":
-    # Создание коллекции
-    collection = SampleCollection(cache_dir=Path("./data_cache"))
+# Утилитарные функции для работы с Sample и SampleCollection
+def split_by_category(
+    samples: Union[List[Sample], Dict[str, Sample], 'SampleCollection'],
+    category: Literal['class', 'subclass'] = 'subclass',
+    include_empty: bool = False
+) -> Dict[str, List[Sample]]:
+    """
+    Разделяет коллекцию образцов по категориям (классам или подклассам).
     
-    # Загрузка данных (пример)
-    sample_data = None
-    uv_data = None # УФ-видимый спектр
+    Parameters:
+    -----------
+    samples : Union[List[Sample], Dict[str, Sample], SampleCollection]
+        Коллекция образцов. Может быть:
+        - Список объектов Sample
+        - Словарь {sample_id: Sample}
+        - Объект SampleCollection
+    category : Literal['class', 'subclass']
+        По какой категории разделять:
+        - 'class' -> по sample_class
+        - 'subclass' -> по sample_subclass
+    include_empty : bool
+        Включать ли категории без образцов (пустые списки)
+        
+    Returns:
+    --------
+    Dict[str, List[Sample]]
+        Словарь, где ключ - название категории (класса/подкласса),
+        значение - список образцов этой категории.
+    """
+    # Преобразуем входные данные в список Sample
+    if isinstance(samples, dict):
+        sample_list = list(samples.values())
+    elif isinstance(samples, list):
+        sample_list = samples
+    elif hasattr(samples, 'samples'):  # Это SampleCollection
+        sample_list = list(samples.samples.values())
+    else:
+        raise TypeError(f"Неподдерживаемый тип данных: {type(samples)}")
     
-    # Создание образца
-    sample = collection.create_sample_from_data(
-        sample_id="sample_001",
-        fluorescence_eem=sample_data,
-        uv_vis_absorption=uv_data,
-        measurement_params={
-            "excitation_wavelengths": np.linspace(240, 450, 100),
-            "emission_wavelengths": np.linspace(250, 600, 100),
-            "integration_time": 0.1
-        },
-        sample_type="unknown",
-        measurement_date=datetime.now(),
-        comments="Первый тестовый образец"
-    )
+    # Группируем образцы по выбранной категории
+    result = {}
     
+    for sample in sample_list:
+        if category == 'class':
+            key = sample.sample_class
+        else:  # category == 'subclass'
+            key = sample.sample_subclass
+        
+        # Если ключ None или пустая строка, обрабатываем специально
+        if key is None or key == '':
+            key = '_unknown' if include_empty else None
+            if key is None:
+                continue
+        
+        if key not in result:
+            result[key] = []
+        result[key].append(sample)
     
-    # Сохранение образца
-    collection.save_sample("sample_001")
+    # Добавляем пустые категории если нужно
+    if include_empty:
+        # Получаем все уникальные категории из всех образцов
+        all_keys = set()
+        for sample in sample_list:
+            if category == 'class':
+                key = sample.sample_class
+            else:
+                key = sample.sample_subclass
+            all_keys.add(key if key else '_unknown')
+        
+        # Добавляем пустые списки для отсутствующих категорий
+        for key in all_keys:
+            if key not in result:
+                result[key] = []
     
-    # Позже можно загрузить
-    loaded_sample = collection.load_sample("sample_001")
+    return result
+
+def split_and_get_stats(
+    samples: Union[List[Sample], Dict[str, Sample], 'SampleCollection'],
+    category: Literal['class', 'subclass'] = 'subclass'
+) -> pd.DataFrame:
+    """
+    Разделяет коллекцию по категориям и возвращает статистику.
     
-    # Проверка, изменились ли данные
-    current_hash = loaded_sample.calculate_hash()
-    if current_hash != loaded_sample._data_hash:
+    Returns:
+    --------
+    pd.DataFrame
+        DataFrame со статистикой по категориям:
+        - category: название категории
+        - count: количество образцов
+        - percentage: процент от общего количества
+        - sample_ids: список ID образцов
+    """
+    grouped = split_by_category(samples, category, include_empty=True)
+    
+    total = sum(len(samples_list) for samples_list in grouped.values())
+    
+    stats_data = []
+    for category_name, samples_list in sorted(grouped.items()):
+        count = len(samples_list)
+        percentage = (count / total * 100) if total > 0 else 0
+        sample_ids = [s.sample_id for s in samples_list]
+        
+        stats_data.append({
+            'category': category_name,
+            'count': count,
+            'percentage': round(percentage, 2),
+            'sample_ids': sample_ids,
+            'sample_count': len(sample_ids)  # для удобства фильтрации
+        })
+    
+    return pd.DataFrame(stats_data)
+
+def get_samples_by_category(
+    samples: Union[List[Sample], Dict[str, Sample], 'SampleCollection'],
+    category_value: str,
+    category_type: Literal['class', 'subclass'] = 'subclass'
+) -> List[Sample]:
+    """
+    Получает все образцы с определенным значением категории.
+    
+    Parameters:
+    -----------
+    category_value : str
+        Значение категории для поиска
+    category_type : Literal['class', 'subclass']
+        Тип категории для поиска
+        
+    Returns:
+    --------
+    List[Sample]
+        Список образцов с указанной категорией
+    """
+    if isinstance(samples, dict):
+        sample_list = list(samples.values())
+    elif isinstance(samples, list):
+        sample_list = samples
+    elif hasattr(samples, 'samples'):
+        sample_list = list(samples.samples.values())
+    else:
+        raise TypeError(f"Неподдерживаемый тип данных: {type(samples)}")
+    
+    result = []
+    for sample in sample_list:
+        if category_type == 'class':
+            if sample.sample_class == category_value:
+                result.append(sample)
+        else:
+            if sample.sample_subclass == category_value:
+                result.append(sample)
+    
+    return result
+
+def visualize_category_distribution(
+    samples: Union[List[Sample], Dict[str, Sample], 'SampleCollection'],
+    category: Literal['class', 'subclass'] = 'subclass',
+    top_n: Optional[int] = None,
+    figsize: tuple = (12, 6)
+):
+    """
+    Визуализирует распределение образцов по категориям.
+    
+    Requires:
+    ---------
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    """
+    try:
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        
+        grouped = split_by_category(samples, category, include_empty=True)
+        
+        # Подготовка данных
+        categories = []
+        counts = []
+        
+        for cat_name, samples_list in grouped.items():
+            if samples_list or cat_name != '_unknown':  # Показываем пустые кроме unknown
+                categories.append(cat_name if cat_name != '_unknown' else 'Unknown')
+                counts.append(len(samples_list))
+        
+        # Ограничиваем количество категорий если нужно
+        if top_n and len(categories) > top_n:
+            # Сортируем по количеству
+            sorted_data = sorted(zip(categories, counts), key=lambda x: x[1], reverse=True)
+            categories, counts = zip(*sorted_data[:top_n])
+            
+            # Добавляем "Остальные"
+            other_count = sum(sorted_data[top_n:], key=lambda x: x[1]) # type: ignore
+            if other_count > 0:
+                categories = list(categories) + ['Other']
+                counts = list(counts) + [other_count]
+        
+        # Создаем график
+        plt.figure(figsize=figsize)
+        
+        # Столбчатая диаграмма
+        ax1 = plt.subplot(1, 2, 1)
+        bars = ax1.bar(categories, counts)
+        ax1.set_xlabel(f'Sample {category}')
+        ax1.set_ylabel('Count')
+        ax1.set_title(f'Distribution by {category}')
+        ax1.tick_params(axis='x', rotation=45)
+        
+        # Добавляем значения на столбцы
+        for bar in bars:
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{int(height)}', ha='center', va='bottom')
+        
+        # Круговая диаграмма
+        ax2 = plt.subplot(1, 2, 2)
+        wedges, texts, autotexts = ax2.pie(counts, labels=categories, autopct='%1.1f%%') # type: ignore
+        ax2.set_title(f'Percentage by {category}')
+        
+        plt.tight_layout()
+        plt.show()
+        
+    except ImportError:
+        print("Для визуализации требуется matplotlib и seaborn")
+        print("Установите: pip install matplotlib seaborn")
         print("Данные изменились, нужно пересчитать дескрипторы!")
     
