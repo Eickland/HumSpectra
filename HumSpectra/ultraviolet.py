@@ -393,29 +393,37 @@ def calc_single_density(data: DataFrame,
     return uv_param
 
 def calc_suva(data: DataFrame,
-         debug: bool=False,
-         toc: float|None = None) -> float:
+              debug: bool = False,
+              toc: float | None = None) -> float:
     """
     :param data: DataFrame, уф спектр
+    :param debug: bool, режим отладки
+    :param toc: float | None, значение TOC (если не передано, берется из атрибутов)
     :return: uv_param: float, значение параметра SUVA 254
-    Функция проверяет наличие рекалибровки и рассчитывает параметр SUVA 254, для функции необходимо наличие в метаданных таблицы значение TOC
+    Функция проверяет наличие рекалибровки и рассчитывает параметр SUVA 254,
+    для функции необходимо значение TOC (из атрибутов или параметра)
     """
     if not debug:
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
     
-        
-    if ("TOC" not in data.attrs) and (toc is None):
-        raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
-    
-    else:
-        toc = data.attrs['TOC']
-
+    # Определяем значение TOC
     if toc is None:
-        raise KeyError("Нет значения органического углерода")
+        # Если toc не передан, пытаемся взять из атрибутов
+        if "TOC" not in data.attrs:
+            raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
+        
+        toc_value = data.attrs['TOC']
+        
+        # Проверяем, что в атрибутах не None
+        if toc_value is None:
+            raise KeyError("Нет значения органического углерода в атрибутах таблицы")
+    else:
+        # Используем переданное значение
+        toc_value = toc
     
     a_254 = calc_single_density(data, 254)
-    uv_param = a_254 / toc
+    uv_param = a_254 / toc_value
 
     return uv_param
 
