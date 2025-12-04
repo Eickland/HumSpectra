@@ -38,7 +38,118 @@ def base_recall_uv(data: DataFrame) -> DataFrame:
 
     return data_copy + 1.001 * abs(min_value)
 
-def ratio_descriptor_uv(data: DataFrame,
+def calc_r490_555(data: DataFrame,
+                     wave_1: int = 490,
+                     wave_2: int = 555,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :wave_1/wave_2: значение длины волны в нм (целое число)
+    :return: uv_param: float, значение параметра % отражения wave 1 деленной на % отражения wave 2
+    
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_1 = series.sub(wave_1).abs().idxmin()
+    index_2 = series.sub(wave_2).abs().idxmin()
+    uv_param = data.loc[index_1] / data.loc[index_2]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+def calc_r412_547(data: DataFrame,
+                     wave_1: int = 412,
+                     wave_2: int = 547,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :wave_1/wave_2: значение длины волны в нм (целое число)
+    :return: uv_param: float, значение параметра % отражения wave 1 деленной на % отражения wave 2
+    
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_1 = series.sub(wave_1).abs().idxmin()
+    index_2 = series.sub(wave_2).abs().idxmin()
+    uv_param = data.loc[index_1] / data.loc[index_2]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+def calc_r412_670(data: DataFrame,
+                     wave_1: int = 412,
+                     wave_2: int = 670,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :wave_1/wave_2: значение длины волны в нм (целое число)
+    :return: uv_param: float, значение параметра % отражения wave 1 деленной на % отражения wave 2
+    
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_1 = series.sub(wave_1).abs().idxmin()
+    index_2 = series.sub(wave_2).abs().idxmin()
+    uv_param = data.loc[index_1] / data.loc[index_2]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+def calc_r460_560(data: DataFrame,
+                     wave_1: int = 460,
+                     wave_2: int = 560,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :wave_1/wave_2: значение длины волны в нм (целое число)
+    :return: uv_param: float, значение параметра % отражения wave 1 деленной на % отражения wave 2
+    
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_1 = series.sub(wave_1).abs().idxmin()
+    index_2 = series.sub(wave_2).abs().idxmin()
+    uv_param = data.loc[index_1] / data.loc[index_2]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+def calc_r280_460(data: DataFrame,
+                     wave_1: int = 280,
+                     wave_2: int = 460,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :wave_1/wave_2: значение длины волны в нм (целое число)
+    :return: uv_param: float, значение параметра % отражения wave 1 деленной на % отражения wave 2
+    
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_1 = series.sub(wave_1).abs().idxmin()
+    index_2 = series.sub(wave_2).abs().idxmin()
+    uv_param = data.loc[index_1] / data.loc[index_2]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+
+def calc_ratio_descriptor_uv(data: DataFrame,
                      wave_1: int,
                      wave_2: int,
           debug: bool=True) -> float:
@@ -60,7 +171,7 @@ def ratio_descriptor_uv(data: DataFrame,
 
     return uv_param
 
-def integral_ratio_uv(data: DataFrame,
+def calc_integral_ratio_uv(data: DataFrame,
                       low_wv_left: float,
                       low_wv_right: float,
                       high_wv_left: float,
@@ -74,9 +185,9 @@ def integral_ratio_uv(data: DataFrame,
     series = pd.Series(data.index, index=data.index)
     
     index_low_left = series.sub(low_wv_left).abs().idxmin()
-    index_low_right = series.sub(low_wv_left).abs().idxmin()
-    index_high_left = series.sub(low_wv_left).abs().idxmin()
-    index_high_right = series.sub(low_wv_left).abs().idxmin()
+    index_low_right = series.sub(low_wv_right).abs().idxmin()
+    index_high_left = series.sub(high_wv_left).abs().idxmin()
+    index_high_right = series.sub(high_wv_right).abs().idxmin()
     
     high = np.trapezoid(
         data.loc[index_high_left:index_high_right]
@@ -89,7 +200,123 @@ def integral_ratio_uv(data: DataFrame,
 
     return uv_param
 
-def e2_e3(data: DataFrame,
+def calc_ir_2_18(data: DataFrame,
+                      low_wv_left: float = 710,
+                      low_wv_right: float = 740,
+                      high_wv_left: float = 230,
+                      high_wv_right: float = 260,
+          debug: bool=True) -> float:
+
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    
+    index_low_left = series.sub(low_wv_left).abs().idxmin()
+    index_low_right = series.sub(low_wv_right).abs().idxmin()
+    index_high_left = series.sub(high_wv_left).abs().idxmin()
+    index_high_right = series.sub(high_wv_right).abs().idxmin()
+    
+    high = np.trapezoid(
+        data.loc[index_high_left:index_high_right]
+    )
+    low = np.trapezoid(
+        data.loc[index_low_left:index_low_right]
+    )
+    
+    uv_param = float(high / low)
+
+    return uv_param
+
+def calc_ir_19_20(data: DataFrame,
+                      low_wv_left: float = 770,
+                      low_wv_right: float = 800,
+                      high_wv_left: float = 740,
+                      high_wv_right: float = 770,
+          debug: bool=True) -> float:
+
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    
+    index_low_left = series.sub(low_wv_left).abs().idxmin()
+    index_low_right = series.sub(low_wv_right).abs().idxmin()
+    index_high_left = series.sub(high_wv_left).abs().idxmin()
+    index_high_right = series.sub(high_wv_right).abs().idxmin()
+    
+    high = np.trapezoid(
+        data.loc[index_high_left:index_high_right]
+    )
+    low = np.trapezoid(
+        data.loc[index_low_left:index_low_right]
+    )
+    
+    uv_param = float(high / low)
+
+    return uv_param
+
+def calc_ir_4_5(data: DataFrame,
+                      low_wv_left: float = 320,
+                      low_wv_right: float = 350,
+                      high_wv_left: float = 290,
+                      high_wv_right: float = 320,
+          debug: bool=True) -> float:
+
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    
+    index_low_left = series.sub(low_wv_left).abs().idxmin()
+    index_low_right = series.sub(low_wv_right).abs().idxmin()
+    index_high_left = series.sub(high_wv_left).abs().idxmin()
+    index_high_right = series.sub(high_wv_right).abs().idxmin()
+    
+    high = np.trapezoid(
+        data.loc[index_high_left:index_high_right]
+    )
+    low = np.trapezoid(
+        data.loc[index_low_left:index_low_right]
+    )
+    
+    uv_param = float(high / low)
+
+    return uv_param
+
+def calc_ir_7_8(data: DataFrame,
+                      low_wv_left: float = 410,
+                      low_wv_right: float = 440,
+                      high_wv_left: float = 380,
+                      high_wv_right: float = 410,
+          debug: bool=True) -> float:
+
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    
+    index_low_left = series.sub(low_wv_left).abs().idxmin()
+    index_low_right = series.sub(low_wv_right).abs().idxmin()
+    index_high_left = series.sub(high_wv_left).abs().idxmin()
+    index_high_right = series.sub(high_wv_right).abs().idxmin()
+    
+    high = np.trapezoid(
+        data.loc[index_high_left:index_high_right]
+    )
+    low = np.trapezoid(
+        data.loc[index_low_left:index_low_right]
+    )
+    
+    uv_param = float(high / low)
+
+    return uv_param
+
+def calc_e2_e3(data: DataFrame,
           debug: bool=True) -> float:
     """
     :param data: DataFrame, уф спектр
@@ -108,7 +335,26 @@ def e2_e3(data: DataFrame,
 
     return uv_param
 
-def e4_e6(data: DataFrame,
+def calc_e3_e4(data: DataFrame,
+          debug: bool=True) -> float:
+    """
+    :param data: DataFrame, уф спектр
+    :return: uv_param: float, значение параметра E4/E6
+    Функция проверяет наличие рекалибровки и рассчитывает отношение оптической плотности при длине волны 465 к 665 нм.
+    """
+    if not debug:
+        if not check_recall_flag(data):
+            raise ValueError("Ошибка проверки статуса калsибровки")
+    
+    series = pd.Series(data.index, index=data.index)
+    index_365 = series.sub(365).abs().idxmin()
+    index_465 = series.sub(465).abs().idxmin()
+    uv_param = data.loc[index_365] / data.loc[index_465]
+    uv_param = float(uv_param.iloc[0].item())
+
+    return uv_param
+
+def calc_e4_e6(data: DataFrame,
           debug: bool=True) -> float:
     """
     :param data: DataFrame, уф спектр
@@ -127,7 +373,7 @@ def e4_e6(data: DataFrame,
 
     return uv_param
 
-def single_density(data: DataFrame,
+def calc_single_density(data: DataFrame,
             wave: int = 254,
             debug: bool=True) -> float:
     """
@@ -146,8 +392,9 @@ def single_density(data: DataFrame,
 
     return uv_param
 
-def suva(data: DataFrame,
-         debug: bool=False) -> float:
+def calc_suva(data: DataFrame,
+         debug: bool=False,
+         toc: float|None = None) -> float:
     """
     :param data: DataFrame, уф спектр
     :return: uv_param: float, значение параметра SUVA 254
@@ -157,16 +404,22 @@ def suva(data: DataFrame,
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
     
-
-    if "TOC" not in data.attrs:
+        
+    if ("TOC" not in data.attrs) and (toc is None):
         raise KeyError("В метаданных таблицы должно быть значения содержания органического углерода")
+    
+    else:
+        toc = data.attrs['TOC']
 
-    a_254 = single_density(data, 254)
-    uv_param = a_254 / data.attrs['TOC']
+    if toc is None:
+        raise KeyError("Нет значения органического углерода")
+    
+    a_254 = calc_single_density(data, 254)
+    uv_param = a_254 / toc
 
     return uv_param
 
-def lambda_UV(data: DataFrame,
+def calc_lambda_UV(data: DataFrame,
                        short_wave: int = 450,
                        long_wave: int = 550,
                        debug: bool = True) -> float:
@@ -189,6 +442,184 @@ def lambda_UV(data: DataFrame,
     uv_param = 1 / abs(a)
 
     return uv_param
+
+def calc_ag(absorbance_series, path_length_cm=1.0):
+    """
+    Calculate Napierian absorption coefficient a_g(λ)
+    
+    Parameters:
+    - absorbance_series: pandas Series with wavelengths as index and absorbance values
+    - path_length_cm: optical path length in cm (default=1 cm)
+    
+    Returns:
+    - pandas Series with a_g(λ) values in m⁻¹
+    """
+    path_length_m = path_length_cm / 100  # Convert cm to meters
+    ag_values = 2.303 * absorbance_series / path_length_m
+    return ag_values
+
+def calc_spectral_slope(ag_series, lambda1, lambda2):
+    """
+    Calculate spectral slope S between two wavelengths
+    
+    Parameters:
+    - ag_series: pandas Series with a_g(λ) values
+    - lambda1, lambda2: wavelength range in nm
+    
+    Returns:
+    - spectral slope S in nm⁻¹
+    """
+    if lambda1 not in ag_series.index or lambda2 not in ag_series.index:
+        # Interpolate if exact wavelengths not present
+        ag1 = np.interp(lambda1, ag_series.index, ag_series.values)
+        ag2 = np.interp(lambda2, ag_series.index, ag_series.values)
+    else:
+        ag1 = ag_series.loc[lambda1]
+        ag2 = ag_series.loc[lambda2]
+    
+    if ag1 <= 0 or ag2 <= 0:
+        return np.nan
+    
+    S = - (np.log(ag1) - np.log(ag2)) / (lambda1 - lambda2)
+    return S
+
+def calc_B1_band(ag_series):
+    """
+    Calculate B1' band intensity
+    
+    Parameters:
+    - ag_series: pandas Series with a_g(λ) values
+    
+    Returns:
+    - B1' value in m⁻¹
+    """
+    # Wavelength ranges for B1 calculation
+    wavelengths = [295, 305, 330]
+    
+    # Check if we have the required wavelengths
+    available_wavelengths = ag_series.index
+    if not all(wl in available_wavelengths for wl in wavelengths):
+        # Interpolate missing wavelengths
+        ag_295 = np.interp(295, available_wavelengths, ag_series.values)
+        ag_305 = np.interp(305, available_wavelengths, ag_series.values)
+        ag_330 = np.interp(330, available_wavelengths, ag_series.values)
+    else:
+        ag_295 = ag_series.loc[295]
+        ag_305 = ag_series.loc[305]
+        ag_330 = ag_series.loc[330]
+    
+    # Calculate exponential slope between 295-330 nm
+    slope_295_330 = (np.log(ag_330) - np.log(ag_295)) / (330 - 295)
+    
+    # Calculate expected ag(305) from exponential fit
+    ag_305_expected = ag_295 * np.exp(slope_295_330 * (305 - 295))
+    
+    # B1' = measured ag(305) - expected ag(305) from exponential fit
+    B1_prime = ag_305 - ag_305_expected
+    
+    return B1_prime
+
+def calc_B2_band(ag_series):
+    """
+    Calculate B2' band intensity
+    
+    Parameters:
+    - ag_series: pandas Series with a_g(λ) values
+    
+    Returns:
+    - B2' value in m⁻¹
+    """
+    # Wavelength ranges for B2 calculation
+    wavelengths = [380, 410, 443]
+    
+    # Check if we have the required wavelengths
+    available_wavelengths = ag_series.index
+    if not all(wl in available_wavelengths for wl in wavelengths):
+        # Interpolate missing wavelengths
+        ag_380 = np.interp(380, available_wavelengths, ag_series.values)
+        ag_410 = np.interp(410, available_wavelengths, ag_series.values)
+        ag_443 = np.interp(443, available_wavelengths, ag_series.values)
+    else:
+        ag_380 = ag_series.loc[380]
+        ag_410 = ag_series.loc[410]
+        ag_443 = ag_series.loc[443]
+    
+    # Calculate exponential slope between 380-443 nm
+    slope_380_443 = (np.log(ag_443) - np.log(ag_380)) / (443 - 380)
+    
+    # Calculate expected ag(410) from exponential fit
+    ag_410_expected = ag_380 * np.exp(slope_380_443 * (410 - 380))
+    
+    # B2' = measured ag(410) - expected ag(410) from exponential fit
+    B2_prime = ag_410 - ag_410_expected
+    
+    return B2_prime
+
+def calc_cdom_descriptors(absorbance_df, path_length_cm=1.0, doc_concentration=None):
+    """
+    Calculate all CDOM spectral descriptors from absorbance data
+    
+    Parameters:
+    - absorbance_df: DataFrame with one column of absorbance values and wavelength index
+    - path_length_cm: optical path length in cm
+    - doc_concentration: DOC concentration for normalized parameters (optional)
+    
+    Returns:
+    - Dictionary with all spectral descriptors
+    """
+    
+    # Get the absorbance series (assuming single column)
+    absorbance_series = absorbance_df.iloc[:, 0]
+    
+    # Calculate a_g(λ) series
+    ag_series = calc_ag(absorbance_series, path_length_cm)
+    
+    # Calculate specific a_g values at key wavelengths
+    ag_275 = np.interp(275, ag_series.index, ag_series.values) if 275 not in ag_series.index else ag_series.loc[275]
+    ag_380 = np.interp(380, ag_series.index, ag_series.values) if 380 not in ag_series.index else ag_series.loc[380]
+    
+    # Calculate spectral slopes
+    S_275_295 = calc_spectral_slope(ag_series, 275, 295)
+    S_380_443 = calc_spectral_slope(ag_series, 380, 443)
+    
+    # Calculate B bands
+    B1_prime = calc_B1_band(ag_series)
+    B2_prime = calc_B2_band(ag_series)
+    
+    # Compile results
+    descriptors = {
+        'ag_275': ag_275,           # m⁻¹
+        'ag_380': ag_380,           # m⁻¹
+        'S_275_295': S_275_295,     # nm⁻¹
+        'S_380_443': S_380_443,     # nm⁻¹
+        'B1_prime': B1_prime,       # m⁻¹
+        'B2_prime': B2_prime        # m⁻¹
+    }
+    
+    # Add DOC-normalized values if DOC concentration is provided
+    if doc_concentration is not None and doc_concentration > 0:
+        descriptors['ag_275_DOC'] = ag_275 / doc_concentration  # L·μmol⁻¹·m⁻¹
+        descriptors['ag_380_DOC'] = ag_380 / doc_concentration  # L·μmol⁻¹·m⁻¹
+        descriptors['B1_prime_DOC'] = B1_prime / doc_concentration  # L·μmol⁻¹·m⁻¹
+        descriptors['B2_prime_DOC'] = B2_prime / doc_concentration  # L·μmol⁻¹·m⁻¹
+    
+    return descriptors
+
+def calc_differential_absorption_spectrum(ag_series, doc_concentration, reference_ag, reference_doc):
+    """
+    Calculate DOC-normalized differential absorption spectrum (DAS)
+    
+    Parameters:
+    - ag_series: a_g(λ) values for sample
+    - doc_concentration: DOC concentration for sample
+    - reference_ag: a_g(λ) values for reference
+    - reference_doc: DOC concentration for reference
+    
+    Returns:
+    - DAS values
+    """
+    das = (ag_series / doc_concentration) / (reference_ag / reference_doc)
+    return das
 
 def plot_uv(data: DataFrame,
             xlabel: bool = True,

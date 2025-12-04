@@ -7,7 +7,7 @@ from matplotlib.axes import Axes
 
 import HumSpectra.utilits as ut
 
-def asm_350(data: pd.DataFrame) -> float:
+def calc_asm_350(data: pd.DataFrame) -> float:
     """
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: asm 350, показатель асимметрии спектра при длине возбуждения 350 нм
@@ -23,7 +23,7 @@ def asm_350(data: pd.DataFrame) -> float:
 
     return float(fluo_param)
 
-def asm_280(data: pd.DataFrame) -> float:
+def calc_asm_280(data: pd.DataFrame) -> float:
     """
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: asm 280, показатель асимметрии спектра при длине возбуждения 280 нм
@@ -39,7 +39,7 @@ def asm_280(data: pd.DataFrame) -> float:
 
     return float(fluo_param)
 
-def fluo_index(data: pd.DataFrame)-> float:
+def calc_fluo_index(data: pd.DataFrame)-> float:
     """
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: fluo_index, отношение интенсивности при длине волны испускания 450 нм к 500 нм при длине волны возбуждения 370 нм
@@ -49,7 +49,7 @@ def fluo_index(data: pd.DataFrame)-> float:
     
     return float(fluo_param)
 
-def humin_index(data: pd.DataFrame)-> float:
+def calc_humin_index(data: pd.DataFrame)-> float:
     """
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: humin_index, Функция рассчитывает отношение интеграла длины волны испускания от 435 до 480 нм к интегралу от 300 до 345 нм при длине возбуждения 254 нм.
