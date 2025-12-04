@@ -24,7 +24,7 @@ class EEMDataLoader:
     def load_eem_from_samples(
         self,
         samples: Union[List[Sample], Dict[str, Sample], 'SampleCollection'],
-        data_field: str = 'cutted_fluo',  # или 'fluorescence_eem', 'cutted_fluo'
+        data_field: str = 'cutted_fluo_eem',  # или 'fluorescence_eem', 'cutted_fluo_eem'
         filter_tags: Optional[List[str]] = ['cutted_fluo'],
         filter_mode: str = 'all',  # 'all', 'any', 'none'
         require_all_tags: bool = True,  # Устаревший параметр, для обратной совместимости
@@ -136,7 +136,7 @@ class EEMDataLoader:
                 
                 if data is None:
                     # Попробуем альтернативные поля если основное пустое
-                    if data_field == 'cutted_fluo' and sample.fluorescence_eem is not None:
+                    if data_field == 'cutted_fluo_eem' and sample.fluorescence_eem is not None:
                         print(f"Предупреждение: У образца {sample.sample_id} нет {data_field}, "
                               f"используем fluorescence_eem")
                         data = sample.fluorescence_eem
