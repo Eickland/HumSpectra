@@ -182,64 +182,6 @@ def calc_integral_ratio_uv(data: DataFrame,
         if not check_recall_flag(data):
             raise ValueError("Ошибка проверки статуса калибровки")
     
-    series = pd.Series(data.index, index=data.index)
-    
-    index_low_left = series.sub(low_wv_left).abs().idxmin()
-    index_low_right = series.sub(low_wv_right).abs().idxmin()
-    index_high_left = series.sub(high_wv_left).abs().idxmin()
-    index_high_right = series.sub(high_wv_right).abs().idxmin()
-    
-    high = np.trapezoid(
-        data.loc[index_high_left:index_high_right]
-    )
-    low = np.trapezoid(
-        data.loc[index_low_left:index_low_right]
-    )
-    
-    uv_param = float(high / low)
-
-    return uv_param
-
-def calc_ir_2_18(data: DataFrame,
-                      low_wv_left: float = 710,
-                      low_wv_right: float = 740,
-                      high_wv_left: float = 230,
-                      high_wv_right: float = 260,
-          debug: bool=True) -> float:
-
-    if not debug:
-        if not check_recall_flag(data):
-            raise ValueError("Ошибка проверки статуса калибровки")
-    
-    series = pd.Series(data.index, index=data.index)
-    
-    index_low_left = series.sub(low_wv_left).abs().idxmin()
-    index_low_right = series.sub(low_wv_right).abs().idxmin()
-    index_high_left = series.sub(high_wv_left).abs().idxmin()
-    index_high_right = series.sub(high_wv_right).abs().idxmin()
-    
-    high = np.trapezoid(
-        data.loc[index_high_left:index_high_right]
-    )
-    low = np.trapezoid(
-        data.loc[index_low_left:index_low_right]
-    )
-    
-    uv_param = float(high / low)
-
-    return uv_param
-
-def calc_ir_19_20(data: DataFrame,
-                      low_wv_left: float = 770,
-                      low_wv_right: float = 800,
-                      high_wv_left: float = 740,
-                      high_wv_right: float = 770,
-          debug: bool=True) -> float:
-
-    if not debug:
-        if not check_recall_flag(data):
-            raise ValueError("Ошибка проверки статуса калибровки")
-    
     # Предполагаем, что data - это DataFrame с одним столбцом (поглощение)
     # и индексом, представляющим длины волн
     
@@ -275,6 +217,33 @@ def calc_ir_19_20(data: DataFrame,
 
     return uv_param
 
+
+def calc_ir_2_18(data: DataFrame,
+                      low_wv_left: float = 710,
+                      low_wv_right: float = 740,
+                      high_wv_left: float = 230,
+                      high_wv_right: float = 260,
+          debug: bool=True) -> float:
+
+    return calc_integral_ratio_uv(data,
+                      low_wv_left,
+                      low_wv_right,
+                      high_wv_left,
+                      high_wv_right)
+
+def calc_ir_19_20(data: DataFrame,
+                      low_wv_left: float = 770,
+                      low_wv_right: float = 800,
+                      high_wv_left: float = 740,
+                      high_wv_right: float = 770,
+          debug: bool=True) -> float:
+
+    return calc_integral_ratio_uv(data,
+                      low_wv_left,
+                      low_wv_right,
+                      high_wv_left,
+                      high_wv_right)
+
 def calc_ir_4_5(data: DataFrame,
                       low_wv_left: float = 320,
                       low_wv_right: float = 350,
@@ -282,27 +251,11 @@ def calc_ir_4_5(data: DataFrame,
                       high_wv_right: float = 320,
           debug: bool=True) -> float:
 
-    if not debug:
-        if not check_recall_flag(data):
-            raise ValueError("Ошибка проверки статуса калибровки")
-    
-    series = pd.Series(data.index, index=data.index)
-    
-    index_low_left = series.sub(low_wv_left).abs().idxmin()
-    index_low_right = series.sub(low_wv_right).abs().idxmin()
-    index_high_left = series.sub(high_wv_left).abs().idxmin()
-    index_high_right = series.sub(high_wv_right).abs().idxmin()
-    
-    high = np.trapezoid(
-        data.loc[index_high_left:index_high_right]
-    )
-    low = np.trapezoid(
-        data.loc[index_low_left:index_low_right]
-    )
-    
-    uv_param = float(high / low)
-
-    return uv_param
+    return calc_integral_ratio_uv(data,
+                      low_wv_left,
+                      low_wv_right,
+                      high_wv_left,
+                      high_wv_right)
 
 def calc_ir_7_8(data: DataFrame,
                       low_wv_left: float = 410,
@@ -311,27 +264,11 @@ def calc_ir_7_8(data: DataFrame,
                       high_wv_right: float = 410,
           debug: bool=True) -> float:
 
-    if not debug:
-        if not check_recall_flag(data):
-            raise ValueError("Ошибка проверки статуса калибровки")
-    
-    series = pd.Series(data.index, index=data.index)
-    
-    index_low_left = series.sub(low_wv_left).abs().idxmin()
-    index_low_right = series.sub(low_wv_right).abs().idxmin()
-    index_high_left = series.sub(high_wv_left).abs().idxmin()
-    index_high_right = series.sub(high_wv_right).abs().idxmin()
-    
-    high = np.trapezoid(
-        data.loc[index_high_left:index_high_right]
-    )
-    low = np.trapezoid(
-        data.loc[index_low_left:index_low_right]
-    )
-    
-    uv_param = float(high / low)
-
-    return uv_param
+    return calc_integral_ratio_uv(data,
+                      low_wv_left,
+                      low_wv_right,
+                      high_wv_left,
+                      high_wv_right)
 
 def calc_e2_e3(data: DataFrame,
           debug: bool=True) -> float:
