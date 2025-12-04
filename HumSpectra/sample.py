@@ -18,6 +18,7 @@ class Sample:
     # Основные спектральные данные
     fluorescence_eem: Optional[pd.DataFrame] = None
     uv_vis_absorption: Optional[pd.DataFrame] = None
+    uv_vis_reflection: Optional[pd.DataFrame] = None
     
     #Дополнительные данные
     org_carbon: Optional[float] = None
@@ -26,7 +27,7 @@ class Sample:
     
     #Координаты
     latitude: Optional[float] = None
-    lonitude: Optional[float] = None
+    lontitude: Optional[float] = None
     
     # Параметры измерений
     measurement_params: Dict[str, Any] = field(default_factory=dict)
@@ -65,11 +66,12 @@ class Sample:
             'sample_class': self.sample_class,
             'fluorescence_eem': self.fluorescence_eem,
             'uv_vis_absorption': self.uv_vis_absorption,
+            'uv_vis_reflection': self.uv_vis_reflection,
             'org_carbon': self.org_carbon,
             'pH': self.pH,
             'Eh': self.Eh,
             'latitude': self.latitude,
-            'lonitude': self.lonitude,
+            'lontitude': self.lontitude,
             'measurement_params': self.measurement_params,
             'descriptors': self.descriptors,
             'file_path': str(self.file_path) if self.file_path else None,
@@ -91,11 +93,12 @@ class Sample:
             sample_class=data['sample_class'],
             fluorescence_eem=data.get('fluorescence_eem'),
             uv_vis_absorption=data.get('uv_vis_absorption'),
+            uv_vis_reflection=data.get('uv_vis_reflection'),
             org_carbon=data.get('org_carbon'),
             pH=data.get('pH'),
             Eh=data.get('Eh'),
             latitude=data.get('latitude'),
-            lonitude=data.get('lonitude'),
+            lontitude=data.get('lontitude'),
             measurement_params=data.get('measurement_params', {}),
             descriptors=data.get('descriptors', {}),
             file_path=file_path,
