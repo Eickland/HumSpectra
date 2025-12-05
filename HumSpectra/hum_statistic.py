@@ -427,11 +427,15 @@ def random_forest_classification(
     n_estimators: int = 100,
     max_depth: Optional[int] = None,
     index_level: Optional[int] = None,
+    cross_validate: bool = False,
+    cv_dataset: pd.DataFrame | None = None,
+    cv_folds: int = 5,
     **kwargs
 ) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
-           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float]:
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float, dict | None]:
     """
-    Анализ данных с помощью Random Forest для задач классификации.
+    Анализ данных с помощью Random Forest для задач классификации
+    с опциональной кросс-валидацией на отдельном датасете.
     
     Parameters:
     -----------
@@ -449,10 +453,14 @@ def random_forest_classification(
         Количество деревьев в Random Forest
     max_depth : int, optional
         Максимальная глубина деревьев
-    save_report : bool
-        Сохранять ли HTML отчет
     index_level : int
         Уровень индекса для использования в качестве цели (если target_column=None)
+    cross_validate : bool
+        Включить кросс-валидацию на отдельном датасете
+    cv_dataset : pd.DataFrame, optional
+        Дополнительный датасет для кросс-валидации (должен иметь ту же структуру)
+    cv_folds : int
+        Количество фолдов для кросс-валидации
     
     Returns:
     --------
@@ -464,15 +472,22 @@ def random_forest_classification(
     - X_train, X_test, y_train, y_test: разделенные данные
     - label_encoder: обученный LabelEncoder
     - accuracy: точность модели
+    - weighted_avg_accuracy: средневзвешенная точность
+    - macro_avg_accuracy: макро-средняя точность
+    - cv_results: результаты кросс-валидации (если включена)
     """
     
     # Сохраняем оригинальный stdout
     old_stdout = sys.stdout
     sys.stdout = captured_output = StringIO()
     
+    cv_results = None
+    
     try:
         print("=" * 70)
         print("RANDOM FOREST АНАЛИЗ КЛАССИФИКАЦИИ")
+        if cross_validate and cv_dataset is not None:
+            print("С ИСПОЛЬЗОВАНИЕМ КРОСС-ВАЛИДАЦИИ")
         print("=" * 70)
         
         # 1. ПОДГОТОВКА ДАННЫХ
@@ -480,17 +495,12 @@ def random_forest_classification(
         print("-" * 40)
         
         # Определяем целевую переменную
-        # Определяем целевую переменную
         if (target_column is None) and (index_level is not None):
-            
             # Используем уровень индекса как целевую переменную
             target = data.index.get_level_values(index_level)
-            
             features_df = data.reset_index(drop=True)
             target_name = f"{index_level} уровень индекса"
-            
         else:
-            
             target = data[target_column]
             features_df = data.drop(columns=[target_column])
             target_name = target_column
@@ -530,10 +540,8 @@ def random_forest_classification(
         missing_values = features_numeric.isnull().sum().sum()
         
         if missing_values > 0:
-            
             print(f"   Заполняем {missing_values} пропущенных значений средними")
             features_numeric = features_numeric.fillna(features_numeric.mean())
-        
         
         # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
         print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
@@ -563,12 +571,81 @@ def random_forest_classification(
                 raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
         else:
             print("   Недостаточно признаков для VIF анализа (требуется > 1)")
-            vif_results = pd.DataFrame()        
+            vif_results = pd.DataFrame()
         
         # Масштабирование признаков
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(features_numeric)
         print(f"   Размерность данных: {X_scaled.shape}")
+        
+        # 2.2: Кросс-валидация на дополнительном датасете (если включена)
+        if cross_validate and cv_dataset is not None:
+            print("\n2.2. ПОДГОТОВКА ДАННЫХ ДЛЯ КРОСС-ВАЛИДАЦИИ")
+            print("-" * 40)
+            
+            # Проверяем структуру датасета
+            print("   Проверка структуры дополнительного датасета...")
+            
+            # Определяем целевую переменную для кросс-валидационного датасета
+            if (target_column is None) and (index_level is not None):
+                cv_target = cv_dataset.index.get_level_values(index_level)
+                cv_features_df = cv_dataset.reset_index(drop=True)
+            else:
+                cv_target = cv_dataset[target_column]
+                cv_features_df = cv_dataset.drop(columns=[target_column])
+            
+            # Кодируем целевую переменную
+            cv_target_encoded = label_encoder.transform(cv_target)
+            
+            # Проверяем совпадение столбцов
+            cv_numeric_columns = cv_features_df.select_dtypes(include=[np.number]).columns
+            
+            if not set(numeric_columns).issubset(set(cv_numeric_columns)):
+                missing_cols = set(numeric_columns) - set(cv_numeric_columns)
+                print(f"   ⚠️ Предупреждение: В кросс-валидационном датасете отсутствуют столбцы: {missing_cols}")
+                # Используем только общие столбцы
+                common_cols = list(set(numeric_columns).intersection(set(cv_numeric_columns)))
+                cv_features_numeric = cv_features_df[common_cols].copy()
+            else:
+                cv_features_numeric = cv_features_df[numeric_columns].copy()
+            
+            # Применяем масштабирование
+            cv_X_scaled = scaler.transform(cv_features_numeric)
+            
+            print(f"   Размер кросс-валидационного датасета: {cv_X_scaled.shape}")
+            print(f"   Количество классов в кросс-валидации: {len(np.unique(cv_target_encoded))}")
+            
+            # Выполняем кросс-валидацию
+            print("   Выполнение кросс-валидации...")
+            cv_scores = cross_val_score(
+                RandomForestClassifier(
+                    n_estimators=n_estimators,
+                    max_depth=max_depth,
+                    random_state=random_state,
+                    class_weight='balanced'
+                ),
+                cv_X_scaled,
+                cv_target_encoded,
+                cv=cv_folds,
+                scoring='accuracy',
+                n_jobs=-1
+            )
+            
+            cv_results = {
+                'cv_scores': cv_scores,
+                'cv_mean': cv_scores.mean(),
+                'cv_std': cv_scores.std(),
+                'cv_X_scaled': cv_X_scaled,
+                'cv_target_encoded': cv_target_encoded,
+                'cv_features_numeric': cv_features_numeric
+            }
+            
+            print(f"   Результаты кросс-валидации ({cv_folds} фолдов):")
+            print(f"      Точность по фолдам: {cv_scores}")
+            print(f"      Средняя точность: {cv_scores.mean():.4f}")
+            print(f"      Стандартное отклонение: {cv_scores.std():.4f}")
+            print(f"      Минимальная точность: {cv_scores.min():.4f}")
+            print(f"      Максимальная точность: {cv_scores.max():.4f}")
         
         # 3. РАЗДЕЛЕНИЕ НА ВЫБОРКИ
         print("\n3. РАЗДЕЛЕНИЕ НА ОБУЧАЮЩУЮ И ТЕСТОВУЮ ВЫБОРКИ")
@@ -585,10 +662,8 @@ def random_forest_classification(
         min_samples = class_counts.min()
         
         if min_samples < 2:
-            
             print("   ⚠️  Некоторые классы имеют <2 наблюдений, стратификация отключена")
             stratify = None
-            
         else:
             stratify = y_encoded
         
@@ -628,6 +703,9 @@ def random_forest_classification(
         
         print(f"   Точность (Accuracy): {accuracy:.4f}")
         
+        if cross_validate and cv_results:
+            print(f"   Cross-Validation Accuracy: {cv_results['cv_mean']:.4f} ± {cv_results['cv_std']:.4f}")
+        
         # Детальный отчет по классам
         print("\n   Отчет по классификации:")
         print("   " + "-" * 35)
@@ -646,7 +724,6 @@ def random_forest_classification(
             macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
             
         except ValueError as e:
-            
             print(f"   Ошибка при создании classification report: {e}")
             print("   Используем числовые метки классов...")
             
@@ -671,18 +748,13 @@ def random_forest_classification(
         }).sort_values('Важность', ascending=False)
         
         print("   Топ-10 важнейших признаков:")
-        
         for i, (_, row) in enumerate(feature_importance.head(10).iterrows(), 1):
             print(f"      {i:2d}. {row['Признак']:30s}: {row['Важность']:.4f}")
-            
         
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
-        
         results_df['Истинный_класс'] = y_encoded
-        
         results_df['Предсказанный_класс'] = rf_model.predict(X_scaled)
-        
         results_df['Верно_предсказано'] = (
             results_df['Истинный_класс'] == results_df['Предсказанный_класс']
         )
@@ -698,6 +770,10 @@ def random_forest_classification(
         print(f"   Классов: {len(class_names)}")
         print(f"   Признаков: {len(numeric_columns)}")
         print(f"   Точность на тесте: {accuracy:.4f}")
+        
+        if cross_validate and cv_results:
+            print(f"   Средняя точность кросс-валидации: {cv_results['cv_mean']:.4f}")
+        
         print(f"   Самый важный признак: {feature_importance.iloc[0]['Признак']}")
         print("=" * 70)
         
@@ -721,7 +797,8 @@ def random_forest_classification(
                     y_test=y_test,
                     y_pred=y_pred,
                     output_html_path=output_html_path,
-                    vif_results = vif_results
+                    vif_results=vif_results,
+                    cv_results=cv_results
                 )
                 print(f"\n✅ HTML отчет сохранен: {output_html_path}")
             except Exception as e:
@@ -736,7 +813,8 @@ def random_forest_classification(
             label_encoder,
             float(accuracy),
             weighted_avg_accuracy,
-            macro_avg_accuracy
+            macro_avg_accuracy,
+            cv_results
         )
         
     except Exception as e:
@@ -747,8 +825,9 @@ def random_forest_classification(
 
 def create_rf_classification_html_report(console_output, results_df, feature_importance, 
                          rf_model, class_names, label_encoder,
-                         X_test, y_test, y_pred, output_html_path,vif_results,problem_type = 'classification'):
-    """Создание HTML отчета с результатами анализа Random Forest"""
+                         X_test, y_test, y_pred, output_html_path, vif_results,
+                         cv_results=None, problem_type='classification'):
+    """Создание HTML отчета с результатами анализа Random Forest с поддержкой кросс-валидации"""
     
     # Создаем визуализации
     plt.style.use('default')
@@ -776,7 +855,6 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     confusion_matrix_plot = ""
     
     if problem_type == 'classification':
-        
         from sklearn.metrics import confusion_matrix
         
         cm = confusion_matrix(y_test, y_pred)
@@ -796,7 +874,74 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
         buffer2.seek(0)
         confusion_matrix_plot = base64.b64encode(buffer2.getvalue()).decode()
         plt.close(fig2)
+    
+    # График результатов кросс-валидации (если есть)
+    cv_plot = ""
+    cv_section = ""
+    
+    if cv_results is not None:
+        cv_scores = cv_results['cv_scores']
+        cv_mean = cv_results['cv_mean']
+        cv_std = cv_results['cv_std']
         
+        # Визуализация результатов кросс-валидации
+        fig_cv, ax_cv = plt.subplots(figsize=(8, 5))
+        folds = range(1, len(cv_scores) + 1)
+        ax_cv.plot(folds, cv_scores, 'o-', linewidth=2, markersize=8)
+        ax_cv.axhline(y=cv_mean, color='r', linestyle='--', label=f'Среднее: {cv_mean:.4f}')
+        ax_cv.fill_between(folds, cv_mean - cv_std, cv_mean + cv_std, alpha=0.2, color='gray')
+        ax_cv.set_xlabel('Номер фолда')
+        ax_cv.set_ylabel('Точность')
+        ax_cv.set_title(f'Результаты кросс-валидации ({len(cv_scores)} фолдов)')
+        ax_cv.set_xticks(folds)
+        ax_cv.grid(True, alpha=0.3)
+        ax_cv.legend()
+        plt.tight_layout()
+        
+        buffer_cv = BytesIO()
+        fig_cv.savefig(buffer_cv, format='png', dpi=100, bbox_inches='tight')
+        buffer_cv.seek(0)
+        cv_plot = base64.b64encode(buffer_cv.getvalue()).decode()
+        plt.close(fig_cv)
+        
+        cv_section = f"""
+        <div class="section">
+            <h2>📈 Результаты кросс-валидации</h2>
+            <p><em>Оценка стабильности модели на независимом датасете</em></p>
+            
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h3>{cv_mean:.4f}</h3>
+                    <p>Средняя точность</p>
+                </div>
+                <div class="summary-card">
+                    <h3>±{cv_std:.4f}</h3>
+                    <p>Стандартное отклонение</p>
+                </div>
+                <div class="summary-card">
+                    <h3>{len(cv_scores)}</h3>
+                    <p>Количество фолдов</p>
+                </div>
+                <div class="summary-card">
+                    <h3>{cv_results['cv_X_scaled'].shape[0]}</h3>
+                    <p>Наблюдений в CV</p>
+                </div>
+            </div>
+            
+            <div class="plot-container">
+                <img src="data:image/png;base64,{cv_plot}" alt="Cross-Validation Results">
+            </div>
+            
+            <div class="coefficient-info">
+                <h3>📊 Результаты по фолдам:</h3>
+                <p>{', '.join([f'{score:.4f}' for score in cv_scores])}</p>
+                <p><strong>Лучший фолд:</strong> {max(cv_scores):.4f}</p>
+                <p><strong>Худший фолд:</strong> {min(cv_scores):.4f}</p>
+                <p><strong>Разница:</strong> {max(cv_scores) - min(cv_scores):.4f}</p>
+            </div>
+        </div>
+        """
+    
     # Создаем секцию VIF если есть результаты
     vif_section = ""
     if vif_results is not None and len(vif_results) > 0:
@@ -814,7 +959,7 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
             </div>
         </div>
         """
-            
+    
     # Создаем стилизованный HTML
     html_content = f"""
     <!DOCTYPE html>
@@ -946,6 +1091,22 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
                 border-radius: 5px;
                 margin: 15px 0;
             }}
+            .coefficient-info {{
+                background: #fff3cd;
+                padding: 15px;
+                border-radius: 5px;
+                margin: 15px 0;
+                border-left: 4px solid #ffc107;
+            }}
+            .cv-badge {{
+                display: inline-block;
+                background: #17a2b8;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 20px;
+                font-size: 14px;
+                margin-left: 10px;
+            }}
         </style>
     </head>
     <body>
@@ -953,6 +1114,7 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
             <div class="header">
                 <h1>🌲 Анализ Random Forest</h1>
                 <p>Автоматический отчет по результатам анализа с помощью Random Forest</p>
+                {f'<p class="cv-badge">С КРОСС-ВАЛИДАЦИЕЙ</p>' if cv_results else ''}
             </div>
             
             <div class="summary-grid">
@@ -981,6 +1143,10 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
                 <p><strong>Максимальная глубина:</strong> {rf_model.max_depth if rf_model.max_depth else 'Не ограничена'}</p>
                 <p><strong>Количество признаков:</strong> {rf_model.n_features_in_}</p>
             </div>
+            
+            {cv_section}
+            
+            {vif_section}
             
             <div class="section">
                 <h2>📋 Полный вывод анализа</h2>
@@ -1027,7 +1193,7 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     # Сохраняем HTML файл
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
-
+        
 def lda_classification(data: pd.DataFrame,
                       target_column: str | None = None,
                       index_level: int | None = None,
@@ -1405,7 +1571,6 @@ def lda_classification(data: pd.DataFrame,
         sys.stdout = old_stdout
         print(f"Ошибка при выполнении анализа: {e}")
         raise
-
 
 def create_lda_classification_html_report(console_output, results_df, feature_importance, 
                           lda_model, class_names, label_encoder,

@@ -4,6 +4,7 @@ import pandas as pd
 import scipy.interpolate
 from typing import Union, List
 from matplotlib.axes import Axes
+from scipy import interpolate, signal
 
 import HumSpectra.utilits as ut
 
@@ -184,7 +185,6 @@ def where_is_raman(exc_wv: float,
     """
     return 1e7 / (1e7 / exc_wv - omega)
 
-
 def cut_peak_spline(em_wvs, fl, peak_position, peak_half_width=15., points_in_spline=10):
     """
     em_wvs - 1d numpy array of emission wavelength
@@ -199,7 +199,6 @@ def cut_peak_spline(em_wvs, fl, peak_position, peak_half_width=15., points_in_sp
     spline_wvs = em_wvs[mask]
 
     return knots, mask, spline_wvs, spline
-
 
 def cut_raman_spline(em_wvs: np.ndarray,
                      fl: np.ndarray,
@@ -223,11 +222,249 @@ def cut_raman_spline(em_wvs: np.ndarray,
     
     return np.array(res[-1](em_wvs))
 
+def remove_raman_scatter(eem_df, ex_wavelengths=None, em_wavelengths=None, 
+                         method='interpolation', width_nm=15, plot=False, 
+                         water_raman_peak=None, return_mask=False):
+    """
+    Удаление пика комбинационного рассеяния (Raman scatter) из EEM спектра.
+    
+    Параметры:
+    ----------
+    eem_df : pandas DataFrame
+        EEM спектр, где:
+        - индексы: длины волн испускания (emission)
+        - столбцы: длины волны возбуждения (excitation)
+        
+    ex_wavelengths : array-like, optional
+        Явное указание длин волн возбуждения. Если None, берутся из столбцов df.
+        
+    em_wavelengths : array-like, optional
+        Явное указание длин волн испускания. Если None, берутся из индексов df.
+        
+    method : str, default='interpolation'
+        Метод удаления:
+        - 'interpolation': интерполяция через соседние точки
+        - 'savgol': фильтр Savitzky-Golay для сглаживания
+        - 'linear': линейная интерполяция между краями
+        
+    width_nm : float, default=15
+        Ширина области вокруг пика КР (в нм) для обработки.
+        
+    plot : bool, default=False
+        Визуализация процесса удаления для одного выбранного возбуждения.
+        
+    water_raman_peak : float, optional
+        Положение пика КР воды (смещение от возбуждения в см⁻¹).
+        По умолчанию: ~3400 см⁻¹ для воды (что соответствует ~30-40 нм при typ. возбуждении).
+        
+    return_mask : bool, default=False
+        Возвращать также маску удаленной области.
+        
+    Возвращает:
+    -----------
+    eem_corrected : pandas DataFrame
+        EEM спектр с удаленным пиком КР.
+        
+    raman_mask : pandas DataFrame (опционально)
+        Маска удаленной области (True - удаленные точки).
+    """
+    
+    # Копируем данные для безопасности
+    eem_data = eem_df.copy()
+    
+    # Получаем длины волн
+    if ex_wavelengths is None:
+        ex_wavelengths = eem_data.columns.values.astype(float)
+    else:
+        ex_wavelengths = np.array(ex_wavelengths)
+        
+    if em_wavelengths is None:
+        em_wavelengths = eem_data.index.values.astype(float)
+    else:
+        em_wavelengths = np.array(em_wavelengths)
+    
+    # Проверяем монотонность
+    if not (np.all(np.diff(ex_wavelengths) > 0) and np.all(np.diff(em_wavelengths) > 0)):
+        print("Предупреждение: Длины волн не монотонно возрастают. Возможны проблемы.")
+    
+    # Создаем массив для исправленного EEM
+    eem_corrected = eem_data.values.copy().astype(float)
+    
+    # Маска удаленных областей
+    raman_mask = np.zeros_like(eem_corrected, dtype=bool)
+    
+    # Для каждого возбуждения находим и удаляем пик КР
+    for i, ex_wl in enumerate(ex_wavelengths):
+        # 1. Определяем положение пика КР для данного возбуждения
+        if water_raman_peak is None:
+            # Стандартное смещение для воды: ~3400 см⁻¹
+            # Переводим в нанометры: 1/λ_ex - 1/λ_raman = 3400 * 1e-7
+            # λ_raman = 1 / (1/ex_wl - 3400e-7)
+            ex_wl_cm = 1e7 / ex_wl  # возбуждение в см⁻¹
+            raman_wl_cm = ex_wl_cm - 3400  # положение КР в см⁻¹
+            raman_wl_nm = 1e7 / raman_wl_cm  # положение КР в нм
+        else:
+            # Явно заданное смещение в см⁻¹
+            ex_wl_cm = 1e7 / ex_wl
+            raman_wl_cm = ex_wl_cm - water_raman_peak
+            raman_wl_nm = 1e7 / raman_wl_cm
+        
+        # 2. Определяем индексы для удаления вокруг пика КР
+        # Находим ближайшую длину волны испускания
+        em_idx = np.argmin(np.abs(em_wavelengths - raman_wl_nm))
+        raman_em_wl = em_wavelengths[em_idx]
+        
+        # Определяем диапазон для удаления
+        half_width = width_nm / 2
+        lower_bound = raman_em_wl - half_width
+        upper_bound = raman_em_wl + half_width
+        
+        # Находим индексы в диапазоне
+        mask_indices = np.where((em_wavelengths >= lower_bound) & 
+                                (em_wavelengths <= upper_bound))[0]
+        
+        if len(mask_indices) == 0:
+            # Если нет точек в диапазоне, пропускаем
+            continue
+        
+        # 3. Удаляем пик КР выбранным методом
+        em_intensity = eem_corrected[:, i].copy()
+        
+        if method == 'interpolation':
+            # Метод интерполяции через соседние точки
+            # Создаем маску для интерполяции (все точки кроме удаляемых)
+            valid_mask = np.ones(len(em_wavelengths), dtype=bool)
+            valid_mask[mask_indices] = False
+            
+            if np.sum(valid_mask) >= 2:  # Нужно минимум 2 точки для интерполяции
+                # Интерполяция кубическим сплайном
+                f_interp = interpolate.interp1d(
+                    em_wavelengths[valid_mask],
+                    em_intensity[valid_mask],
+                    kind='cubic',
+                    fill_value='extrapolate' # type: ignore
+                )
+                # Заменяем удаляемую область интерполированными значениями
+                eem_corrected[mask_indices, i] = f_interp(em_wavelengths[mask_indices])
+                raman_mask[mask_indices, i] = True
+        
+        elif method == 'savgol':
+            # Метод Savitzky-Golay фильтра
+            # Временно заполняем удаляемую область соседними значениями
+            temp_intensity = em_intensity.copy()
+            
+            # Находим индексы до и после удаляемой области
+            before_idx = mask_indices[0] - 1
+            after_idx = mask_indices[-1] + 1
+            
+            if before_idx >= 0 and after_idx < len(em_intensity):
+                # Линейная интерполяция между краями
+                left_val = em_intensity[before_idx]
+                right_val = em_intensity[after_idx]
+                n_points = len(mask_indices)
+                
+                for j, idx in enumerate(mask_indices):
+                    temp_intensity[idx] = left_val + (right_val - left_val) * (j + 1) / (n_points + 1)
+            
+            # Применяем фильтр Savitzky-Golay
+            window_length = min(11, len(em_intensity) // 3 * 2 + 1)  # нечетное
+            if window_length >= 3:
+                smoothed = signal.savgol_filter(temp_intensity, 
+                                               window_length=window_length,
+                                               polyorder=2)
+                # Заменяем только удаляемую область
+                eem_corrected[mask_indices, i] = smoothed[mask_indices]
+                raman_mask[mask_indices, i] = True
+        
+        elif method == 'linear':
+            # Простая линейная интерполяция
+            # Находим значения до и после удаляемой области
+            before_idx = mask_indices[0] - 1
+            after_idx = mask_indices[-1] + 1
+            
+            if before_idx >= 0 and after_idx < len(em_intensity):
+                left_val = em_intensity[before_idx]
+                right_val = em_intensity[after_idx]
+                n_points = len(mask_indices)
+                
+                for j, idx in enumerate(mask_indices):
+                    eem_corrected[idx, i] = left_val + (right_val - left_val) * (j + 1) / (n_points + 1)
+                raman_mask[mask_indices, i] = True
+        
+        # 4. Визуализация для первого или выбранного возбуждения
+        if plot and (i == len(ex_wavelengths) // 2 or i == 0):
+            fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+            
+            # Сырые данные
+            ax = axes[0, 0]
+            ax.plot(em_wavelengths, em_intensity, 'b-', label='Исходный', alpha=0.7)
+            ax.axvspan(lower_bound, upper_bound, alpha=0.3, color='red', label='Область КР')
+            ax.axvline(raman_em_wl, color='r', linestyle='--', alpha=0.5, label='Пик КР')
+            ax.set_xlabel('Длина волны испускания (нм)')
+            ax.set_ylabel('Интенсивность')
+            ax.set_title(f'Возбуждение {ex_wl:.0f} нм\nПик КР при {raman_em_wl:.1f} нм')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            # После коррекции
+            ax = axes[0, 1]
+            ax.plot(em_wavelengths, em_intensity, 'b-', label='Исходный', alpha=0.5)
+            ax.plot(em_wavelengths, eem_corrected[:, i], 'r-', label='Корректированный', linewidth=2)
+            ax.axvspan(lower_bound, upper_bound, alpha=0.3, color='red')
+            ax.set_xlabel('Длина волны испускания (нм)')
+            ax.set_ylabel('Интенсивность')
+            ax.set_title(f'Сравнение до/после коррекции')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            # Разница
+            ax = axes[1, 0]
+            difference = em_intensity - eem_corrected[:, i]
+            ax.plot(em_wavelengths, difference, 'g-')
+            ax.fill_between(em_wavelengths, 0, difference, where=(difference>0), 
+                           alpha=0.3, color='green', label='Удалено')
+            ax.fill_between(em_wavelengths, 0, difference, where=(difference<0), 
+                           alpha=0.3, color='red', label='Добавлено')
+            ax.set_xlabel('Длина волны испускания (нм)')
+            ax.set_ylabel('Разница')
+            ax.set_title('Разница между исходным и корректированным')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            # 2D визуализация маски
+            ax = axes[1, 1]
+            mask_display = np.zeros_like(eem_corrected)
+            mask_display[raman_mask] = 1
+            im = ax.imshow(mask_display, aspect='auto', 
+                          extent=[ex_wavelengths[0], ex_wavelengths[-1], 
+                                  em_wavelengths[-1], em_wavelengths[0]],
+                          cmap='Reds')
+            ax.set_xlabel('Возбуждение (нм)')
+            ax.set_ylabel('Испускание (нм)')
+            ax.set_title('Маска удаленных областей КР')
+            plt.colorbar(im, ax=ax, label='Удалено (1) / Сохранено (0)')
+            
+            plt.tight_layout()
+            plt.show()
+    
+    # Конвертируем обратно в DataFrame
+    eem_corrected_df = pd.DataFrame(eem_corrected, 
+                                    index=eem_data.index,
+                                    columns=eem_data.columns)
+    
+    if return_mask:
+        raman_mask_df = pd.DataFrame(raman_mask,
+                                     index=eem_data.index,
+                                     columns=eem_data.columns)
+        return eem_corrected_df, raman_mask_df
+    
+    return eem_corrected_df
 
 def read_fluo_3d(path: str,
                  sep: str | None = None,
                  index_col: int | None = None,  # Изменено на None по умолчанию
-                 debug: bool = False) -> pd.DataFrame:
+                 debug: bool = False,
+                 remove_raman=True) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -338,5 +575,9 @@ def read_fluo_3d(path: str,
     data.attrs['subclass'] = ut.extract_subclass_from_name(name)
     data.attrs['path'] = path
     
-    return data
+    if remove_raman:
+        
+        data = remove_raman_scatter(data)
+    
+    return data # type: ignore
 
