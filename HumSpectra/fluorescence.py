@@ -576,8 +576,12 @@ def read_fluo_3d(path: str,
     data.attrs['path'] = path
     
     if remove_raman:
+        init_data = remove_raman_scatter(data)
         
-        data = remove_raman_scatter(data)
+    else:
+        init_data = data
     
-    return data # type: ignore
+    init_data.attrs = data.attrs.copy() # type: ignore
+    
+    return init_data # type: ignore
 
