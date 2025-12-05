@@ -404,6 +404,72 @@ class SampleCollection:
                 print(f"  ... и еще {len(sample_ids_excluded) - 5} образцов")
         
         return df
+    
+    def create_flexible_descriptors_table(self,
+                                         min_coverage: float = 1.0,
+                                         fill_na: Any = np.nan,
+                                         sample_attributes: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Создает таблицу с дескрипторами, которые есть хотя бы у min_coverage*100% образцов.
+        
+        Параметры:
+            min_coverage: минимальная доля образцов, имеющих дескриптор (0.0-1.0)
+            fill_na: значение для пропусков
+            sample_attributes: дополнительные атрибуты образцов
+            
+        Возвращает:
+            DataFrame с дескрипторами, удовлетворяющими условию покрытия
+        """
+        if not self.samples:
+            return pd.DataFrame()
+        
+        total_samples = len(self.samples)
+        min_samples_required = int(total_samples * min_coverage)
+        
+        # Собираем статистику по дескрипторам
+        descriptor_stats = {}
+        for sample in self.samples.values():
+            for desc_name in sample.descriptors:
+                if desc_name not in descriptor_stats:
+                    descriptor_stats[desc_name] = 0
+                descriptor_stats[desc_name] += 1
+        
+        # Выбираем дескрипторы с достаточным покрытием
+        selected_descriptors = [
+            desc for desc, count in descriptor_stats.items()
+            if count >= min_samples_required
+        ]
+        
+        print(f"Дескрипторы с покрытием >= {min_coverage*100}%:")
+        print(f"  Всего дескрипторов в коллекции: {len(descriptor_stats)}")
+        print(f"  Отобранных дескрипторов: {len(selected_descriptors)}")
+        
+        if not selected_descriptors:
+            return pd.DataFrame()
+        
+        # Создаем таблицу
+        rows = []
+        for sample_id, sample in self.samples.items():
+            row = {'sample_id': sample_id}
+            
+            # Добавляем значения выбранных дескрипторов
+            for desc in sorted(selected_descriptors):
+                row[desc] = sample.descriptors.get(desc, fill_na) # type: ignore
+            
+            # Добавляем дополнительные атрибуты
+            if sample_attributes:
+                for attr in sample_attributes:
+                    if hasattr(sample, attr):
+                        row[attr] = getattr(sample, attr, fill_na)
+                    else:
+                        row[attr] = fill_na
+            
+            rows.append(row)
+        
+        df = pd.DataFrame(rows)
+        df.set_index('sample_id', inplace=True)
+        
+        return df
 
 # Утилитарные функции для работы с Sample и SampleCollection
 def split_by_category(
