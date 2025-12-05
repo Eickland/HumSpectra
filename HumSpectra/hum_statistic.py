@@ -481,7 +481,7 @@ def random_forest_classification(
         
         # Определяем целевую переменную
         # Определяем целевую переменную
-        if target_column is None and index_level:
+        if (target_column is None) and (index_level is not None):
             
             # Используем уровень индекса как целевую переменную
             target = data.index.get_level_values(index_level)
@@ -1056,7 +1056,7 @@ def lda_classifaction(data:pd.DataFrame,
         print("1. Подготовка данных...")
         
         # Определяем целевую переменную
-        if target_column is None and index_level:
+        if (target_column is None) and (index_level is not None):
             
             # Используем уровень индекса как целевую переменную
             target = data.index.get_level_values(index_level)
