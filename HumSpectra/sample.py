@@ -146,11 +146,14 @@ class Sample:
 class SampleCollection:
     """Коллекция образцов с возможностью сохранения/загрузки"""
     
-    def __init__(self, cache_dir: Optional[Path] = None):
+    def __init__(self, cache_dir: Optional[Path] = None, samples: Optional[List[Sample]] = None):
         self.samples: Dict[str, Sample] = {}
         self.cache_dir = cache_dir or Path("./sample_cache")
         self.cache_dir.mkdir(exist_ok=True)
         self._tag_index: Dict[str, Set[str]] = {}
+        
+        if samples:
+            self.add_samples(samples)
         
     def add_sample(self, sample: Sample):
         """Добавляет образец в коллекцию"""
@@ -309,6 +312,18 @@ class SampleCollection:
     def get_samples_without_tags(self) -> List[Sample]:
         """Возвращает образцы без тегов"""
         return [s for s in self.samples.values() if not s.sample_tags]
+    
+    def add_samples(self, samples: List[Sample]):
+        """Добавляет несколько образцов в коллекцию"""
+        for sample in samples:
+            self.add_sample(sample)
+    
+    @classmethod
+    def from_samples(cls, samples: List[Sample], cache_dir: Optional[Path] = None) -> 'SampleCollection':
+        """Создает коллекцию из списка образцов (фабричный метод)"""
+        collection = cls(cache_dir=cache_dir)
+        collection.add_samples(samples)
+        return collection
     
     def create_common_descriptors_table(self, 
                                       fill_na: Any = np.nan,
