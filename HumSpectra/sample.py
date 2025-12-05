@@ -309,6 +309,101 @@ class SampleCollection:
     def get_samples_without_tags(self) -> List[Sample]:
         """Возвращает образцы без тегов"""
         return [s for s in self.samples.values() if not s.sample_tags]
+    
+    def create_common_descriptors_table(self, 
+                                      fill_na: Any = np.nan,
+                                      sample_attributes: Optional[List[str]] = None,
+                                      sort_by: Optional[str] = None) -> pd.DataFrame:
+        """
+        Создает DataFrame с дескрипторами, общими для всех образцов.
+        
+        Параметры:
+            fill_na: значение для заполнения пропусков (по умолчанию NaN)
+            sample_attributes: дополнительные атрибуты образцов для включения в таблицу
+                              (например, ['sample_type', 'pH', 'org_carbon'])
+            sort_by: имя столбца для сортировки (None - без сортировки)
+            
+        Возвращает:
+            DataFrame где:
+            - строки: образцы
+            - столбцы: sample_id + общие дескрипторы + дополнительные атрибуты
+            - только образцы, имеющие ВСЕ общие дескрипторы
+        """
+        if not self.samples:
+            return pd.DataFrame()
+        
+        # 1. Находим дескрипторы, общие для всех образцов
+        all_descriptor_sets = [set(sample.descriptors.keys()) 
+                              for sample in self.samples.values()]
+        
+        # Находим пересечение всех множеств дескрипторов
+        common_descriptors = set.intersection(*all_descriptor_sets) if all_descriptor_sets else set()
+        
+        if not common_descriptors:
+            print("Нет дескрипторов, общих для всех образцов")
+            return pd.DataFrame()
+        
+        print(f"Найдено {len(common_descriptors)} общих дескрипторов: {sorted(common_descriptors)}")
+        
+        # 2. Собираем данные только для образцов, имеющих все общие дескрипторы
+        rows = []
+        sample_ids_included = []
+        sample_ids_excluded = []
+        
+        for sample_id, sample in self.samples.items():
+            # Проверяем, есть ли у образца все общие дескрипторы
+            sample_descriptors = set(sample.descriptors.keys())
+            if not common_descriptors.issubset(sample_descriptors):
+                missing = common_descriptors - sample_descriptors
+                sample_ids_excluded.append((sample_id, missing))
+                continue
+            
+            # Создаем строку для DataFrame
+            row = {'sample_id': sample_id}
+            
+            # Добавляем значения общих дескрипторов
+            for desc in sorted(common_descriptors):
+                row[desc] = sample.descriptors.get(desc, fill_na) # type: ignore
+            
+            # Добавляем дополнительные атрибуты образца
+            if sample_attributes:
+                for attr in sample_attributes:
+                    if hasattr(sample, attr):
+                        row[attr] = getattr(sample, attr, fill_na)
+                    else:
+                        row[attr] = fill_na
+            
+            rows.append(row)
+            sample_ids_included.append(sample_id)
+        
+        # 3. Создаем DataFrame
+        if not rows:
+            print("Нет образцов, содержащих все общие дескрипторы")
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(rows)
+        
+        # Устанавливаем sample_id как индекс, если нужно
+        df.set_index('sample_id', inplace=True)
+        
+        # Сортируем, если указано
+        if sort_by and sort_by in df.columns:
+            df.sort_values(by=sort_by, inplace=True)
+        
+        # 4. Выводим статистику
+        print(f"\nСтатистика:")
+        print(f"  Всего образцов в коллекции: {len(self.samples)}")
+        print(f"  Образцов включено в таблицу: {len(sample_ids_included)}")
+        print(f"  Образцов исключено: {len(sample_ids_excluded)}")
+        
+        if sample_ids_excluded:
+            print(f"\nИсключенные образцы (отсутствующие дескрипторы):")
+            for sample_id, missing in sample_ids_excluded[:5]:  # Показываем первые 5
+                print(f"  {sample_id}: отсутствуют {missing}")
+            if len(sample_ids_excluded) > 5:
+                print(f"  ... и еще {len(sample_ids_excluded) - 5} образцов")
+        
+        return df
 
 # Утилитарные функции для работы с Sample и SampleCollection
 def split_by_category(
