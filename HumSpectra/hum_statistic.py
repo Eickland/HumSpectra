@@ -8,7 +8,7 @@ from typing import Optional, Union, List, Tuple
 import base64
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split,cross_val_score
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, r2_score, mean_absolute_error, silhouette_score
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
@@ -1028,28 +1028,37 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
-def lda_classifaction(data:pd.DataFrame,
-                                target_column:str|None = None,
-                                index_level:int|None = None,
-                                n_components:int|None = None,
-                               test_size:float = 0.2,
-                               random_state:int = 42, 
-                               output_html_path:str|None = None,
-                               **kwargs
-                               ) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, pd.DataFrame, LabelEncoder,
-           np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, float, float, float]:
+def lda_classification(data: pd.DataFrame,
+                      target_column: str | None = None,
+                      index_level: int | None = None,
+                      n_components: int | None = None,
+                      test_size: float = 0.2,
+                      random_state: int = 42,
+                      output_html_path: str | None = None,
+                      cross_validate: bool = False,
+                      cv_dataset: pd.DataFrame | None = None,
+                      cv_folds: int = 5,
+                      **kwargs) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, 
+                                         pd.DataFrame, LabelEncoder, np.ndarray, np.ndarray, 
+                                         np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
+                                         float, float, float, dict | None]:
     """
     Анализ данных с помощью Linear Discriminant Analysis (LDA)
-    с выводом результатов в HTML файл и проверкой на мультиколлинеарность
+    с выводом результатов в HTML файл и проверкой на мультиколлинеарности
+    и опциональной кросс-валидацией на отдельном датасете
     """
     
     # Перехватываем вывод в консоль
     old_stdout = sys.stdout
     sys.stdout = captured_output = StringIO()
     
+    cv_results = None
+    
     try:
         print("=" * 70)
         print("АНАЛИЗ С ПОМОЩЬЮ LINEAR DISCRIMINANT ANALYSIS (LDA)")
+        if cross_validate and cv_dataset is not None:
+            print("С ИСПОЛЬЗОВАНИЕМ КРОСС-ВАЛИДАЦИИ")
         print("=" * 70)
         
         # Шаг 1: Подготовка данных
@@ -1057,15 +1066,11 @@ def lda_classifaction(data:pd.DataFrame,
         
         # Определяем целевую переменную
         if (target_column is None) and (index_level is not None):
-            
             # Используем уровень индекса как целевую переменную
             target = data.index.get_level_values(index_level)
-            
             features_df = data.reset_index(drop=True)
             target_name = f"{index_level} уровень индекса"
-            
         else:
-            
             target = data[target_column]
             features_df = data.drop(columns=[target_column])
             target_name = target_column
@@ -1138,7 +1143,6 @@ def lda_classifaction(data:pd.DataFrame,
             vif_results = pd.DataFrame()
         
         # Масштабирование признаков
-        
         scaler = StandardScaler()
         features_scaled = scaler.fit_transform(features_numeric)
         
@@ -1159,10 +1163,8 @@ def lda_classifaction(data:pd.DataFrame,
         min_samples_per_class = class_counts.min()
         
         if min_samples_per_class < 2:
-            
             print("   Предупреждение: некоторые классы имеют менее 2 образцов, стратификация отключена")
             stratify = None
-            
         else:
             stratify = target_encoded
         
@@ -1182,14 +1184,71 @@ def lda_classifaction(data:pd.DataFrame,
         
         # Если в тестовой выборке не все классы, используем только присутствующие
         if len(test_classes) < len(class_names):
-            
             print("   Предупреждение: не все классы присутствуют в тестовой выборке")
             present_classes_mask = np.isin(np.arange(len(class_names)), test_classes)
             present_class_names = class_names[present_classes_mask]
             print(f"   Используемые классы для отчета: {list(present_class_names)}")
-            
         else:
             present_class_names = class_names
+        
+        # Шаг 3.1: Кросс-валидация на дополнительном датасете
+        if cross_validate and cv_dataset is not None:
+            print("\n3.1. Кросс-валидация на дополнительном датасете...")
+            
+            # Проверяем структуру датасета
+            print("   Проверка структуры дополнительного датасета...")
+            
+            # Определяем целевую переменную для кросс-валидационного датасета
+            if (target_column is None) and (index_level is not None):
+                cv_target = cv_dataset.index.get_level_values(index_level)
+                cv_features_df = cv_dataset.reset_index(drop=True)
+            else:
+                cv_target = cv_dataset[target_column]
+                cv_features_df = cv_dataset.drop(columns=[target_column])
+            
+            # Кодируем целевую переменную
+            cv_target_encoded = le.transform(cv_target)
+            
+            # Убеждаемся, что признаки совпадают
+            cv_numeric_columns = cv_features_df.select_dtypes(include=[np.number]).columns
+            
+            # Проверяем совпадение столбцов
+            if not set(numeric_columns).issubset(set(cv_numeric_columns)):
+                missing_cols = set(numeric_columns) - set(cv_numeric_columns)
+                print(f"   ⚠️ Предупреждение: В кросс-валидационном датасете отсутствуют столбцы: {missing_cols}")
+                # Используем только общие столбцы
+                common_cols = list(set(numeric_columns).intersection(set(cv_numeric_columns)))
+                cv_features_numeric = cv_features_df[common_cols].copy()
+            else:
+                cv_features_numeric = cv_features_df[numeric_columns].copy()
+            
+            # Применяем масштабирование
+            cv_features_scaled = scaler.transform(cv_features_numeric)
+            
+            print(f"   Размер кросс-валидационного датасета: {cv_features_scaled.shape}")
+            print(f"   Количество классов в кросс-валидации: {len(np.unique(cv_target_encoded))}")
+            
+            # Выполняем кросс-валидацию
+            cv_scores = cross_val_score(
+                LinearDiscriminantAnalysis(n_components=n_components),
+                cv_features_scaled,
+                cv_target_encoded,
+                cv=cv_folds,
+                scoring='accuracy'
+            )
+            
+            cv_results = {
+                'cv_scores': cv_scores,
+                'cv_mean': cv_scores.mean(),
+                'cv_std': cv_scores.std(),
+                'cv_features_scaled': cv_features_scaled,
+                'cv_target_encoded': cv_target_encoded
+            }
+            
+            print(f"   Результаты кросс-валидации ({cv_folds} фолдов):")
+            print(f"      Точность по фолдам: {cv_scores}")
+            print(f"      Средняя точность: {cv_scores.mean():.4f}")
+            print(f"      Стандартное отклонение: {cv_scores.std():.4f}")
         
         # Шаг 4: Обучение LDA
         print("4. Обучение Linear Discriminant Analysis...")
@@ -1253,6 +1312,9 @@ def lda_classifaction(data:pd.DataFrame,
         accuracy = accuracy_score(y_test, y_pred)
         print(f"   Accuracy: {accuracy:.4f}")
         
+        if cross_validate and cv_results:
+            print(f"   Cross-Validation Accuracy: {cv_results['cv_mean']:.4f} ± {cv_results['cv_std']:.4f}")
+        
         print(f"\n   Classification Report:")
         print("   " + "-" * 50)
         
@@ -1270,7 +1332,6 @@ def lda_classifaction(data:pd.DataFrame,
             macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
             
         except ValueError as e:
-            
             print(f"   Ошибка при создании classification report: {e}")
             print("   Используем числовые метки классов...")
             
@@ -1284,7 +1345,7 @@ def lda_classifaction(data:pd.DataFrame,
             
             weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
             macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-            
+        
         # Шаг 6: Анализ важности признаков через коэффициенты LDA
         print("\n6. Анализ важности признаков...")
         
@@ -1305,7 +1366,6 @@ def lda_classifaction(data:pd.DataFrame,
         importance_column = 'coefficient' if n_components == 1 else 'coefficient_sum'
         for i, row in feature_importance.head(10).iterrows():
             print(f"      {row['feature']}: {row[importance_column]:.4f}")
-        
         
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
@@ -1329,16 +1389,16 @@ def lda_classifaction(data:pd.DataFrame,
         
         # Создаем HTML отчет
         if output_html_path:
-            create_lda_classifaction_html_report(console_output, results_df, feature_importance, 
+            create_lda_classification_html_report(console_output, results_df, feature_importance, 
                                  lda_model, class_names, le, X_test, y_test, y_pred, 
-                                 X_train_lda, y_train, output_html_path, vif_results, numeric_columns)
+                                 X_train_lda, y_train, output_html_path, vif_results, 
+                                 numeric_columns, cv_results)
             
             print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
         
-        return (results_df, lda_model, scaler, feature_importance,le,
+        return (results_df, lda_model, scaler, feature_importance, le,
                 X_train, X_test, y_train, y_test, X_train_lda, X_test_lda,
-                float(accuracy), weighted_avg_accuracy, macro_avg_accuracy,
-                )
+                float(accuracy), weighted_avg_accuracy, macro_avg_accuracy, cv_results)
         
     except Exception as e:
         # Восстанавливаем stdout в случае ошибки
@@ -1346,10 +1406,12 @@ def lda_classifaction(data:pd.DataFrame,
         print(f"Ошибка при выполнении анализа: {e}")
         raise
 
-def create_lda_classifaction_html_report(console_output, results_df, feature_importance, 
+
+def create_lda_classification_html_report(console_output, results_df, feature_importance, 
                           lda_model, class_names, label_encoder,
-                          X_test, y_test, y_pred, X_lda, y_train, output_html_path, vif_results=None, feature_names=None):
-    """Создание HTML отчета с результатами анализа LDA"""
+                          X_test, y_test, y_pred, X_lda, y_train, output_html_path, 
+                          vif_results=None, feature_names=None, cv_results=None):
+    """Создание HTML отчета с результатами анализа LDA с поддержкой кросс-валидации"""
     
     # Создаем визуализации
     plt.style.use('default')
@@ -1469,6 +1531,71 @@ def create_lda_classifaction_html_report(console_output, results_df, feature_imp
                 <p><strong>VIF < 5</strong>: Нет мультиколлинеарности</p>
                 <p><strong>5 ≤ VIF < 10</strong>: Умеренная мультиколлинеарность</p>
                 <p><strong>VIF ≥ 10</strong>: Высокая мультиколлинеарность (требует внимания)</p>
+            </div>
+        </div>
+        """
+    
+    # Создаем секцию кросс-валидации если есть результаты
+    cv_section = ""
+    if cv_results is not None:
+        cv_scores = cv_results['cv_scores']
+        cv_mean = cv_results['cv_mean']
+        cv_std = cv_results['cv_std']
+        
+        # Визуализация результатов кросс-валидации
+        fig_cv, ax_cv = plt.subplots(figsize=(8, 5))
+        folds = range(1, len(cv_scores) + 1)
+        ax_cv.plot(folds, cv_scores, 'o-', linewidth=2, markersize=8)
+        ax_cv.axhline(y=cv_mean, color='r', linestyle='--', label=f'Среднее: {cv_mean:.4f}')
+        ax_cv.fill_between(folds, cv_mean - cv_std, cv_mean + cv_std, alpha=0.2, color='gray')
+        ax_cv.set_xlabel('Номер фолда')
+        ax_cv.set_ylabel('Точность')
+        ax_cv.set_title(f'Результаты кросс-валидации ({len(cv_scores)} фолдов)')
+        ax_cv.set_xticks(folds)
+        ax_cv.grid(True, alpha=0.3)
+        ax_cv.legend()
+        plt.tight_layout()
+        
+        buffer_cv = BytesIO()
+        fig_cv.savefig(buffer_cv, format='png', dpi=100, bbox_inches='tight')
+        buffer_cv.seek(0)
+        cv_plot = base64.b64encode(buffer_cv.getvalue()).decode()
+        plt.close(fig_cv)
+        
+        cv_section = f"""
+        <div class="section">
+            <h2>📈 Результаты кросс-валидации</h2>
+            <p><em>Оценка стабильности модели на независимом датасете</em></p>
+            
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <h3>{cv_mean:.4f}</h3>
+                    <p>Средняя точность</p>
+                </div>
+                <div class="summary-card">
+                    <h3>±{cv_std:.4f}</h3>
+                    <p>Стандартное отклонение</p>
+                </div>
+                <div class="summary-card">
+                    <h3>{len(cv_scores)}</h3>
+                    <p>Количество фолдов</p>
+                </div>
+                <div class="summary-card">
+                    <h3>{cv_results['cv_features_scaled'].shape[0]}</h3>
+                    <p>Наблюдений в CV</p>
+                </div>
+            </div>
+            
+            <div class="plot-container">
+                <img src="data:image/png;base64,{cv_plot}" alt="Cross-Validation Results">
+            </div>
+            
+            <div class="coefficient-info">
+                <h3>📊 Результаты по фолдам:</h3>
+                <p>{', '.join([f'{score:.4f}' for score in cv_scores])}</p>
+                <p><strong>Лучший фолд:</strong> {max(cv_scores):.4f}</p>
+                <p><strong>Худший фолд:</strong> {min(cv_scores):.4f}</p>
+                <p><strong>Разница:</strong> {max(cv_scores) - min(cv_scores):.4f}</p>
             </div>
         </div>
         """
@@ -1618,6 +1745,15 @@ def create_lda_classifaction_html_report(console_output, results_df, feature_imp
                 border-radius: 5px;
                 margin: 10px 0;
             }}
+            .cv-badge {{
+                display: inline-block;
+                background: #28a745;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 20px;
+                font-size: 14px;
+                margin-left: 10px;
+            }}
         </style>
     </head>
     <body>
@@ -1625,6 +1761,7 @@ def create_lda_classifaction_html_report(console_output, results_df, feature_imp
             <div class="header">
                 <h1>📊 Анализ Linear Discriminant Analysis (LDA)</h1>
                 <p>Автоматический отчет по результатам анализа с помощью LDA</p>
+                {f'<p class="cv-badge">С КРОСС-ВАЛИДАЦИЕЙ</p>' if cv_results else ''}
             </div>
             
             <div class="summary-grid">
@@ -1651,6 +1788,7 @@ def create_lda_classifaction_html_report(console_output, results_df, feature_imp
                 <p><strong>Тип модели:</strong> Linear Discriminant Analysis</p>
                 <p><strong>Количество компонентов:</strong> {lda_model.n_components}</p>
                 <p><strong>Количество классов:</strong> {len(class_names)}</p>
+                <p><strong>Объясненная дисперсия:</strong> {lda_model.explained_variance_ratio_.sum():.2%}</p>
             </div>
             
             {equations_section}
@@ -1663,6 +1801,8 @@ def create_lda_classifaction_html_report(console_output, results_df, feature_imp
             </div>
             
             {vif_section}
+            
+            {cv_section}
             
             <div class="section">
                 <h2>📋 Полный вывод анализа</h2>
@@ -1711,4 +1851,3 @@ def create_lda_classifaction_html_report(console_output, results_df, feature_imp
     # Сохраняем HTML файл
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
-
