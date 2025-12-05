@@ -1230,7 +1230,7 @@ def lda_classification(data: pd.DataFrame,
             
             # Выполняем кросс-валидацию
             cv_scores = cross_val_score(
-                LinearDiscriminantAnalysis(n_components=min(n_classes - 1, features_df.shape[1])),
+                LinearDiscriminantAnalysis(n_components=min(len(np.unique(cv_target_encoded)), features_df.shape[1])),
                 cv_features_scaled,
                 cv_target_encoded,
                 cv=cv_folds,
