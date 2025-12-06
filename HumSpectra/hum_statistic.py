@@ -1489,6 +1489,7 @@ def lda_classification(data: pd.DataFrame,
                     cv_target_encoded, cv_predictions,
                     target_names=cv_present_class_names,
                     output_dict=True,
+                    labels=cv_unique_classes,
                     zero_division=0
                 )
                 
