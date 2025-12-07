@@ -1153,7 +1153,7 @@ def lda_classification(data: pd.DataFrame,
                       **kwargs) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, 
                                          pd.DataFrame, LabelEncoder, np.ndarray, np.ndarray, 
                                          np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
-                                         float, float, float, dict | None]:
+                                         float, float, float,pd.DataFrame, dict | None]:
     """
     Анализ данных с помощью Linear Discriminant Analysis (LDA)
     с выводом результатов в HTML файл и проверкой на мультиколлинеарности
