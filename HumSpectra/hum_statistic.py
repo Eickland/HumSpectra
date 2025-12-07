@@ -480,7 +480,7 @@ def random_forest_classification(
     old_stdout = sys.stdout
     sys.stdout = captured_output = StringIO()
     
-    cv_results = None
+    external_results = None
     
     try:
         print("=" * 70)
@@ -829,7 +829,7 @@ def random_forest_classification(
             float(accuracy),
             weighted_avg_accuracy,
             macro_avg_accuracy,
-            cv_results
+            external_results # type: ignore
         )
         
     except Exception as e:
