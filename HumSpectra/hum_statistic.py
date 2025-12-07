@@ -431,7 +431,7 @@ def random_forest_classification(
     cv_dataset: pd.DataFrame | None = None,
     **kwargs
 ) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
-           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float, dict | None]:
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float,pd.DataFrame, dict | None]:
     """
     Анализ данных с помощью Random Forest для задач классификации
     с опциональной кросс-валидацией на отдельном датасете.
@@ -829,6 +829,7 @@ def random_forest_classification(
             float(accuracy),
             weighted_avg_accuracy,
             macro_avg_accuracy,
+            clf_report_df,
             external_results # type: ignore
         )
         
@@ -1149,7 +1150,6 @@ def lda_classification(data: pd.DataFrame,
                       output_html_path: str | None = None,
                       external_validation: bool = False,
                       cv_dataset: pd.DataFrame | None = None,
-                      cv_folds: int = 5,
                       **kwargs) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, 
                                          pd.DataFrame, LabelEncoder, np.ndarray, np.ndarray, 
                                          np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
@@ -1370,6 +1370,70 @@ def lda_classification(data: pd.DataFrame,
         print(f"\n   Classification Report:")
         print("   " + "-" * 50)
         
+        
+        try:
+            clf_report = classification_report(
+                y_test, y_pred, 
+                target_names=present_class_names, 
+                output_dict=True,
+                zero_division=0
+            )
+            clf_report_df = pd.DataFrame(clf_report).transpose()
+            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
+            
+            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
+            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
+            
+        except ValueError as e:
+            print(f"   Ошибка при создании classification report: {e}")
+            print("   Используем числовые метки классов...")
+            
+            clf_report = classification_report(
+                y_test, y_pred, 
+                output_dict=True,
+                zero_division=0
+            )
+            clf_report_df = pd.DataFrame(clf_report).transpose()
+            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
+            
+            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
+            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
+        
+        # Шаг 6: Анализ важности признаков через коэффициенты LDA
+        print("\n6. Анализ важности признаков...")
+        
+        # Анализ коэффициентов LDA
+        if n_components == 1:
+            feature_importance = pd.DataFrame({
+                'feature': numeric_columns,
+                'coefficient': lda_model.coef_[0]
+            }).sort_values('coefficient', key=abs, ascending=False)
+        else:
+            # Для многокомпонентного случая используем сумму абсолютных значений по компонентам
+            feature_importance = pd.DataFrame({
+                'feature': numeric_columns,
+                'coefficient_sum': np.sum(np.abs(lda_model.coef_), axis=0)
+            }).sort_values('coefficient_sum', ascending=False)
+        
+        print("   Топ-10 самых важных признаков (по абсолютным коэффициентам LDA):")
+        importance_column = 'coefficient' if n_components == 1 else 'coefficient_sum'
+        for i, row in feature_importance.head(10).iterrows():
+            print(f"      {row['feature']}: {row[importance_column]:.4f}")
+        
+        # Создаем DataFrame с результатами
+        results_df = features_df.copy()
+        results_df['actual'] = target_encoded
+        results_df['predicted'] = lda_model.predict(features_scaled)
+        results_df['is_correct'] = (results_df['actual'] == results_df['predicted'])
+        
+        results_df['Class'] = data.index.get_level_values('Class')
+        results_df['Subclass'] = data.index.get_level_values('Subclass')
+        
+        # Добавляем LDA компоненты
+        lda_components = lda_model.transform(features_scaled)
+        for i in range(lda_components.shape[1]):
+            results_df[f'LDA_Component_{i+1}'] = lda_components[:, i]
+        
         if external_validation and cv_dataset is not None:
             print("\n5.1. Валидация на дополнительном датасете...")
             
@@ -1459,70 +1523,7 @@ def lda_classification(data: pd.DataFrame,
                 
                 cv_report_df = pd.DataFrame(cv_clf_report).transpose()
                 print(cv_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))        
-        
-        
-        try:
-            clf_report = classification_report(
-                y_test, y_pred, 
-                target_names=present_class_names, 
-                output_dict=True,
-                zero_division=0
-            )
-            clf_report_df = pd.DataFrame(clf_report).transpose()
-            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            
-            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
-            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-            
-        except ValueError as e:
-            print(f"   Ошибка при создании classification report: {e}")
-            print("   Используем числовые метки классов...")
-            
-            clf_report = classification_report(
-                y_test, y_pred, 
-                output_dict=True,
-                zero_division=0
-            )
-            clf_report_df = pd.DataFrame(clf_report).transpose()
-            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            
-            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
-            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-        
-        # Шаг 6: Анализ важности признаков через коэффициенты LDA
-        print("\n6. Анализ важности признаков...")
-        
-        # Анализ коэффициентов LDA
-        if n_components == 1:
-            feature_importance = pd.DataFrame({
-                'feature': numeric_columns,
-                'coefficient': lda_model.coef_[0]
-            }).sort_values('coefficient', key=abs, ascending=False)
-        else:
-            # Для многокомпонентного случая используем сумму абсолютных значений по компонентам
-            feature_importance = pd.DataFrame({
-                'feature': numeric_columns,
-                'coefficient_sum': np.sum(np.abs(lda_model.coef_), axis=0)
-            }).sort_values('coefficient_sum', ascending=False)
-        
-        print("   Топ-10 самых важных признаков (по абсолютным коэффициентам LDA):")
-        importance_column = 'coefficient' if n_components == 1 else 'coefficient_sum'
-        for i, row in feature_importance.head(10).iterrows():
-            print(f"      {row['feature']}: {row[importance_column]:.4f}")
-        
-        # Создаем DataFrame с результатами
-        results_df = features_df.copy()
-        results_df['actual'] = target_encoded
-        results_df['predicted'] = lda_model.predict(features_scaled)
-        results_df['is_correct'] = (results_df['actual'] == results_df['predicted'])
-        
-        results_df['Class'] = data.index.get_level_values('Class')
-        results_df['Subclass'] = data.index.get_level_values('Subclass')
-        
-        # Добавляем LDA компоненты
-        lda_components = lda_model.transform(features_scaled)
-        for i in range(lda_components.shape[1]):
-            results_df[f'LDA_Component_{i+1}'] = lda_components[:, i]
+                
         
         # Получаем весь вывод
         console_output = captured_output.getvalue()
@@ -1531,32 +1532,18 @@ def lda_classification(data: pd.DataFrame,
         sys.stdout = old_stdout
         
         # Создаем HTML отчет
-        if external_validation and cv_dataset is not None:
         
-            if output_html_path:
-                create_lda_classification_html_report(console_output, results_df, feature_importance, 
-                                    lda_model, class_names, le, X_test, y_test, y_pred, 
-                                    X_train_lda, y_train, output_html_path, vif_results, 
-                                    numeric_columns, external_results) # type: ignore
-                
-                print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
+        if output_html_path:
+            create_lda_classification_html_report(console_output, results_df, feature_importance, 
+                                lda_model, class_names, le, X_test, y_test, y_pred, 
+                                X_train_lda, y_train, output_html_path, vif_results, 
+                                numeric_columns, external_results) # type: ignore
             
-            return (results_df, lda_model, scaler, feature_importance, le,
-                    X_train, X_test, y_train, y_test, X_train_lda, X_test_lda,
-                    float(accuracy), weighted_avg_accuracy, macro_avg_accuracy, external_results) # type: ignore
-            
-        else:
-            if output_html_path:
-                create_lda_classification_html_report(console_output, results_df, feature_importance, 
-                                    lda_model, class_names, le, X_test, y_test, y_pred, 
-                                    X_train_lda, y_train, output_html_path, vif_results, 
-                                    numeric_columns)
-                
-                print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
-            
-            return (results_df, lda_model, scaler, feature_importance, le,
-                    X_train, X_test, y_train, y_test, X_train_lda, X_test_lda,
-                    float(accuracy), weighted_avg_accuracy, macro_avg_accuracy) # type: ignore            
+            print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
+        
+        return (results_df, lda_model, scaler, feature_importance, le,
+                X_train, X_test, y_train, y_test, X_train_lda, X_test_lda,
+                float(accuracy), weighted_avg_accuracy, macro_avg_accuracy,clf_report_df, external_results) # type: ignore        
             
         
     except Exception as e:
