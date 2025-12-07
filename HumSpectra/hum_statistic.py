@@ -1164,7 +1164,7 @@ def lda_classification(data: pd.DataFrame,
     old_stdout = sys.stdout
     sys.stdout = captured_output = StringIO()
     
-    cv_results = None
+    external_results = None
     
     try:
         print("=" * 70)
