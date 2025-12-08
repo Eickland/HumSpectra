@@ -464,12 +464,14 @@ def read_fluo_3d(path: str,
                  sep: str | None = None,
                  index_col: int | None = None,  # Изменено на None по умолчанию
                  debug: bool = False,
-                 remove_raman=True) -> pd.DataFrame:
+                 remove_raman=True,
+                 assign_class_type: bool = True) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
     :param sep: разделитель в строчном виде (example: ",").
     :param index_col: номер столбца, который считается индексом таблицы. Если None, будет определён автоматически.
+    :param non_class_type: параметр, при True пытается прочесть класс и подкласс из имя спектра, при False - не приписывает класс.
     :return: DataFrame: Таблица, в котором индексами строк являются длины волн испускания, имена столбцов - длины волн
             возбуждения. Таблица имеет метаданные - имя образца, класс, подкласс
     """
@@ -571,9 +573,12 @@ def read_fluo_3d(path: str,
     data.columns = data.columns.astype(int)
 
     data.attrs['name'] = name
-    data.attrs['class'] = ut.extract_class_from_name(name)
-    data.attrs['subclass'] = ut.extract_subclass_from_name(name)
     data.attrs['path'] = path
+    
+    if assign_class_type:
+        data.attrs['class'] = ut.extract_class_from_name(name)
+        data.attrs['subclass'] = ut.extract_subclass_from_name(name)
+    
     
     if remove_raman:
         init_data = remove_raman_scatter(data)
