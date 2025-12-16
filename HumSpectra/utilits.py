@@ -260,25 +260,27 @@ def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
     
     return [x for x in spectra_list if x is not None]
 
-def spectra_to_df(spectra_list, metrics,class_filter):
-
-    df = pd.DataFrame([{
-
-        "Sample": s.attrs['name'],
-        "Class": s.attrs['class'], 
-        "Subclass": s.attrs['subclass'],
-
-        **{name: func(s) for name, func in metrics.items()}
-    } for s in spectra_list])
+def spectra_to_df(spectra_list, metrics, class_filter, check_class_type=True):
+    if check_class_type:
+        
+        df = pd.DataFrame([{
+            "Sample": s.attrs['name'],
+            "Class": s.attrs['class'], 
+            "Subclass": s.attrs['subclass'],
+            **{name: func(s) for name, func in metrics.items()}
+        } for s in spectra_list])
+        
+    else:
+        df = pd.DataFrame([{
+            "Sample": s.attrs['name'],
+            **{name: func(s) for name, func in metrics.items()}
+        } for s in spectra_list])        
 
     if class_filter:
-    
         return df[df["Class"] == class_filter] if class_filter else df
     
-    else:
-        
+    else: 
         return df
-
 def analyze_geographical(data):
     """
     Анализирует географические координаты и определяет крайние точки.
