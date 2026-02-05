@@ -2542,20 +2542,53 @@ def plot_spectra_kde_overlay(spectra_list: list,
     return fig, ax
        
 def spectrum(spec: pd.DataFrame,
-             ax = None):
+             ax = None,
+             normalize=True,
+             xlim=(200, 1000),
+             peak_width=0.8):
     
     spec = spec.copy(deep=True)
     
     if ax is None:
-
-        fig, ax = plt.subplots(1,1,figsize=(6,6))
+        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     
-    ax.plot(spec["mass"],spec["intensity"], color="black",linewidth=0.2)
-        
-    ax.set_xlabel("m/z")
-    ax.set_ylabel("intensity")
-        
-    ax.set_xlim((200,1000))
+    # Нормализация интенсивностей (опционально)
+    if normalize and spec["intensity"].max() > 0:
+        spec["intensity"] = spec["intensity"] / spec["intensity"].max() * 100
+    
+    # Основные пики - черные линии
+    ax.stem(spec["mass"], 
+            spec["intensity"],
+            linefmt='black',
+            markerfmt=' ',
+            basefmt=' ',
+            use_line_collection=True)
+    
+    # Сглаженная линия основания
+    ax.plot(spec["mass"], spec["intensity"], 
+            color='black', 
+            linewidth=0.5, 
+            alpha=0.3)
+    
+    ax.set_xlabel("m/z", fontsize=12, fontweight='bold')
+    ax.set_ylabel("Relative Intensity (%)" if normalize else "Intensity", 
+                  fontsize=12, fontweight='bold')
+    
+    # Установка границ
+    if xlim:
+        ax.set_xlim(xlim)
+    else:
+        ax.set_xlim((spec["mass"].min() - 5, spec["mass"].max() + 5))
+    
+    # Автоматические границы по y
+    ax.set_ylim((0, spec["intensity"].max() * 1.15))
+    
+    # Настройка внешнего вида
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.tick_params(axis='both', which='major', labelsize=10)
+    
+    return ax
 
 def recallibrate(spec: pd.DataFrame, 
                 error_table: Optional[pd.DataFrame] = None, 
