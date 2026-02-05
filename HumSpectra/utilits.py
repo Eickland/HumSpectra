@@ -252,6 +252,47 @@ def attributting_order(data: DataFrame,
 
     return data_copy
 
+def column_numeric_position_calc(target_number:float,
+                                 df:pd.DataFrame):
+    columns = df.columns
+    
+    if pd.api.types.is_numeric_dtype(columns.dtype):
+    
+        # 1. Вычисляем абсолютные разницы
+        diffs = np.abs(columns - target_number) # type: ignore
+
+        # 2. Находим позицию (индекс в списке столбцов), где разница минимальна
+        closest_position = int(np.argmin(diffs))
+
+        # 3. Получаем само имя столбца
+        closest_column_name = columns[closest_position]
+    
+    else:
+        raise ValueError('Значения столбцов должны быть числовыми')
+    
+    return closest_column_name
+
+def index_numeric_position_calc(target_number:float,
+                                 df:pd.DataFrame):
+    
+    index = df.index
+    
+    if pd.api.types.is_numeric_dtype(index.dtype):
+    
+        # 1. Вычисляем абсолютные разницы
+        diffs = np.abs(index - target_number) # type: ignore
+
+        # 2. Находим позицию (индекс в списке столбцов), где разница минимальна
+        closest_position = int(np.argmin(diffs))
+
+        # 3. Получаем само имя столбца
+        closest_index = index[closest_position]
+    
+    else:
+        raise ValueError('Значения столбцов должны быть числовыми')
+    
+    return closest_index
+    
 def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
     
     """Загружает все спектры из папки"""
@@ -260,25 +301,28 @@ def load_spectra_data(folder, reader_func, **kwargs)-> list[DataFrame]:
     
     return [x for x in spectra_list if x is not None]
 
-def spectra_to_df(spectra_list, metrics,class_filter):
-
-    df = pd.DataFrame([{
-
-        "Sample": s.attrs['name'],
-        "Class": s.attrs['class'], 
-        "Subclass": s.attrs['subclass'],
-
-        **{name: func(s) for name, func in metrics.items()}
-    } for s in spectra_list])
+def spectra_to_df(spectra_list, metrics, class_filter, check_class_type=True):
+    if check_class_type:
+        
+        df = pd.DataFrame([{
+            "Sample": s.attrs['name'],
+            "Class": s.attrs['class'], 
+            "Subclass": s.attrs['subclass'],
+            **{name: func(s) for name, func in metrics.items()}
+        } for s in spectra_list])
+        
+    else:
+        df = pd.DataFrame([{
+            "Sample": s.attrs['name'],
+            **{name: func(s) for name, func in metrics.items()}
+        } for s in spectra_list])        
 
     if class_filter:
-    
         return df[df["Class"] == class_filter] if class_filter else df
     
-    else:
-        
+    else: 
         return df
-
+    
 def analyze_geographical(data):
     """
     Анализирует географические координаты и определяет крайние точки.

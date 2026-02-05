@@ -45,8 +45,8 @@ def calc_fluo_index(data: pd.DataFrame)-> float:
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: fluo_index, отношение интенсивности при длине волны испускания 450 нм к 500 нм при длине волны возбуждения 370 нм
     """
-    row = data[370]
-    fluo_param = row.loc[450]/row.loc[500]
+    row = data[ut.column_numeric_position_calc(370,data)]
+    fluo_param = row.loc[ut.index_numeric_position_calc(450,data)]/row.loc[ut.index_numeric_position_calc(500,data)]
     
     return float(fluo_param)
 
@@ -55,7 +55,7 @@ def calc_humin_index(data: pd.DataFrame)-> float:
     :param data: DataFrame, спектр флуоресценции
     :return: fluo_param: humin_index, Функция рассчитывает отношение интеграла длины волны испускания от 435 до 480 нм к интегралу от 300 до 345 нм при длине возбуждения 254 нм.
     """
-    row = data[255].to_numpy()
+    row = data[ut.column_numeric_position_calc(255,data)].to_numpy()
     EM_wavelengths = data.index.to_numpy(dtype="int")
     spline = cut_raman_spline(EM_wavelengths, row, 255)
     high = np.trapezoid(spline[np.where(EM_wavelengths == 435)[0][0]:np.where(EM_wavelengths == 480)[0][0]])
