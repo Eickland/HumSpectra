@@ -524,23 +524,18 @@ def delete_eject_quantile_fluo(data: DataFrame,
 
     return data
 
-def normilize_by_max(data: DataFrame)-> DataFrame:
-
+def normalize_by_min_max(data: pd.DataFrame) -> pd.DataFrame:
     """
-    Нормирует спектр от 0 до 1
-
-    Args:
-        data (pd.DataFrame): 3D спектр флуоресценции.
-
-    Returns:
-        pd.DataFrame: Отнормированый спектр
+    Нормирует спектр строго в диапазон от 0 до 1.
     """
-
-    data = data.copy()
-
-    data = data/data.max(axis=None)
-
-    return data
+    # Находим глобальный минимум и максимум
+    v_min = data.values.min()
+    v_max = data.values.max()
+    
+    if v_max == v_min:
+        return data - v_min 
+        
+    return (data - v_min) / (v_max - v_min)
 
 def get_strong_correlations(corr_matrix: pd.DataFrame, 
                             threshold: float = 0.8, 
