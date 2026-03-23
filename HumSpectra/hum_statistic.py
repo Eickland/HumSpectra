@@ -1707,6 +1707,7 @@ def create_lda_classification_html_report(console_output, results_df, feature_im
     # График важности признаков
     fig1, ax1 = plt.subplots(figsize=(10, 6))
     top_features = feature_importance.head(15)
+    print(top_features)
     importance_column = 'coefficient' if 'coefficient' in top_features.columns else 'coefficient_sum'
     
     colors = ['red' if x < 0 else 'blue' for x in top_features[importance_column]]
