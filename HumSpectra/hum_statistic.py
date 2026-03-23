@@ -1,6 +1,8 @@
 import sys
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import StringIO, BytesIO
@@ -771,7 +773,7 @@ def random_forest_classification(
         
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
-        results_df['Истинный_класс'] = y_encoded
+        results_df['Истинный_класс'] = y_encoded # type: ignore
         results_df['Предсказанный_класс'] = rf_model.predict(X_scaled)
         results_df['Верно_предсказано'] = (
             results_df['Истинный_класс'] == results_df['Предсказанный_класс']
@@ -1422,7 +1424,7 @@ def lda_classification(data: pd.DataFrame,
         
         # Создаем DataFrame с результатами
         results_df = features_df.copy()
-        results_df['actual'] = target_encoded
+        results_df['actual'] = target_encoded # type: ignore
         results_df['predicted'] = lda_model.predict(features_scaled)
         results_df['is_correct'] = (results_df['actual'] == results_df['predicted'])
         
