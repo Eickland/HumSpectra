@@ -431,6 +431,7 @@ def random_forest_classification(
     index_level: Optional[int] = None,
     external_validation: bool = False,
     cv_dataset: pd.DataFrame | None = None,
+    vif_filter: bool = False,
     **kwargs
 ) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
            np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float,pd.DataFrame, dict | None]:
@@ -543,36 +544,39 @@ def random_forest_classification(
         if missing_values > 0:
             print(f"   Заполняем {missing_values} пропущенных значений средними")
             features_numeric = features_numeric.fillna(features_numeric.mean())
-        
-        # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
-        print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
-        
-        # Проверяем, достаточно ли признаков для VIF анализа
-        if len(features_numeric.columns) > 1:
-            features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
             
-            # Выводим результаты VIF анализа
-            print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
-            print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
-            print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
+        if vif_filter:
+            # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
+            print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
             
-            if len(vif_results) > 0:
-                print(f"\n   Топ признаков по VIF (после фильтрации):")
-                for i, row in vif_results.head(10).iterrows():
-                    status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
-                    print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
-            
-            # Используем отфильтрованные признаки
-            features_numeric = features_after_vif
-            
-            # Обновляем список числовых колонок
-            numeric_columns = features_numeric.columns
-            
-            if len(numeric_columns) == 0:
-                raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
+            # Проверяем, достаточно ли признаков для VIF анализа
+            if len(features_numeric.columns) > 1:
+                features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
+                
+                # Выводим результаты VIF анализа
+                print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
+                print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
+                print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
+                
+                if len(vif_results) > 0:
+                    print(f"\n   Топ признаков по VIF (после фильтрации):")
+                    for i, row in vif_results.head(10).iterrows():
+                        status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
+                        print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
+                
+                # Используем отфильтрованные признаки
+                features_numeric = features_after_vif
+                
+                # Обновляем список числовых колонок
+                numeric_columns = features_numeric.columns
+                
+                if len(numeric_columns) == 0:
+                    raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
+            else:
+                print("   Недостаточно признаков для VIF анализа (требуется > 1)")
+                vif_results = pd.DataFrame()
         else:
-            print("   Недостаточно признаков для VIF анализа (требуется > 1)")
-            vif_results = pd.DataFrame()
+            vif_results = 0
         
         # Масштабирование признаков
         scaler = StandardScaler()
@@ -1152,6 +1156,7 @@ def lda_classification(data: pd.DataFrame,
                       output_html_path: str | None = None,
                       external_validation: bool = False,
                       cv_dataset: pd.DataFrame | None = None,
+                      vif_filter: bool = False,
                       **kwargs) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, 
                                          pd.DataFrame, LabelEncoder, np.ndarray, np.ndarray, 
                                          np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
@@ -1226,35 +1231,38 @@ def lda_classification(data: pd.DataFrame,
             print(f"   Обнаружено пропущенных значений: {missing_count}")
             features_numeric = features_numeric.fillna(features_numeric.mean())
         
-        # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
-        print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
-        
-        # Проверяем, достаточно ли признаков для VIF анализа
-        if len(features_numeric.columns) > 1:
-            features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
+        if vif_filter:
+            # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
+            print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
             
-            # Выводим результаты VIF анализа
-            print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
-            print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
-            print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
-            
-            if len(vif_results) > 0:
-                print(f"\n   Топ признаков по VIF (после фильтрации):")
-                for i, row in vif_results.head(10).iterrows():
-                    status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
-                    print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
-            
-            # Используем отфильтрованные признаки
-            features_numeric = features_after_vif
-            
-            # Обновляем список числовых колонок
-            numeric_columns = features_numeric.columns
-            
-            if len(numeric_columns) == 0:
-                raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
+            # Проверяем, достаточно ли признаков для VIF анализа
+            if len(features_numeric.columns) > 1:
+                features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
+                
+                # Выводим результаты VIF анализа
+                print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
+                print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
+                print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
+                
+                if len(vif_results) > 0:
+                    print(f"\n   Топ признаков по VIF (после фильтрации):")
+                    for i, row in vif_results.head(10).iterrows():
+                        status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
+                        print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
+                
+                # Используем отфильтрованные признаки
+                features_numeric = features_after_vif
+                
+                # Обновляем список числовых колонок
+                numeric_columns = features_numeric.columns
+                
+                if len(numeric_columns) == 0:
+                    raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
+            else:
+                print("   Недостаточно признаков для VIF анализа (требуется > 1)")
+                vif_results = pd.DataFrame()
         else:
-            print("   Недостаточно признаков для VIF анализа (требуется > 1)")
-            vif_results = pd.DataFrame()
+            vif_results = 0
         
         # Масштабирование признаков
         scaler = StandardScaler()
