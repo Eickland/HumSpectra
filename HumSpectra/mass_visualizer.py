@@ -1101,10 +1101,61 @@ def plot_mass_intensity_relationship(spectrum_df, mass_col='mass', intensity_col
     plt.tight_layout()
     return fig
 
+def ensure_all_classes_present(data, class_column='class', class_dict=None, colors_dict=None):
+    """
+    Проверяет наличие всех классов в данных и добавляет отсутствующие с нулевыми значениями.
+    
+    Parameters:
+    -----------
+    data : pd.DataFrame
+        DataFrame с данными
+    class_column : str
+        Название колонки с классами
+    class_dict : dict
+        Словарь с названиями классов (ключи - оригинальные названия, значения - отображаемые имена)
+    colors_dict : dict
+        Словарь с цветами для классов (ключи - оригинальные названия классов)
+    
+    Returns:
+    --------
+    tuple: (value_counts, class_names_list, colors_list)
+        value_counts - Series с частотами классов (включая нулевые)
+        class_names_list - список названий классов для отображения
+        colors_list - список цветов для классов
+    """
+    
+    # Если словарь классов не передан, используем perminova_class_color_dictionary
+    if class_dict is None:
+        class_dict = perminova_class_color_dictionary
+    
+    # Если словарь цветов не передан, используем тот же словарь
+    if colors_dict is None:
+        colors_dict = perminova_class_color_dictionary
+    
+    # Получаем все необходимые классы
+    required_classes = list(class_dict.keys())
+    
+    # Получаем текущие значения частот
+    value_counts = data[class_column].value_counts()
+    
+    # Добавляем отсутствующие классы с нулевыми значениями
+    for class_name in required_classes:
+        if class_name not in value_counts.index:
+            value_counts[class_name] = 0
+    
+    # Сортируем в порядке, заданном словарем
+    value_counts = value_counts.reindex(required_classes)
+    
+    # Получаем названия для отображения и цвета в правильном порядке
+    class_names_list = [class_dict[class_name] for class_name in required_classes]
+    colors_list = [colors_dict[class_name] for class_name in required_classes]
+    
+    return value_counts, class_names_list, colors_list
+
 def plot_mol_class_distribution(masslist:pd.DataFrame,mod='bar'):
     
     data = masslist.copy()    
-    value_counts = data.dropna().value_counts("class")
+    value_counts,_,_ = ensure_all_classes_present(data)
     
     if mod == 'bar':
         
