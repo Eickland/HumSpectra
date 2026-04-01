@@ -1,18 +1,26 @@
 import sys
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import StringIO, BytesIO
-from typing import Optional, Union, List, Tuple
 import base64
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split,cross_val_score
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, mean_squared_error, r2_score, mean_absolute_error, silhouette_score
-from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
+from typing import Tuple, Optional, Dict, Any, List
+import warnings
+warnings.filterwarnings('ignore')
 
 import HumSpectra.utilits as ut
 
@@ -418,6 +426,211 @@ def create_kmeans_html_report(console_output, result_df, contingency_table, perc
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
 
+def random_forest_classification_batch(
+    data: pd.DataFrame,
+    target_column: Optional[str] = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    n_estimators: int = 100,
+    max_depth: Optional[int] = None,
+    index_level: Optional[int] = None,
+    vif_filter: bool = False,
+    **kwargs
+) -> Dict[str, Any]:
+    """
+    ОПТИМИЗИРОВАННАЯ ВЕРСИЯ: Минимум операций ввода-вывода, максимальная скорость.
+    Без HTML отчета, без print, только вычисления.
+    
+    Возвращает словарь с результатами для быстрого доступа.
+    """
+    
+    # 1. ПОДГОТОВКА ДАННЫХ (векторизованная)
+    if (target_column is None) and (index_level is not None):
+        target = data.index.get_level_values(index_level).values
+        features_df = data.reset_index(drop=True)
+        target_name = f"{index_level}_level_index"
+    else:
+        target = data[target_column].values
+        features_df = data.drop(columns=[target_column])
+        target_name = target_column
+    
+    # 2. КОДИРОВАНИЕ ЦЕЛЕВОЙ ПЕРЕМЕННОЙ
+    label_encoder = LabelEncoder()
+    y_encoded = label_encoder.fit_transform(target) # type: ignore
+    class_names = label_encoder.classes_
+    n_classes = len(class_names)
+    
+    # 3. ПРЕДОБРАБОТКА ПРИЗНАКОВ (векторизованная)
+    numeric_columns = features_df.select_dtypes(include=[np.number]).columns
+    
+    if len(numeric_columns) == 0:
+        raise ValueError("Не найдено числовых признаков")
+    
+    # Преобразуем сразу в numpy array для скорости
+    X = features_df[numeric_columns].values
+    
+    # Обработка пропусков (быстрая, векторизованная)
+    if np.any(np.isnan(X)):
+        col_means = np.nanmean(X, axis=0)
+        nan_mask = np.isnan(X)
+        X[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
+    
+    # VIF фильтрация (опционально, векторизованная)
+    if vif_filter and X.shape[1] > 1:
+        X, vif_results = _fast_vif_filter(X, numeric_columns, **kwargs)
+        numeric_columns = numeric_columns[X.shape[1] == X.shape[1]]  # Обновляем
+        vif_results_dict = vif_results
+    else:
+        vif_results_dict = None
+    
+    # 4. МАСШТАБИРОВАНИЕ (один раз для всех)
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # 5. РАЗДЕЛЕНИЕ ВЫБОРОК
+    # Определяем стратификацию
+    unique_classes, class_counts = np.unique(y_encoded, return_counts=True)
+    stratify = y_encoded if class_counts.min() >= 2 else None
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y_encoded,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=stratify
+    )
+    
+    # 6. ОБУЧЕНИЕ МОДЕЛИ
+    rf_model = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        random_state=random_state,
+        n_jobs=-1,
+        class_weight='balanced'
+    )
+    rf_model.fit(X_train, y_train)
+    
+    # 7. ПРЕДСКАЗАНИЯ И МЕТРИКИ
+    y_pred = rf_model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    
+    # Расчет метрик по классам
+    clf_report = classification_report(
+        y_test, y_pred,
+        output_dict=True,
+        zero_division=0
+    )
+    
+    weighted_avg_accuracy = clf_report['weighted avg']['precision'] # type: ignore
+    macro_avg_accuracy = clf_report['macro avg']['precision'] # type: ignore
+    
+    # 8. ВАЖНОСТЬ ПРИЗНАКОВ
+    feature_importance = pd.DataFrame({
+        'feature': numeric_columns,
+        'importance': rf_model.feature_importances_
+    }).sort_values('importance', ascending=False)
+    
+    # 9. РЕЗУЛЬТАТЫ
+    results_df = pd.DataFrame({
+        'true_class': y_encoded,
+        'predicted_class': rf_model.predict(X_scaled),
+        'is_correct': y_encoded == rf_model.predict(X_scaled)
+    })
+    
+    return {
+        'results_df': results_df,
+        'model': rf_model,
+        'scaler': scaler,
+        'feature_importance': feature_importance,
+        'X_train': X_train,
+        'X_test': X_test,
+        'y_train': y_train,
+        'y_test': y_test,
+        'label_encoder': label_encoder,
+        'accuracy': accuracy,
+        'weighted_avg_accuracy': weighted_avg_accuracy,
+        'macro_avg_accuracy': macro_avg_accuracy,
+        'classification_report': clf_report,
+        'vif_results': vif_results_dict,
+        'n_classes': n_classes,
+        'class_names': class_names,
+        'n_features': len(numeric_columns)
+    }
+
+
+def _fast_vif_filter(X: np.ndarray, feature_names: pd.Index, threshold: float = 10.0, **kwargs) -> Tuple[np.ndarray, pd.DataFrame]:
+    """
+    Быстрая фильтрация мультиколлинеарности с помощью VIF.
+    Векторизованная версия для массовых вычислений.
+    """
+    from sklearn.linear_model import LinearRegression
+    from sklearn.preprocessing import StandardScaler
+    
+    n_features = X.shape[1]
+    vif_results = []
+    
+    # Стандартизируем для VIF
+    X_scaled_vif = StandardScaler().fit_transform(X)
+    
+    # Список признаков для удаления
+    to_remove = set()
+    
+    # Итеративно удаляем признаки с высоким VIF
+    remaining_features = list(range(n_features))
+    max_iterations = n_features
+    
+    for _ in range(max_iterations):
+        if len(remaining_features) <= 1:
+            break
+            
+        # Пересчитываем VIF для оставшихся признаков
+        current_X = X_scaled_vif[:, remaining_features]
+        current_vif = []
+        
+        for idx in range(len(remaining_features)):
+            # Векторизованный расчет VIF
+            y = current_X[:, idx]
+            X_others = np.delete(current_X, idx, axis=1)
+            
+            # Проверяем, что есть другие признаки
+            if X_others.shape[1] > 0:
+                model = LinearRegression()
+                model.fit(X_others, y)
+                r2 = model.score(X_others, y)
+                vif = 1.0 / (1.0 - r2) if r2 < 0.999 else 1000.0
+            else:
+                vif = 1.0
+            
+            current_vif.append((remaining_features[idx], vif))
+        
+        # Находим признак с максимальным VIF
+        max_vif_feature, max_vif_value = max(current_vif, key=lambda x: x[1])
+        
+        # Сохраняем результаты
+        vif_results.append({
+            'feature': feature_names[max_vif_feature],
+            'VIF': max_vif_value
+        })
+        
+        # Если VIF превышает порог, удаляем признак
+        if max_vif_value > threshold:
+            to_remove.add(max_vif_feature)
+            remaining_features.remove(max_vif_feature)
+        else:
+            break
+    
+    # Фильтруем X
+    keep_indices = [i for i in range(n_features) if i not in to_remove]
+    X_filtered = X[:, keep_indices]
+    
+    vif_df = pd.DataFrame(vif_results)
+    
+    return X_filtered, vif_df
+
+
+# ============================================================================
+# ИСПРАВЛЕННАЯ ВЕРСИЯ ДЛЯ ОДИНОЧНЫХ ВЫЧИСЛЕНИЙ С HTML ОТЧЕТОМ
+# ============================================================================
+
 def random_forest_classification(
     data: pd.DataFrame,
     target_column: Optional[str] = None,
@@ -429,52 +642,17 @@ def random_forest_classification(
     index_level: Optional[int] = None,
     external_validation: bool = False,
     cv_dataset: pd.DataFrame | None = None,
+    vif_filter: bool = False,
     **kwargs
 ) -> Tuple[pd.DataFrame, RandomForestClassifier, StandardScaler, pd.DataFrame,
-           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float,pd.DataFrame, dict | None]:
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, LabelEncoder, float, float, float, pd.DataFrame, dict | None]:
     """
-    Анализ данных с помощью Random Forest для задач классификации
-    с опциональной кросс-валидацией на отдельном датасете.
-    
-    Parameters:
-    -----------
-    data : pd.DataFrame
-        Входной DataFrame с данными
-    target_column : str, optional
-        Название целевой колонки. Если None, используется index_level индекс
-    test_size : float
-        Доля тестовой выборки
-    random_state : int
-        Seed для воспроизводимости
-    output_html_path : str
-        Путь для сохранения HTML отчета
-    n_estimators : int
-        Количество деревьев в Random Forest
-    max_depth : int, optional
-        Максимальная глубина деревьев
-    index_level : int
-        Уровень индекса для использования в качестве цели (если target_column=None)
-    cross_validate : bool
-        Включить кросс-валидацию на отдельном датасете
-    cv_dataset : pd.DataFrame, optional
-        Дополнительный датасет для кросс-валидации (должен иметь ту же структуру)
-    cv_folds : int
-        Количество фолдов для кросс-валидации
-    
-    Returns:
-    --------
-    Tuple containing:
-    - results_df: DataFrame с результатами предсказаний
-    - rf_model: обученная модель Random Forest
-    - scaler: обученный скейлер
-    - feature_importance: важность признаков
-    - X_train, X_test, y_train, y_test: разделенные данные
-    - label_encoder: обученный LabelEncoder
-    - accuracy: точность модели
-    - weighted_avg_accuracy: средневзвешенная точность
-    - macro_avg_accuracy: макро-средняя точность
-    - cv_results: результаты кросс-валидации (если включена)
+    ИСПРАВЛЕННАЯ ВЕРСИЯ: Для одиночных вычислений с полным HTML отчетом.
+    Использует оптимизированные вычисления внутри.
     """
+    
+    import sys
+    from io import StringIO
     
     # Сохраняем оригинальный stdout
     old_stdout = sys.stdout
@@ -489,307 +667,91 @@ def random_forest_classification(
             print("С ИСПОЛЬЗОВАНИЕМ КРОСС-ВАЛИДАЦИИ")
         print("=" * 70)
         
-        # 1. ПОДГОТОВКА ДАННЫХ
+        # ИСПОЛЬЗУЕМ ОПТИМИЗИРОВАННУЮ ВЕРСИЮ ДЛЯ ВЫЧИСЛЕНИЙ
+        batch_results = random_forest_classification_batch(
+            data=data,
+            target_column=target_column,
+            test_size=test_size,
+            random_state=random_state,
+            n_estimators=n_estimators,
+            max_depth=max_depth,
+            index_level=index_level,
+            vif_filter=vif_filter,
+            **kwargs
+        )
+        
+        # Извлекаем результаты
+        results_df = batch_results['results_df']
+        rf_model = batch_results['model']
+        scaler = batch_results['scaler']
+        feature_importance = batch_results['feature_importance']
+        X_train = batch_results['X_train']
+        X_test = batch_results['X_test']
+        y_train = batch_results['y_train']
+        y_test = batch_results['y_test']
+        label_encoder = batch_results['label_encoder']
+        accuracy = batch_results['accuracy']
+        weighted_avg_accuracy = batch_results['weighted_avg_accuracy']
+        macro_avg_accuracy = batch_results['macro_avg_accuracy']
+        clf_report_df = pd.DataFrame(batch_results['classification_report']).transpose()
+        class_names = batch_results['class_names']
+        numeric_columns = feature_importance['feature'].values
+        
+        # Выводим информацию в консоль
         print("\n1. ПОДГОТОВКА ДАННЫХ")
         print("-" * 40)
-        
-        # Определяем целевую переменную
-        if (target_column is None) and (index_level is not None):
-            # Используем уровень индекса как целевую переменную
-            target = data.index.get_level_values(index_level)
-            features_df = data.reset_index(drop=True)
-            target_name = f"{index_level} уровень индекса"
-        else:
-            target = data[target_column]
-            features_df = data.drop(columns=[target_column])
-            target_name = target_column
-        
-        print(f"   Целевая переменная: {target_name}")
-        print(f"   Уникальных значений в целевой переменной: {target.nunique()}")
-        
-        # Проверяем, что задача действительно классификация
-        unique_values = target.nunique()
-        print(f"   Уникальных классов: {unique_values}")
-        
-        if unique_values < 2:
-            raise ValueError("Для классификации необходимо минимум 2 класса")
-        
-        # Кодируем целевую переменную
-        label_encoder = LabelEncoder()
-        y_encoded = label_encoder.fit_transform(target)
-        class_names = label_encoder.classes_
-        
+        print(f"   Целевая переменная: {target_column if target_column else f'{index_level} уровень индекса'}")
+        print(f"   Уникальных значений в целевой переменной: {batch_results['n_classes']}")
         print(f"   Классы: {list(class_names)}")
         print(f"   Размер датасета: {len(data)} наблюдений")
         
-        # 2. ПРЕДОБРАБОТКА ПРИЗНАКОВ
         print("\n2. ПРЕДОБРАБОТКА ПРИЗНАКОВ")
         print("-" * 40)
+        print(f"   Числовых признаков: {batch_results['n_features']}")
+        print(f"   Размерность данных: {batch_results['results_df'].shape}")
         
-        # Выбираем только числовые признаки
-        numeric_columns = features_df.select_dtypes(include=[np.number]).columns
-        
-        if len(numeric_columns) == 0:
-            raise ValueError("Не найдено числовых признаков для обучения")
-        
-        features_numeric = features_df[numeric_columns].copy()
-        print(f"   Числовых признаков: {len(numeric_columns)}")
-        
-        # Обработка пропущенных значений
-        missing_values = features_numeric.isnull().sum().sum()
-        
-        if missing_values > 0:
-            print(f"   Заполняем {missing_values} пропущенных значений средними")
-            features_numeric = features_numeric.fillna(features_numeric.mean())
-        
-        # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
-        print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
-        
-        # Проверяем, достаточно ли признаков для VIF анализа
-        if len(features_numeric.columns) > 1:
-            features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
-            
-            # Выводим результаты VIF анализа
-            print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
-            print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
-            print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
-            
-            if len(vif_results) > 0:
-                print(f"\n   Топ признаков по VIF (после фильтрации):")
-                for i, row in vif_results.head(10).iterrows():
-                    status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
-                    print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
-            
-            # Используем отфильтрованные признаки
-            features_numeric = features_after_vif
-            
-            # Обновляем список числовых колонок
-            numeric_columns = features_numeric.columns
-            
-            if len(numeric_columns) == 0:
-                raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
-        else:
-            print("   Недостаточно признаков для VIF анализа (требуется > 1)")
-            vif_results = pd.DataFrame()
-        
-        # Масштабирование признаков
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(features_numeric)
-        print(f"   Размерность данных: {X_scaled.shape}")
-        
-        # 3. РАЗДЕЛЕНИЕ НА ВЫБОРКИ
-        print("\n3. РАЗДЕЛЕНИЕ НА ОБУЧАЮЩУЮ И ТЕСТОВУЮ ВЫБОРКИ")
+        print("\n3. РАЗДЕЛЕНИЕ НА ВЫБОРКИ")
         print("-" * 40)
-        
-        # Проверяем распределение классов для стратификации
-        unique_classes, class_counts = np.unique(y_encoded, return_counts=True)
-        
         print("   Распределение классов:")
-        for cls, count, name in zip(unique_classes, class_counts, class_names):
-            print(f"      {name} (класс {cls}): {count} наблюдений")
-        
-        # Определяем стратификацию
-        min_samples = class_counts.min()
-        
-        if min_samples < 2:
-            print("   ⚠️  Некоторые классы имеют <2 наблюдений, стратификация отключена")
-            stratify = None
-        else:
-            stratify = y_encoded
-        
-        # Разделение данных
-        X_train, X_test, y_train, y_test, indices_train, indices_test = train_test_split(
-            X_scaled, y_encoded, features_df.index,
-            test_size=test_size,
-            random_state=random_state,
-            stratify=stratify
-        )
-        
+        for cls, name in enumerate(class_names):
+            count = np.sum(batch_results['y_train'] == cls) + np.sum(batch_results['y_test'] == cls)
+            print(f"      {name}: {count} наблюдений")
         print(f"   Обучающая выборка: {X_train.shape[0]} наблюдений")
         print(f"   Тестовая выборка: {X_test.shape[0]} наблюдений")
         
-        # 4. ОБУЧЕНИЕ МОДЕЛИ
         print("\n4. ОБУЧЕНИЕ RANDOM FOREST")
         print("-" * 40)
-        
-        rf_model = RandomForestClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            random_state=random_state,
-            n_jobs=-1,
-            class_weight='balanced'
-        )
-        
-        rf_model.fit(X_train, y_train)
-        
         print(f"   Модель обучена: {n_estimators} деревьев")
         
-        # 5. ОЦЕНКА МОДЕЛИ
         print("\n5. ОЦЕНКА МОДЕЛИ НА ТЕСТОВОЙ ВЫБОРКЕ")
         print("-" * 40)
-        
-        y_pred = rf_model.predict(X_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        
         print(f"   Точность (Accuracy): {accuracy:.4f}")
-        
-        # Детальный отчет по классам
         print("\n   Отчет по классификации:")
         print("   " + "-" * 35)
+        print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
         
-        try:
-            clf_report = classification_report(
-                y_test, y_pred, 
-                target_names=class_names, 
-                output_dict=True,
-                zero_division=0
-            )
-            clf_report_df = pd.DataFrame(clf_report).transpose()
-            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            
-            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
-            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-            
-        except ValueError as e:
-            print(f"   Ошибка при создании classification report: {e}")
-            print("   Используем числовые метки классов...")
-            
-            clf_report = classification_report(
-                y_test, y_pred, 
-                output_dict=True,
-                zero_division=0
-            )
-            clf_report_df = pd.DataFrame(clf_report).transpose()
-            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            
-            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
-            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-
+        # Внешняя валидация
         if external_validation and cv_dataset is not None:
-            print("\n5.1. Валидация на дополнительном датасете...")
-            
-            # Проверяем структуру датасета
-            print("   Проверка структуры дополнительного датасета...")
-            
-            # Определяем целевую переменную для валидационного датасета
-            if (target_column is None) and (index_level is not None):
-                cv_target = cv_dataset.index.get_level_values(index_level)
-                cv_features_df = cv_dataset.reset_index(drop=True)
-            else:
-                cv_target = cv_dataset[target_column]
-                cv_features_df = cv_dataset.drop(columns=[target_column])
-            
-            # Кодируем целевую переменную (используем уже обученный LabelEncoder)
-            try:
-                cv_target_encoded = label_encoder.transform(cv_target)
-            except ValueError as e:
-                print(f"   ⚠️ Предупреждение: В валидационном датасете обнаружены новые классы: {e}")
-                # Создаем маску для строк с известными классами
-                known_classes_mask = cv_target.isin(label_encoder.classes_)
-                cv_target_filtered = cv_target[known_classes_mask]
-                cv_features_filtered = cv_features_df[known_classes_mask]
-                
-                if len(cv_target_filtered) == 0:
-                    print("   ❌ Ошибка: Нет строк с известными классами для валидации")
-                    cv_target_encoded = None
-                    cv_features_filtered = None
-                else:
-                    cv_target_encoded = label_encoder.transform(cv_target_filtered)
-                    cv_features_df = cv_features_filtered
-            
-            if cv_target_encoded is not None:
-                # Убеждаемся, что признаки совпадают
-                cv_numeric_columns = cv_features_df.select_dtypes(include=[np.number]).columns
-                
-                # Проверяем совпадение столбцов
-                if not set(numeric_columns).issubset(set(cv_numeric_columns)):
-                    missing_cols = set(numeric_columns) - set(cv_numeric_columns)
-                    print(f"   ⚠️ Предупреждение: В валидационном датасете отсутствуют столбцы: {missing_cols}")
-                    # Используем только общие столбцы
-                    common_cols = list(set(numeric_columns).intersection(set(cv_numeric_columns)))
-                    cv_features_numeric = cv_features_df[common_cols].copy()
-                else:
-                    cv_features_numeric = cv_features_df[numeric_columns].copy()
-                
-                # Применяем масштабирование (используем уже обученный scaler!)
-                cv_features_scaled = scaler.transform(cv_features_numeric)
-                
-                # Применяем обученную LDA модель
-                cv_predictions = rf_model.predict(cv_features_scaled)
-                cv_predictions_proba = rf_model.predict_proba(cv_features_scaled)
-                
-                # Вычисляем метрики
-                cv_accuracy = accuracy_score(cv_target_encoded, cv_predictions)
-                
-                # Получаем классы, которые есть в валидационном датасете
-                cv_unique_classes = np.unique(cv_target_encoded)
-                cv_present_class_names = label_encoder.classes_[cv_unique_classes]
-                
-                # Генерируем детальный отчет по классам
-                cv_clf_report = classification_report(
-                    cv_target_encoded, cv_predictions,
-                    target_names=cv_present_class_names,
-                    output_dict=True,
-                    labels=cv_unique_classes,
-                    zero_division=0
-                )
-                
-                external_results = {
-                    'features_scaled': cv_features_scaled,
-                    'target_encoded': cv_target_encoded,
-                    'predictions': cv_predictions,
-                    'predictions_proba': cv_predictions_proba,
-                    'accuracy': cv_accuracy,
-                    'classification_report': cv_clf_report,
-                    'present_classes': cv_present_class_names
-                }
-                
-                print(f"   Размер валидационного датасета: {cv_features_scaled.shape}")
-                print(f"   Количество классов в валидации: {len(cv_unique_classes)}")
-                print(f"   Accuracy на валидационном датасете: {cv_accuracy:.4f}")
-                
-                # Выводим отчет по классам
-                print(f"\n   Classification Report для валидационного датасета:")
-                print("   " + "-" * 50)
-                
-                cv_report_df = pd.DataFrame(cv_clf_report).transpose()
-                print(cv_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-
+            external_results = _perform_external_validation(
+                rf_model, scaler, label_encoder, numeric_columns,
+                cv_dataset, target_column, index_level
+            )
         
-        # 6. ВАЖНОСТЬ ПРИЗНАКОВ
         print("\n6. АНАЛИЗ ВАЖНОСТИ ПРИЗНАКОВ")
         print("-" * 40)
-        
-        feature_importance = pd.DataFrame({
-            'Признак': numeric_columns,
-            'Важность': rf_model.feature_importances_
-        }).sort_values('Важность', ascending=False)
-        
         print("   Топ-10 важнейших признаков:")
         for i, (_, row) in enumerate(feature_importance.head(10).iterrows(), 1):
-            print(f"      {i:2d}. {row['Признак']:30s}: {row['Важность']:.4f}")
+            print(f"      {i:2d}. {row['feature']:30s}: {row['importance']:.4f}")
         
-        # Создаем DataFrame с результатами
-        results_df = features_df.copy()
-        results_df['Истинный_класс'] = y_encoded
-        results_df['Предсказанный_класс'] = rf_model.predict(X_scaled)
-        results_df['Верно_предсказано'] = (
-            results_df['Истинный_класс'] == results_df['Предсказанный_класс']
-        )
+        print(f"\n   Общая точность на всем датасете: {results_df['is_correct'].mean():.4f}")
         
-        # Общая точность на всем датасете
-        overall_accuracy = results_df['Верно_предсказано'].mean()
-        print(f"   Общая точность на всем датасете: {overall_accuracy:.4f}")
-        
-        # 7. СВОДКА
         print("\n" + "=" * 70)
         print("СВОДКА РЕЗУЛЬТАТОВ")
         print("=" * 70)
-        print(f"   Классов: {len(class_names)}")
-        print(f"   Признаков: {len(numeric_columns)}")
+        print(f"   Классов: {batch_results['n_classes']}")
+        print(f"   Признаков: {batch_results['n_features']}")
         print(f"   Точность на тесте: {accuracy:.4f}")
-        
-        print(f"   Самый важный признак: {feature_importance.iloc[0]['Признак']}")
+        print(f"   Самый важный признак: {feature_importance.iloc[0]['feature']}")
         print("=" * 70)
         
         # Получаем вывод консоли
@@ -798,9 +760,9 @@ def random_forest_classification(
         # Восстанавливаем stdout
         sys.stdout = old_stdout
         
-        # Создание HTML отчета (опционально)
+        # Создание HTML отчета
         if output_html_path:
-            try:
+            try:                
                 create_rf_classification_html_report(
                     console_output=console_output,
                     results_df=results_df,
@@ -810,10 +772,10 @@ def random_forest_classification(
                     label_encoder=label_encoder,
                     X_test=X_test,
                     y_test=y_test,
-                    y_pred=y_pred,
+                    y_pred=rf_model.predict(X_test),
                     output_html_path=output_html_path,
-                    vif_results=vif_results,
-                    external_results=external_results # type: ignore
+                    vif_results=batch_results.get('vif_results'),
+                    external_results=external_results
                 )
                 print(f"\n✅ HTML отчет сохранен: {output_html_path}")
             except Exception as e:
@@ -826,19 +788,81 @@ def random_forest_classification(
             feature_importance,
             X_train, X_test, y_train, y_test,
             label_encoder,
-            float(accuracy),
+            accuracy,
             weighted_avg_accuracy,
             macro_avg_accuracy,
             clf_report_df,
-            external_results # type: ignore
+            external_results
         )
         
     except Exception as e:
-        # Восстанавливаем stdout в случае ошибки
         sys.stdout = old_stdout
         print(f"❌ Ошибка при выполнении анализа: {e}")
         raise
 
+
+def _perform_external_validation(model, scaler, label_encoder, numeric_columns,
+                                 cv_dataset, target_column, index_level):
+    """Вспомогательная функция для внешней валидации"""
+    from sklearn.metrics import accuracy_score, classification_report
+    import numpy as np
+    
+    # Определяем целевую переменную
+    if (target_column is None) and (index_level is not None):
+        cv_target = cv_dataset.index.get_level_values(index_level)
+        cv_features_df = cv_dataset.reset_index(drop=True)
+    else:
+        cv_target = cv_dataset[target_column]
+        cv_features_df = cv_dataset.drop(columns=[target_column])
+    
+    # Кодируем целевую переменную
+    known_mask = cv_target.isin(label_encoder.classes_)
+    cv_target_filtered = cv_target[known_mask]
+    cv_features_filtered = cv_features_df[known_mask]
+    
+    if len(cv_target_filtered) == 0:
+        return None
+    
+    cv_target_encoded = label_encoder.transform(cv_target_filtered)
+    
+    # Выбираем общие признаки
+    cv_numeric = cv_features_filtered.select_dtypes(include=[np.number])
+    common_cols = list(set(numeric_columns).intersection(set(cv_numeric.columns)))
+    
+    if not common_cols:
+        return None
+    
+    cv_features_numeric = cv_numeric[common_cols].values
+    
+    # Масштабируем
+    cv_features_scaled = scaler.transform(cv_features_numeric)
+    
+    # Предсказываем
+    cv_predictions = model.predict(cv_features_scaled)
+    cv_predictions_proba = model.predict_proba(cv_features_scaled)
+    
+    # Метрики
+    cv_accuracy = accuracy_score(cv_target_encoded, cv_predictions)
+    cv_unique_classes = np.unique(cv_target_encoded)
+    cv_present_names = label_encoder.classes_[cv_unique_classes]
+    
+    cv_clf_report = classification_report(
+        cv_target_encoded, cv_predictions,
+        target_names=cv_present_names,
+        output_dict=True,
+        labels=cv_unique_classes,
+        zero_division=0
+    )
+    
+    return {
+        'features_scaled': cv_features_scaled,
+        'target_encoded': cv_target_encoded,
+        'predictions': cv_predictions,
+        'predictions_proba': cv_predictions_proba,
+        'accuracy': cv_accuracy,
+        'classification_report': cv_clf_report,
+        'present_classes': cv_present_names
+    }
 def create_rf_classification_html_report(console_output, results_df, feature_importance, 
                          rf_model, class_names, label_encoder,
                          X_test, y_test, y_pred, output_html_path, vif_results,
@@ -1141,26 +1165,302 @@ def create_rf_classification_html_report(console_output, results_df, feature_imp
     with open(output_html_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
         
-def lda_classification(data: pd.DataFrame,
-                      target_column: str | None = None,
-                      index_level: int | None = None,
-                      n_components: int | None = None,
-                      test_size: float = 0.2,
-                      random_state: int = 42,
-                      output_html_path: str | None = None,
-                      external_validation: bool = False,
-                      cv_dataset: pd.DataFrame | None = None,
-                      **kwargs) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, 
-                                         pd.DataFrame, LabelEncoder, np.ndarray, np.ndarray, 
-                                         np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
-                                         float, float, float,pd.DataFrame, dict | None]:
+def lda_classification_batch(
+    data: pd.DataFrame,
+    target_column: Optional[str] = None,
+    index_level: Optional[int] = None,
+    n_components: Optional[int] = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    vif_filter: bool = False,
+    **kwargs
+) -> Dict[str, Any]:
     """
-    Анализ данных с помощью Linear Discriminant Analysis (LDA)
-    с выводом результатов в HTML файл и проверкой на мультиколлинеарности
-    и опциональной кросс-валидацией на отдельном датасете
+    ОПТИМИЗИРОВАННАЯ ВЕРСИЯ LDA: Для массовых вычислений (тысячи моделей)
+    Минимум операций ввода-вывода, максимальная скорость.
+    
+    Returns:
+        Dict с результатами для быстрого доступа
     """
     
-    # Перехватываем вывод в консоль
+    # 1. ПОДГОТОВКА ДАННЫХ (векторизованная)
+    if (target_column is None) and (index_level is not None):
+        target = data.index.get_level_values(index_level).values
+        features_df = data.reset_index(drop=True)
+    else:
+        target = data[target_column].values
+        features_df = data.drop(columns=[target_column])
+    
+    # 2. КОДИРОВАНИЕ ЦЕЛЕВОЙ ПЕРЕМЕННОЙ
+    label_encoder = LabelEncoder()
+    y_encoded = label_encoder.fit_transform(target) # type: ignore
+    class_names = label_encoder.classes_
+    n_classes = len(class_names)
+    
+    # Проверка на задачу классификации
+    if n_classes < 2:
+        raise ValueError("Для LDA необходимо минимум 2 класса")
+    
+    # 3. ПРЕДОБРАБОТКА ПРИЗНАКОВ
+    # Выбираем только числовые признаки
+    numeric_columns = features_df.select_dtypes(include=[np.number]).columns
+    
+    if len(numeric_columns) == 0:
+        raise ValueError("Не найдено числовых признаков")
+    
+    # Преобразуем в numpy array для скорости
+    X = features_df[numeric_columns].values
+    
+    # Быстрая обработка пропусков
+    if np.any(np.isnan(X)):
+        col_means = np.nanmean(X, axis=0)
+        nan_mask = np.isnan(X)
+        X[nan_mask] = np.take(col_means, np.where(nan_mask)[1])
+    
+    # VIF фильтрация (опционально)
+    if vif_filter and X.shape[1] > 1:
+        X, vif_results = _fast_vif_filter_lda(X, numeric_columns, **kwargs)
+        numeric_columns = numeric_columns[:X.shape[1]]
+        vif_results_dict = vif_results
+    else:
+        vif_results_dict = None
+    
+    # 4. МАСШТАБИРОВАНИЕ
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # 5. РАЗДЕЛЕНИЕ ВЫБОРОК
+    # Определяем стратификацию
+    unique_classes, class_counts = np.unique(y_encoded, return_counts=True)
+    stratify = y_encoded if class_counts.min() >= 2 else None
+    
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y_encoded,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=stratify
+    )
+    
+    # 6. ОПРЕДЕЛЯЕМ КОЛИЧЕСТВО КОМПОНЕНТОВ
+    if n_components is None:
+        n_components = min(n_classes - 1, X_train.shape[1])
+    n_components = min(n_components, n_classes - 1, X_train.shape[1])
+    
+    # 7. ОБУЧЕНИЕ LDA
+    lda_model = LinearDiscriminantAnalysis(n_components=n_components)
+    lda_model.fit(X_train, y_train)
+    
+    # 8. ПРЕОБРАЗОВАНИЕ В LDA ПРОСТРАНСТВО
+    X_train_lda = lda_model.transform(X_train) if n_components > 0 else np.array([])
+    X_test_lda = lda_model.transform(X_test) if n_components > 0 else np.array([])
+    
+    # 9. ПРЕДСКАЗАНИЯ И МЕТРИКИ
+    y_pred = lda_model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    
+    # Расчет метрик по классам
+    # Определяем какие классы присутствуют в тестовой выборке
+    test_classes = np.unique(y_test)
+    present_class_indices = test_classes
+    present_class_names = class_names[present_class_indices]
+    
+    clf_report = classification_report(
+        y_test, y_pred,
+        target_names=present_class_names,
+        labels=present_class_indices,
+        output_dict=True,
+        zero_division=0
+    )
+    
+    weighted_avg_accuracy = clf_report['weighted avg']['precision'] # type: ignore
+    macro_avg_accuracy = clf_report['macro avg']['precision'] # type: ignore
+    
+    # 10. АНАЛИЗ ВАЖНОСТИ ПРИЗНАКОВ
+    if n_components == 1:
+        feature_importance = pd.DataFrame({
+            'feature': numeric_columns,
+            'importance': np.abs(lda_model.coef_[0])
+        }).sort_values('importance', ascending=False)
+    else:
+        feature_importance = pd.DataFrame({
+            'feature': numeric_columns,
+            'importance': np.sum(np.abs(lda_model.coef_), axis=0)
+        }).sort_values('importance', ascending=False)
+    
+    # 11. LDA КОМПОНЕНТЫ ДЛЯ ВСЕХ ДАННЫХ
+    X_all_lda = lda_model.transform(X_scaled) if n_components > 0 else np.array([])
+    
+    # 12. РЕЗУЛЬТАТЫ
+    results_df = pd.DataFrame({
+        'true_class': y_encoded,
+        'predicted_class': lda_model.predict(X_scaled),
+        'is_correct': y_encoded == lda_model.predict(X_scaled)
+    })
+    
+    # Добавляем LDA компоненты
+    if X_all_lda.size > 0:
+        for i in range(X_all_lda.shape[1]):
+            results_df[f'LDA_Component_{i+1}'] = X_all_lda[:, i]
+    
+    return {
+        'results_df': results_df,
+        'model': lda_model,
+        'scaler': scaler,
+        'feature_importance': feature_importance,
+        'label_encoder': label_encoder,
+        'X_train': X_train,
+        'X_test': X_test,
+        'y_train': y_train,
+        'y_test': y_test,
+        'X_train_lda': X_train_lda,
+        'X_test_lda': X_test_lda,
+        'accuracy': accuracy,
+        'weighted_avg_accuracy': weighted_avg_accuracy,
+        'macro_avg_accuracy': macro_avg_accuracy,
+        'classification_report': clf_report,
+        'vif_results': vif_results_dict,
+        'n_classes': n_classes,
+        'class_names': class_names,
+        'n_features': len(numeric_columns),
+        'n_components': n_components,
+        'explained_variance_ratio': lda_model.explained_variance_ratio_ if hasattr(lda_model, 'explained_variance_ratio_') else None,
+        'coef_': lda_model.coef_ if hasattr(lda_model, 'coef_') else None,
+        'intercept_': lda_model.intercept_ if hasattr(lda_model, 'intercept_') else None
+    }
+
+
+def _fast_vif_filter_lda(X: np.ndarray, feature_names: pd.Index, threshold: float = 10.0, **kwargs) -> Tuple[np.ndarray, pd.DataFrame]:
+    """
+    Быстрая фильтрация мультиколлинеарности для LDA.
+    Векторизованная версия для массовых вычислений.
+    """
+    from sklearn.linear_model import LinearRegression
+    from sklearn.preprocessing import StandardScaler
+    
+    n_features = X.shape[1]
+    vif_results = []
+    
+    # Стандартизируем для VIF
+    X_scaled_vif = StandardScaler().fit_transform(X)
+    
+    # Список признаков для удаления
+    to_remove = set()
+    
+    # Итеративно удаляем признаки с высоким VIF
+    remaining_features = list(range(n_features))
+    max_iterations = n_features
+    
+    for _ in range(max_iterations):
+        if len(remaining_features) <= 1:
+            break
+            
+        # Пересчитываем VIF для оставшихся признаков
+        current_X = X_scaled_vif[:, remaining_features]
+        current_vif = []
+        
+        for idx in range(len(remaining_features)):
+            y = current_X[:, idx]
+            X_others = np.delete(current_X, idx, axis=1)
+            
+            if X_others.shape[1] > 0:
+                model = LinearRegression()
+                model.fit(X_others, y)
+                r2 = model.score(X_others, y)
+                vif = 1.0 / (1.0 - r2) if r2 < 0.999 else 1000.0
+            else:
+                vif = 1.0
+            
+            current_vif.append((remaining_features[idx], vif))
+        
+        # Находим признак с максимальным VIF
+        max_vif_feature, max_vif_value = max(current_vif, key=lambda x: x[1])
+        
+        # Сохраняем результаты
+        vif_results.append({
+            'feature': feature_names[max_vif_feature],
+            'VIF': max_vif_value
+        })
+        
+        # Если VIF превышает порог, удаляем признак
+        if max_vif_value > threshold:
+            to_remove.add(max_vif_feature)
+            remaining_features.remove(max_vif_feature)
+        else:
+            break
+    
+    # Фильтруем X
+    keep_indices = [i for i in range(n_features) if i not in to_remove]
+    X_filtered = X[:, keep_indices]
+    
+    vif_df = pd.DataFrame(vif_results)
+    
+    return X_filtered, vif_df
+
+
+def _get_lda_equations(lda_model, feature_names, class_names) -> List[str]:
+    """
+    Генерирует уравнения LDA для вывода (только для отчета)
+    """
+    equations = []
+    n_classes = len(class_names)
+    n_features = len(feature_names)
+    
+    # Для первых K-1 классов
+    for i in range(min(n_classes - 1, lda_model.coef_.shape[0])):
+        equation = f"δ_{class_names[i]}(x) = "
+        parts = []
+        for j in range(n_features):
+            coef_val = lda_model.coef_[i, j]
+            parts.append(f"{coef_val:+.4f}*{feature_names[j]}")
+        equation += " ".join(parts)
+        if hasattr(lda_model, 'intercept_') and len(lda_model.intercept_) > i:
+            equation += f" {lda_model.intercept_[i]:+.4f}"
+        equations.append(equation)
+    
+    # Для последнего класса
+    if n_classes > 1 and lda_model.coef_.shape[0] == n_classes - 1:
+        last_coef = -np.sum(lda_model.coef_, axis=0)
+        last_intercept = -np.sum(lda_model.intercept_)
+        equation = f"δ_{class_names[-1]}(x) = "
+        parts = []
+        for j in range(n_features):
+            parts.append(f"{last_coef[j]:+.4f}*{feature_names[j]}")
+        equation += " ".join(parts)
+        equation += f" {last_intercept:+.4f}"
+        equations.append(equation)
+    
+    return equations
+
+
+# ============================================================================
+# ИСПРАВЛЕННАЯ ВЕРСИЯ LDA ДЛЯ ОДИНОЧНЫХ ВЫЧИСЛЕНИЙ С HTML ОТЧЕТОМ
+# ============================================================================
+
+def lda_classification(
+    data: pd.DataFrame,
+    target_column: str | None = None,
+    index_level: int | None = None,
+    n_components: int | None = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    output_html_path: str | None = None,
+    external_validation: bool = False,
+    cv_dataset: pd.DataFrame | None = None,
+    vif_filter: bool = False,
+    **kwargs
+) -> Tuple[pd.DataFrame, LinearDiscriminantAnalysis, StandardScaler, 
+           pd.DataFrame, LabelEncoder, np.ndarray, np.ndarray, 
+           np.ndarray, np.ndarray, np.ndarray, np.ndarray, 
+           float, float, float, pd.DataFrame, dict | None]:
+    """
+    ИСПРАВЛЕННАЯ ВЕРСИЯ LDA: Для одиночных вычислений с полным HTML отчетом.
+    Использует оптимизированные вычисления внутри.
+    """
+    
+    import sys
+    from io import StringIO
+    
+    # Сохраняем оригинальный stdout
     old_stdout = sys.stdout
     sys.stdout = captured_output = StringIO()
     
@@ -1173,385 +1473,228 @@ def lda_classification(data: pd.DataFrame,
             print("С ИСПОЛЬЗОВАНИЕМ КРОСС-ВАЛИДАЦИИ")
         print("=" * 70)
         
-        # Шаг 1: Подготовка данных
-        print("1. Подготовка данных...")
-        
-        # Определяем целевую переменную
-        if (target_column is None) and (index_level is not None):
-            # Используем уровень индекса как целевую переменную
-            target = data.index.get_level_values(index_level)
-            features_df = data.reset_index(drop=True)
-            target_name = f"{index_level} уровень индекса"
-        else:
-            target = data[target_column]
-            features_df = data.drop(columns=[target_column])
-            target_name = target_column
-        
-        print(f"   Целевая переменная: {target_name}")
-        print(f"   Уникальных значений в целевой переменной: {target.nunique()}")
-        
-        # Проверяем, что задача классификации
-        if target.dtype == 'object' or target.nunique() < 20:
-            problem_type = 'classification'
-        else:
-            raise ValueError("LDA предназначен только для классификации. Используйте другие методы для регрессии.")
-        
-        # Кодируем целевую переменную
-        le = LabelEncoder()
-        target_encoded = le.fit_transform(target)
-        class_names = le.classes_
-        n_classes = len(class_names)
-        
-        print(f"   Тип задачи: {problem_type.upper()}")
-        print(f"   Классы: {list(class_names)}")
-        print(f"   Количество классов: {n_classes}")
-        
-        # Определяем количество компонентов для LDA
-        if n_components is None:
-            n_components = min(n_classes - 1, features_df.shape[1])
-        print(f"   Количество компонентов LDA: {n_components}")
-        
-        # Шаг 2: Предобработка признаков
-        print("2. Предобработка признаков...")
-        
-        # Удаляем нечисловые колонки если есть
-        numeric_columns = features_df.select_dtypes(include=[np.number]).columns
-        features_numeric = features_df[numeric_columns].copy()
-        
-        # Проверяем наличие пропущенных значений
-        if features_numeric.isnull().sum().sum() > 0:
-            missing_count = features_numeric.isnull().sum().sum()
-            print(f"   Обнаружено пропущенных значений: {missing_count}")
-            features_numeric = features_numeric.fillna(features_numeric.mean())
-        
-        # Шаг 2.1: Проверка на мультиколлинеарность с помощью VIF
-        print("2.1. Проверка на мультиколлинеарность (VIF анализ)...")
-        
-        # Проверяем, достаточно ли признаков для VIF анализа
-        if len(features_numeric.columns) > 1:
-            features_after_vif, vif_results, vif_threshold, _ = ut.calculate_vif(features_numeric, **kwargs)
-            
-            # Выводим результаты VIF анализа
-            print(f"   Исходное количество признаков: {len(features_numeric.columns)}")
-            print(f"   Количество признаков после VIF фильтрации: {len(features_after_vif.columns)}")
-            print(f"   Удалено признаков с VIF > {vif_threshold}: {len(features_numeric.columns) - len(features_after_vif.columns)}")
-            
-            if len(vif_results) > 0:
-                print(f"\n   Топ признаков по VIF (после фильтрации):")
-                for i, row in vif_results.head(10).iterrows():
-                    status = "⚠️ ВЫСОКИЙ" if row["VIF"] > vif_threshold else "✅ нормальный"
-                    print(f"      {row['feature']}: {row['VIF']:.2f} ({status})")
-            
-            # Используем отфильтрованные признаки
-            features_numeric = features_after_vif
-            
-            # Обновляем список числовых колонок
-            numeric_columns = features_numeric.columns
-            
-            if len(numeric_columns) == 0:
-                raise ValueError("После фильтрации VIF не осталось признаков. Уменьшите порог VIF.")
-        else:
-            print("   Недостаточно признаков для VIF анализа (требуется > 1)")
-            vif_results = pd.DataFrame()
-        
-        # Масштабирование признаков
-        scaler = StandardScaler()
-        features_scaled = scaler.fit_transform(features_numeric)
-        
-        print(f"   Размерность данных после VIF фильтрации: {features_scaled.shape}")
-        print(f"   Количество признаков: {features_scaled.shape[1]}")
-        
-        # Шаг 3: Разделение на train/test с контролем стратификации
-        print("3. Разделение на обучающую и тестовую выборки...")
-        
-        # Проверяем распределение классов перед разделением
-        unique_classes, class_counts = np.unique(target_encoded, return_counts=True)
-        
-        print(f"   Распределение классов перед разделением:")
-        for cls, count in zip(unique_classes, class_counts):
-            print(f"      Класс {cls} ({class_names[cls]}): {count} samples")
-        
-        # Используем стратификацию только если все классы имеют достаточное количество образцов
-        min_samples_per_class = class_counts.min()
-        
-        if min_samples_per_class < 2:
-            print("   Предупреждение: некоторые классы имеют менее 2 образцов, стратификация отключена")
-            stratify = None
-        else:
-            stratify = target_encoded
-        
-        X_train, X_test, y_train, y_test, indices_train, indices_test = train_test_split(
-            features_scaled, target_encoded, features_df.index, 
-            test_size=test_size, random_state=random_state, stratify=stratify
+        # ИСПОЛЬЗУЕМ ОПТИМИЗИРОВАННУЮ ВЕРСИЮ ДЛЯ ВЫЧИСЛЕНИЙ
+        batch_results = lda_classification_batch(
+            data=data,
+            target_column=target_column,
+            index_level=index_level,
+            n_components=n_components,
+            test_size=test_size,
+            random_state=random_state,
+            vif_filter=vif_filter,
+            **kwargs
         )
         
+        # Извлекаем результаты
+        results_df = batch_results['results_df']
+        lda_model = batch_results['model']
+        scaler = batch_results['scaler']
+        feature_importance = batch_results['feature_importance']
+        label_encoder = batch_results['label_encoder']
+        X_train = batch_results['X_train']
+        X_test = batch_results['X_test']
+        y_train = batch_results['y_train']
+        y_test = batch_results['y_test']
+        X_train_lda = batch_results['X_train_lda']
+        X_test_lda = batch_results['X_test_lda']
+        accuracy = batch_results['accuracy']
+        weighted_avg_accuracy = batch_results['weighted_avg_accuracy']
+        macro_avg_accuracy = batch_results['macro_avg_accuracy']
+        clf_report_df = pd.DataFrame(batch_results['classification_report']).transpose()
+        class_names = batch_results['class_names']
+        n_components_actual = batch_results['n_components']
+        numeric_columns = feature_importance['feature'].values
+        
+        # Шаг 1: Информация о данных
+        print("\n1. ПОДГОТОВКА ДАННЫХ")
+        print("-" * 40)
+        print(f"   Целевая переменная: {target_column if target_column else f'{index_level} уровень индекса'}")
+        print(f"   Уникальных значений: {batch_results['n_classes']}")
+        print(f"   Классы: {list(class_names)}")
+        print(f"   Размер датасета: {len(data)} наблюдений")
+        
+        # Шаг 2: Предобработка
+        print("\n2. ПРЕДОБРАБОТКА ПРИЗНАКОВ")
+        print("-" * 40)
+        print(f"   Числовых признаков: {batch_results['n_features']}")
+        print(f"   Количество компонентов LDA: {n_components_actual}")
+        
+        # Шаг 3: Разделение данных
+        print("\n3. РАЗДЕЛЕНИЕ НА ОБУЧАЮЩУЮ И ТЕСТОВУЮ ВЫБОРКИ")
+        print("-" * 40)
+        print("   Распределение классов:")
+        unique_classes, class_counts = np.unique(y_train, return_counts=True)
+        for cls, count in zip(unique_classes, class_counts):
+            print(f"      {class_names[cls]}: {count} наблюдений (обучение)")
         print(f"   Обучающая выборка: {X_train.shape[0]} наблюдений")
         print(f"   Тестовая выборка: {X_test.shape[0]} наблюдений")
         
-        # Проверяем наличие всех классов в обучающей и тестовой выборках
-        train_classes = np.unique(y_train)
-        test_classes = np.unique(y_test)
-        print(f"   Классы в обучающей выборке: {len(train_classes)}")
-        print(f"   Классы в тестовой выборке: {len(test_classes)}")
-        
-        # Если в тестовой выборке не все классы, используем только присутствующие
-        if len(test_classes) < len(class_names):
-            print("   Предупреждение: не все классы присутствуют в тестовой выборке")
-            present_classes_mask = np.isin(np.arange(len(class_names)), test_classes)
-            present_class_names = class_names[present_classes_mask]
-            print(f"   Используемые классы для отчета: {list(present_class_names)}")
-        else:
-            present_class_names = class_names
-        
-
-        
         # Шаг 4: Обучение LDA
-        print("4. Обучение Linear Discriminant Analysis...")
+        print("\n4. ОБУЧЕНИЕ LINEAR DISCRIMINANT ANALYSIS")
+        print("-" * 40)
+        print(f"   Размерность после LDA (обучение): {X_train_lda.shape if X_train_lda.size > 0 else '0'}")
+        print(f"   Размерность после LDA (тест): {X_test_lda.shape if X_test_lda.size > 0 else '0'}")
+        if batch_results['explained_variance_ratio'] is not None:
+            print(f"   Объясненная дисперсия: {batch_results['explained_variance_ratio'].sum():.4f}")
         
-        lda_model = LinearDiscriminantAnalysis(n_components=n_components)
-        lda_model.fit(X_train, y_train)
-        
-        # Преобразование данных в LDA пространство
-        X_train_lda = lda_model.transform(X_train)
-        X_test_lda = lda_model.transform(X_test)
-        
-        print(f"   Размерность после LDA (обучение): {X_train_lda.shape}")
-        print(f"   Размерность после LDA (тест): {X_test_lda.shape}")
-        print(f"   Объясненная дисперсия: {lda_model.explained_variance_ratio_.sum():.4f}")
-        
-        # Шаг 4.1: Вывод уравнений LDA
-        print("\n4.1. Уравнения классификации LDA:")
+        # Выводим уравнения LDA
+        print("\n4.1. УРАВНЕНИЯ КЛАССИФИКАЦИИ LDA:")
         print("   " + "-" * 50)
         
-        def print_lda_equations(lda_model, feature_names, class_names):
-            """Выводит уравнения дискриминантных функций LDA"""
-            n_classes = len(class_names)
-            n_features = len(feature_names)
-            
-            # Для первых K-1 классов используем coef_ и intercept_
-            for i in range(n_classes - 1):
-                equation = f"   δ_{class_names[i]}(x) = "
-                parts = []
-                for j in range(n_features):
-                    coef_val = lda_model.coef_[i, j]
-                    parts.append(f"{coef_val:+.4f}*{feature_names[j]}")
-                
-                equation += " ".join(parts)
-                equation += f" {lda_model.intercept_[i]:+.4f}"
-                print(equation)
-            
-            # Для последнего класса коэффициенты - это отрицательная сумма всех остальных
-            last_coef = -np.sum(lda_model.coef_, axis=0)
-            last_intercept = -np.sum(lda_model.intercept_[:-1])
-            
-            equation = f"   δ_{class_names[-1]}(x) = "
-            parts = []
-            for j in range(n_features):
-                parts.append(f"{last_coef[j]:+.4f}*{feature_names[j]}")
-            
-            equation += " ".join(parts)
-            equation += f" {last_intercept:+.4f}"
-            print(equation)
-            
+        if hasattr(lda_model, 'coef_') and len(numeric_columns) > 0:
+            equations = _get_lda_equations(lda_model, numeric_columns, class_names)
+            for eq in equations:
+                print(eq)
             print("\n   📝 Примечание: Объект относится к классу с НАИБОЛЬШИМ значением δₖ(x)")
         
-        # Выводим уравнения
-        print_lda_equations(lda_model, numeric_columns, class_names)
+        # Шаг 5: Оценка модели
+        print("\n5. ОЦЕНКА МОДЕЛИ НА ТЕСТОВОЙ ВЫБОРКЕ")
+        print("-" * 40)
+        print(f"   Точность (Accuracy): {accuracy:.4f}")
         
-        # Шаг 5: Предсказания и оценка модели
-        print("5. Оценка модели...")
+        print("\n   ОТЧЕТ ПО КЛАССИФИКАЦИИ:")
+        print("   " + "-" * 35)
+        print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
         
-        y_pred = lda_model.predict(X_test)
-        y_pred_proba = lda_model.predict_proba(X_test)
-        
-        accuracy = accuracy_score(y_test, y_pred)
-        print(f"   Accuracy: {accuracy:.4f}")
-        
-        print(f"\n   Classification Report:")
-        print("   " + "-" * 50)
-        
-        
-        try:
-            clf_report = classification_report(
-                y_test, y_pred, 
-                target_names=present_class_names, 
-                output_dict=True,
-                zero_division=0
-            )
-            clf_report_df = pd.DataFrame(clf_report).transpose()
-            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            
-            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
-            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-            
-        except ValueError as e:
-            print(f"   Ошибка при создании classification report: {e}")
-            print("   Используем числовые метки классов...")
-            
-            clf_report = classification_report(
-                y_test, y_pred, 
-                output_dict=True,
-                zero_division=0
-            )
-            clf_report_df = pd.DataFrame(clf_report).transpose()
-            print(clf_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))
-            
-            weighted_avg_accuracy = np.float64(clf_report_df.loc['weighted avg', 'precision']) # type: ignore
-            macro_avg_accuracy = np.float64(clf_report_df.loc['macro avg', 'precision']) # type: ignore
-        
-        # Шаг 6: Анализ важности признаков через коэффициенты LDA
-        print("\n6. Анализ важности признаков...")
-        
-        # Анализ коэффициентов LDA
-        if n_components == 1:
-            feature_importance = pd.DataFrame({
-                'feature': numeric_columns,
-                'coefficient': lda_model.coef_[0]
-            }).sort_values('coefficient', key=abs, ascending=False)
-        else:
-            # Для многокомпонентного случая используем сумму абсолютных значений по компонентам
-            feature_importance = pd.DataFrame({
-                'feature': numeric_columns,
-                'coefficient_sum': np.sum(np.abs(lda_model.coef_), axis=0)
-            }).sort_values('coefficient_sum', ascending=False)
-        
-        print("   Топ-10 самых важных признаков (по абсолютным коэффициентам LDA):")
-        importance_column = 'coefficient' if n_components == 1 else 'coefficient_sum'
-        for i, row in feature_importance.head(10).iterrows():
-            print(f"      {row['feature']}: {row[importance_column]:.4f}")
-        
-        # Создаем DataFrame с результатами
-        results_df = features_df.copy()
-        results_df['actual'] = target_encoded
-        results_df['predicted'] = lda_model.predict(features_scaled)
-        results_df['is_correct'] = (results_df['actual'] == results_df['predicted'])
-        
-        results_df['Class'] = data.index.get_level_values('Class')
-        results_df['Subclass'] = data.index.get_level_values('Subclass')
-        
-        # Добавляем LDA компоненты
-        lda_components = lda_model.transform(features_scaled)
-        for i in range(lda_components.shape[1]):
-            results_df[f'LDA_Component_{i+1}'] = lda_components[:, i]
-        
+        # Внешняя валидация
         if external_validation and cv_dataset is not None:
-            print("\n5.1. Валидация на дополнительном датасете...")
+            external_results = _perform_external_validation_lda(
+                lda_model, scaler, label_encoder, numeric_columns,
+                cv_dataset, target_column, index_level
+            )
             
-            # Проверяем структуру датасета
-            print("   Проверка структуры дополнительного датасета...")
-            
-            # Определяем целевую переменную для валидационного датасета
-            if (target_column is None) and (index_level is not None):
-                cv_target = cv_dataset.index.get_level_values(index_level)
-                cv_features_df = cv_dataset.reset_index(drop=True)
-            else:
-                cv_target = cv_dataset[target_column]
-                cv_features_df = cv_dataset.drop(columns=[target_column])
-            
-            # Кодируем целевую переменную (используем уже обученный LabelEncoder)
-            try:
-                cv_target_encoded = le.transform(cv_target)
-            except ValueError as e:
-                print(f"   ⚠️ Предупреждение: В валидационном датасете обнаружены новые классы: {e}")
-                # Создаем маску для строк с известными классами
-                known_classes_mask = cv_target.isin(le.classes_)
-                cv_target_filtered = cv_target[known_classes_mask]
-                cv_features_filtered = cv_features_df[known_classes_mask]
-                
-                if len(cv_target_filtered) == 0:
-                    print("   ❌ Ошибка: Нет строк с известными классами для валидации")
-                    cv_target_encoded = None
-                    cv_features_filtered = None
-                else:
-                    cv_target_encoded = le.transform(cv_target_filtered)
-                    cv_features_df = cv_features_filtered
-            
-            if cv_target_encoded is not None:
-                # Убеждаемся, что признаки совпадают
-                cv_numeric_columns = cv_features_df.select_dtypes(include=[np.number]).columns
-                
-                # Проверяем совпадение столбцов
-                if not set(numeric_columns).issubset(set(cv_numeric_columns)):
-                    missing_cols = set(numeric_columns) - set(cv_numeric_columns)
-                    print(f"   ⚠️ Предупреждение: В валидационном датасете отсутствуют столбцы: {missing_cols}")
-                    # Используем только общие столбцы
-                    common_cols = list(set(numeric_columns).intersection(set(cv_numeric_columns)))
-                    cv_features_numeric = cv_features_df[common_cols].copy()
-                else:
-                    cv_features_numeric = cv_features_df[numeric_columns].copy()
-                
-                # Применяем масштабирование (используем уже обученный scaler!)
-                cv_features_scaled = scaler.transform(cv_features_numeric)
-                
-                # Применяем обученную LDA модель
-                cv_predictions = lda_model.predict(cv_features_scaled)
-                cv_predictions_proba = lda_model.predict_proba(cv_features_scaled)
-                
-                # Вычисляем метрики
-                cv_accuracy = accuracy_score(cv_target_encoded, cv_predictions)
-                
-                # Получаем классы, которые есть в валидационном датасете
-                cv_unique_classes = np.unique(cv_target_encoded)
-                cv_present_class_names = le.classes_[cv_unique_classes]
-                
-                # Генерируем детальный отчет по классам
-                cv_clf_report = classification_report(
-                    cv_target_encoded, cv_predictions,
-                    target_names=cv_present_class_names,
-                    output_dict=True,
-                    labels=cv_unique_classes,
-                    zero_division=0
-                )
-                
-                external_results = {
-                    'features_scaled': cv_features_scaled,
-                    'target_encoded': cv_target_encoded,
-                    'predictions': cv_predictions,
-                    'predictions_proba': cv_predictions_proba,
-                    'accuracy': cv_accuracy,
-                    'classification_report': cv_clf_report,
-                    'present_classes': cv_present_class_names
-                }
-                
-                print(f"   Размер валидационного датасета: {cv_features_scaled.shape}")
-                print(f"   Количество классов в валидации: {len(cv_unique_classes)}")
-                print(f"   Accuracy на валидационном датасете: {cv_accuracy:.4f}")
-                
-                # Выводим отчет по классам
-                print(f"\n   Classification Report для валидационного датасета:")
-                print("   " + "-" * 50)
-                
-                cv_report_df = pd.DataFrame(cv_clf_report).transpose()
-                print(cv_report_df.to_string(float_format=lambda x: f"{x:.4f}" if isinstance(x, float) else str(x)))        
-                
+            if external_results:
+                print(f"\n   Accuracy на валидационном датасете: {external_results['accuracy']:.4f}")
         
-        # Получаем весь вывод
+        # Шаг 6: Анализ важности признаков
+        print("\n6. АНАЛИЗ ВАЖНОСТИ ПРИЗНАКОВ")
+        print("-" * 40)
+        print("   Топ-10 самых важных признаков (по абсолютным коэффициентам LDA):")
+        importance_col = 'importance'
+        for i, (_, row) in enumerate(feature_importance.head(10).iterrows(), 1):
+            print(f"      {i:2d}. {row['feature']:30s}: {row[importance_col]:.4f}")
+        
+        # Общая точность
+        overall_accuracy = results_df['is_correct'].mean()
+        print(f"\n   Общая точность на всем датасете: {overall_accuracy:.4f}")
+        
+        # Сводка
+        print("\n" + "=" * 70)
+        print("СВОДКА РЕЗУЛЬТАТОВ")
+        print("=" * 70)
+        print(f"   Классов: {batch_results['n_classes']}")
+        print(f"   Признаков: {batch_results['n_features']}")
+        print(f"   LDA компонентов: {n_components_actual}")
+        print(f"   Точность на тесте: {accuracy:.4f}")
+        print(f"   Самый важный признак: {feature_importance.iloc[0]['feature']}")
+        print("=" * 70)
+        
+        # Получаем вывод консоли
         console_output = captured_output.getvalue()
         
         # Восстанавливаем stdout
         sys.stdout = old_stdout
         
-        # Создаем HTML отчет
-        
+        # Создание HTML отчета
         if output_html_path:
-            create_lda_classification_html_report(console_output, results_df, feature_importance, 
-                                lda_model, class_names, le, X_test, y_test, y_pred, 
-                                X_train_lda, y_train, output_html_path, vif_results, 
-                                numeric_columns, external_results) # type: ignore
-            
-            print(f"\n✅ HTML отчет сохранен в файл: {output_html_path}")
+            try:
+                create_lda_classification_html_report(
+                    console_output=console_output,
+                    results_df=results_df,
+                    feature_importance=feature_importance,
+                    lda_model=lda_model,
+                    class_names=class_names,
+                    label_encoder=label_encoder,
+                    X_test=X_test,
+                    y_test=y_test,
+                    y_pred=lda_model.predict(X_test),
+                    X_lda=X_train_lda,
+                    y_train=y_train,
+                    output_html_path=output_html_path,
+                    vif_results=batch_results.get('vif_results'),
+                    feature_names=numeric_columns,
+                    cv_results=external_results
+                )
+                print(f"\n✅ HTML отчет сохранен: {output_html_path}")
+            except Exception as e:
+                print(f"⚠️  Не удалось создать HTML отчет: {e}")
         
-        return (results_df, lda_model, scaler, feature_importance, le,
+        return (results_df, lda_model, scaler, feature_importance, label_encoder,
                 X_train, X_test, y_train, y_test, X_train_lda, X_test_lda,
-                float(accuracy), weighted_avg_accuracy, macro_avg_accuracy,clf_report_df, external_results) # type: ignore        
-            
+                accuracy, weighted_avg_accuracy, macro_avg_accuracy,
+                clf_report_df, external_results)
         
     except Exception as e:
-        # Восстанавливаем stdout в случае ошибки
         sys.stdout = old_stdout
-        print(f"Ошибка при выполнении анализа: {e}")
+        print(f"❌ Ошибка при выполнении анализа: {e}")
         raise
 
+
+def _perform_external_validation_lda(model, scaler, label_encoder, numeric_columns,
+                                     cv_dataset, target_column, index_level):
+    """
+    Вспомогательная функция для внешней валидации LDA
+    """
+    from sklearn.metrics import accuracy_score, classification_report
+    import numpy as np
+    
+    # Определяем целевую переменную
+    if (target_column is None) and (index_level is not None):
+        cv_target = cv_dataset.index.get_level_values(index_level)
+        cv_features_df = cv_dataset.reset_index(drop=True)
+    else:
+        cv_target = cv_dataset[target_column]
+        cv_features_df = cv_dataset.drop(columns=[target_column])
+    
+    # Кодируем целевую переменную
+    known_mask = cv_target.isin(label_encoder.classes_)
+    cv_target_filtered = cv_target[known_mask]
+    cv_features_filtered = cv_features_df[known_mask]
+    
+    if len(cv_target_filtered) == 0:
+        return None
+    
+    cv_target_encoded = label_encoder.transform(cv_target_filtered)
+    
+    # Выбираем общие признаки
+    cv_numeric = cv_features_filtered.select_dtypes(include=[np.number])
+    common_cols = list(set(numeric_columns).intersection(set(cv_numeric.columns)))
+    
+    if not common_cols:
+        return None
+    
+    cv_features_numeric = cv_numeric[common_cols].values
+    
+    # Масштабируем
+    cv_features_scaled = scaler.transform(cv_features_numeric)
+    
+    # Предсказываем
+    cv_predictions = model.predict(cv_features_scaled)
+    cv_predictions_proba = model.predict_proba(cv_features_scaled)
+    
+    # Метрики
+    cv_accuracy = accuracy_score(cv_target_encoded, cv_predictions)
+    cv_unique_classes = np.unique(cv_target_encoded)
+    cv_present_names = label_encoder.classes_[cv_unique_classes]
+    
+    cv_clf_report = classification_report(
+        cv_target_encoded, cv_predictions,
+        target_names=cv_present_names,
+        output_dict=True,
+        labels=cv_unique_classes,
+        zero_division=0
+    )
+    
+    return {
+        'features_scaled': cv_features_scaled,
+        'target_encoded': cv_target_encoded,
+        'predictions': cv_predictions,
+        'predictions_proba': cv_predictions_proba,
+        'accuracy': cv_accuracy,
+        'classification_report': cv_clf_report,
+        'present_classes': cv_present_names
+    }
+    
 def create_lda_classification_html_report(console_output, results_df, feature_importance, 
                           lda_model, class_names, label_encoder,
                           X_test, y_test, y_pred, X_lda, y_train, output_html_path, 
@@ -1564,7 +1707,7 @@ def create_lda_classification_html_report(console_output, results_df, feature_im
     # График важности признаков
     fig1, ax1 = plt.subplots(figsize=(10, 6))
     top_features = feature_importance.head(15)
-    importance_column = 'coefficient' if 'coefficient' in top_features.columns else 'coefficient_sum'
+    importance_column = 'importance'
     
     colors = ['red' if x < 0 else 'blue' for x in top_features[importance_column]]
     ax1.barh(top_features['feature'], top_features[importance_column], color=colors)
