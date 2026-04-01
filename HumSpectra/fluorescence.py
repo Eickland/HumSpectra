@@ -141,7 +141,8 @@ def plot_2d(data: pd.DataFrame,
             title: bool = True,
             ax: Union[Axes, None] = None,
             norm: bool = False,
-            name: str|None = None) -> Axes:
+            name: str|None = None,
+            raman_spline: bool = False) -> Axes:
     """
     :param data: DataFrame, спектр флуоресценции
     :param ex_wave: int, длина волны возбуждения, при котором строится график
@@ -159,9 +160,13 @@ def plot_2d(data: pd.DataFrame,
         else:
             name = "fluo_spectra"
     
-    row = data[ex_wave]
+    row = data[ex_wave].to_numpy()
     if norm:
         row = (row - row.min()) / (row.max() - row.min())
+    if raman_spline:
+        
+        EM_wavelengths = data.index.to_numpy(dtype="int")
+        row = cut_raman_spline(EM_wavelengths, row, ex_wave)        
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
     ax.plot(data.index, row, label = data.attrs['name'])
