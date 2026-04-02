@@ -96,6 +96,9 @@ def extract_class_from_name(file_name: str) -> str:
     str_name = file_name.replace(" ", "-")
     if 'SLB' in str_name:
         sample_class = 'Baikal'
+        
+        if '_' in str_name:
+            sample_class = 'Mix'
     
     elif "ADOM" in str_name:
         sample_class = "ADOM"
@@ -143,6 +146,9 @@ def extract_subclass_from_name(file_name: str) -> str:
 
     str_name = file_name.replace(" ", "-")
 
+    if 'Mix' == sample_class:
+        return 'Mix'
+    
     if 'Baikal' == sample_class:
         return 'Baikal'
     
