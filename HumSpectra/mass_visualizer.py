@@ -874,7 +874,7 @@ def spectrum(spec: 'pd.DataFrame',
     
     # Create plot
     if ax is None:
-        fig, ax = plt.subplots(figsize=(12, 6), dpi=100)
+        fig, ax = plt.subplots(figsize=(12, 6), dpi=400)
     
     # Отрисовка всех пиков (выбросы просто уйдут за верхнюю границу графика)
     ax.vlines(mass, ymin=0, ymax=intensity, 
