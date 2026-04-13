@@ -28,7 +28,7 @@ perminova_class_names_translate_dict = {
     'phenylisopropanoids': 'Фенил-\nизопроп-\nоиды',
     'terpenoids': 'Терпен-\nоиды',
     'carbohydrates': 'Углеводы',
-    'proteins': 'Белки',
+    'proteins': 'Пептиды',
     'condensed_tanins': 'Конденсир-\nованные\nтанины',
     'lipids': 'Липиды'    
 }
