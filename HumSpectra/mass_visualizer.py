@@ -1187,3 +1187,442 @@ def plot_mol_class_distribution(masslist:pd.DataFrame,mod='bar'):
         
     elif mod == 'mass_distibution':
         plot_mass_intensity_relationship(data)            
+
+def plot_class_dist(spectra_list: list,
+                                    normalize: bool = True,
+                                    figsize: tuple = (8, 7),
+                                    ax=None,
+                                    show_values: bool = True,
+                                    value_threshold: float = 5.0,
+                                    legend: bool = True,
+                                    orientation: str = 'vertical'):
+    """
+    Показывает распределение классов формул для списка спектров.
+    Каждый образец представлен одной горизонтальной полосой, разделенной на цветовые сегменты.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами, каждый должен иметь столбец 'class'
+    normalize : bool, optional
+        Нормализовать значения к 100% (True) или показывать абсолютные количества (False)
+    figsize : tuple, optional
+        Размер фигуры (для вертикального случая отсюда берется лишь ширина, а высота рассчитывается в функции исходя из числа образцов. Для горизонтального - наоборот)
+    ax : matplotlib.axes.Axes, optional
+        Оси для отрисовки, если None - создаются новые
+    show_values : bool, optional
+        Показывать значения на сегментах
+    value_threshold : float, optional
+        Минимальный процент для отображения значения (только если show_values=True)
+    legend : bool, optional
+        Показывать легенду
+    
+    Returns
+    -------
+    tuple: (pd.DataFrame, matplotlib.axes.Axes)
+        DataFrame с результатами и оси графика
+    """
+    if orientation not in ['horizontal', 'vertical']:
+        raise ValueError('Параметр orientation должен быть либо horizontal, либо vertical')
+    if not spectra_list:
+        raise ValueError("Список масс-листов пустой")
+    
+    # Собираем данные по всем спектрам
+    results = []
+    sample_names = []
+    
+    for spec in spectra_list:
+        # Проверяем наличие колонки class
+        if 'class' not in spec.columns:
+            raise ValueError(f"В масс-листе {spec.attrs['name']} отсутствует столбец 'class'")
+        
+        # Получаем имя образца
+        if hasattr(spec, 'attrs') and 'name' in spec.attrs:
+            sample_name = spec.attrs['name']
+        else:
+            sample_name = f"Sample_{len(results)+1}"
+        
+        sample_names.append(sample_name)
+        
+        # Получаем распределение классов с учетом всех возможных классов
+        value_counts, _, _ = ensure_all_classes_present(spec)
+        
+        if normalize:
+            total = value_counts.sum()
+            if total > 0:
+                value_counts = (value_counts / total) * 100
+        
+        results.append(value_counts)
+    
+    # Создаем DataFrame с результатами
+    result_df = pd.DataFrame(results, index=sample_names)
+    
+    # Создаем оси
+    if ax is None:
+        if orientation == 'vertical':
+            fig_height = max(6,len(sample_names)*0.5)
+            fix, ax = plt.subplots(1,1,figsize = (figsize[0],fig_height))
+        else:
+            fig_width = max(8,len(sample_names)*0.8)
+            fig,ax = plt.subplots(1,1,figsize=(fig_width,figsize[1]))
+    
+    # Строим вертикальный stacked bar plot
+    if orientation == 'vertical':
+        left = np.zeros(len(sample_names))
+        
+        for class_name, color in zip(result_df.columns, perminova_class_colors_list):
+            values = result_df[class_name].values
+            label = perminova_class_names_translate_dict.get(class_name, class_name)
+            
+            bars = ax.barh(sample_names, values, left=left, 
+                        label=label, color=color, height=1.0, 
+                        linewidth=0)
+            
+            if show_values:
+                for i, (bar, value) in enumerate(zip(bars, values)):
+                    if value > value_threshold:
+                        position = left[i] + value / 2
+                        ax.text(position, bar.get_y() + bar.get_height()/2.,
+                            f'{value:.1f}',
+                            ha='center', va='center', fontsize=9, 
+                            color='black', weight='bold')
+            
+            left += values
+        for i in range(len(sample_names) - 1):
+            ax.axhline(y=i + 0.5, color='white', linewidth=2, zorder=10)
+        
+        ax.set_ylabel('Образцы')
+        ax.set_xlabel('Доля, %' if normalize else 'Количество формул')
+        ax.grid(True, alpha=0.3, axis='x')
+        if normalize:
+            ax.set_xlim(0, 100)
+    else:  # Строим горизонтальный stacked bar plot
+        bottom = np.zeros(len(sample_names))
+        
+        for class_name, color in zip(result_df.columns, perminova_class_colors_list):
+            values = result_df[class_name].values
+            label = perminova_class_names_translate_dict.get(class_name, class_name)
+            
+            bars = ax.bar(sample_names, values, bottom=bottom, 
+                        label=label, color=color, width=1.0, 
+                        linewidth=0)
+            
+            if show_values:
+                for i, (bar, value) in enumerate(zip(bars, values)):
+                    if value > value_threshold:
+                        position = bottom[i] + value / 2
+                        ax.text(bar.get_x() + bar.get_width()/2., position,
+                            f'{value:.1f}',
+                            ha='center', va='center', fontsize=9, 
+                            color='black', weight='bold', rotation=0)
+            
+            bottom += values
+        
+        for i in range(len(sample_names) - 1):
+            ax.axvline(x=i + 0.5, color='white', linewidth=2, zorder=10)
+        
+        ax.set_xlabel('Образцы')
+        ax.set_ylabel('Доля, %' if normalize else 'Количество формул')
+        ax.set_xticklabels(sample_names, rotation=45, ha='right')
+        ax.grid(True, alpha=0.3, axis='y')
+        if normalize:
+            ax.set_ylim(0, 100)
+    if legend:
+        ax.legend(title='Классы', bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.tight_layout()
+    return result_df, ax
+
+
+def plot_class_dist_humic_stacked(spectra_list: list,
+                                                   normalize: bool = True,
+                                                   figsize: tuple = (10, 6),
+                                                   ax=None,
+                                                   show_values: bool = True,
+                                                   value_threshold: float = 5.0,
+                                                   rotation: int = 0,
+                                                   legend: bool = True):
+    """
+    Группирует спектры по классам гуминовых веществ (df.attrs['class']) 
+    и показывает среднее распределение классов формул для каждой группы.
+    Каждая группа представлена одним столбцом, разделенным на цветовые сегменты.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами, каждый должен иметь:
+        - столбец 'class' с классами формул
+        - атрибут df.attrs['class'] с классом гуминового вещества
+    normalize : bool, optional
+        Нормализовать значения к 100% (True) или показывать абсолютные количества (False)
+    figsize : tuple, optional
+        Размер фигуры
+    ax : matplotlib.axes.Axes, optional
+        Оси для отрисовки, если None - создаются новые
+    show_values : bool, optional
+        Показывать значения на сегментах
+    value_threshold : float, optional
+        Минимальный процент для отображения значения (только если show_values=True)
+    rotation : int, optional
+        Угол поворота подписей по оси X
+    legend : bool, optional
+        Показывать легенду
+    
+    Returns
+    -------
+    tuple: (pd.DataFrame, pd.DataFrame, matplotlib.axes.Axes)
+        DataFrame со средними значениями, DataFrame со стандартными отклонениями, оси графика
+    """
+    
+    if not spectra_list:
+        raise ValueError("Список масс-листов не может быть пустым")
+    
+    # Группируем спектры по классам гуминовых веществ
+    from collections import defaultdict
+    
+    humic_groups = defaultdict(list)
+    
+    for spec in spectra_list:
+        # Проверяем наличие колонки class
+        if 'class' not in spec.columns:
+            raise ValueError(f"В масс-листе {spec.attrs['name']} отсутствует столбец 'class'")
+        
+        # Получаем класс гуминового вещества
+        if hasattr(spec, 'attrs') and 'class' in spec.attrs:
+            humic_class = spec.attrs['class']
+        else:
+            humic_class = 'Unknown'
+        
+        # Получаем распределение классов формул (нормализованное для каждого спектра)
+        value_counts, _, _ = ensure_all_classes_present(spec)
+        
+        if normalize:
+            total = value_counts.sum()
+            if total > 0:
+                value_counts = (value_counts / total) * 100
+        
+        humic_groups[humic_class].append(value_counts)
+    
+    # Вычисляем средние значения и стандартные отклонения для каждой группы
+    group_means = {}
+    
+    for humic_class, distributions in humic_groups.items():
+        # Создаем DataFrame из распределений
+        group_df = pd.DataFrame(distributions)
+        group_means[humic_class] = group_df.mean()
+    
+    # Создаем DataFrame с результатами
+    means_df = pd.DataFrame(group_means).T
+    
+    # Сортируем по алфавиту
+    means_df = means_df.sort_index()
+    
+    # Создаем оси
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    # Строим stacked bar plot
+    humic_classes = means_df.index.tolist()
+    bottom = np.zeros(len(humic_classes))
+    
+    for class_name, color in zip(means_df.columns, perminova_class_colors_list):
+        values = means_df[class_name].values
+        label = perminova_class_names_translate_dict.get(class_name, class_name)
+        
+        bars = ax.bar(humic_classes, values, bottom=bottom, 
+                     label=label, color=color, width=0.7)
+        
+        # Добавляем подписи значений
+        if show_values:
+            for i, (bar, value) in enumerate(zip(bars, values)):
+                if value > value_threshold and not np.isnan(value):
+                    height = bottom[i] + value / 2
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{value:.1f}',
+                           ha='center', va='center', fontsize=9, 
+                           color='black', weight='bold')
+        
+        bottom += values
+    
+    # Настройки осей
+    ax.set_xlabel('Класс гуминового вещества')
+    ax.set_ylabel('Средняя доля, %' if normalize else 'Среднее количество формул')
+    
+    # Добавляем информацию о количестве образцов в каждой группе
+    xtick_labels = []
+    for humic_class in humic_classes:
+        n_samples = len(humic_groups[humic_class])
+        xtick_labels.append(f"{humic_class}\n(n={n_samples})")
+    ax.set_xticks(range(len(humic_classes)))
+    ax.set_xticklabels(xtick_labels, rotation=rotation)
+    
+    ax.set_title('Среднее распределение классов формул по типам гуминовых веществ')
+    
+    if legend:
+        ax.legend(title='Классы формул', bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_axisbelow(True)
+    
+    # Устанавливаем нижнюю границу y=0
+    if normalize:
+        ax.set_ylim(0, 100)
+    else:
+        max_total = means_df.sum(axis=1).max()
+        ax.set_ylim(0, max_total * 1.15)
+    
+    plt.tight_layout()
+    
+    return means_df, ax
+
+
+def plot_class_dist_humic_grouped(spectra_list: list,
+                                                   normalize: bool = True,
+                                                   figsize: tuple = (12, 6),
+                                                   ax=None,
+                                                   show_values: bool = True,
+                                                   rotation: int = 0,
+                                                   legend: bool = True):
+    """
+    Группирует спектры по классам гуминовых веществ (df.attrs['class']) 
+    и показывает распределение классов формул сгруппированными столбцами.
+    Для каждого класса гуминового вещества отображаются отдельные столбцы 
+    для каждого класса формул.
+    
+    Parameters
+    ----------
+    spectra_list : list
+        Список DataFrame с масс-спектрами, каждый должен иметь:
+        - столбец 'class' с классами формул
+        - атрибут df.attrs['class'] с классом гуминового вещества
+    normalize : bool, optional
+        Нормализовать значения к 100% (True) или показывать абсолютные количества (False)
+    figsize : tuple, optional
+        Размер фигуры
+    ax : matplotlib.axes.Axes, optional
+        Оси для отрисовки, если None - создаются новые
+    show_values : bool, optional
+        Показывать значения на столбцах
+    rotation : int, optional
+        Угол поворота подписей по оси X
+    legend : bool, optional
+        Показывать легенду
+    
+    Returns
+    -------
+    tuple: (pd.DataFrame, pd.DataFrame, matplotlib.axes.Axes)
+        DataFrame со средними значениями, DataFrame со стандартными отклонениями, оси графика
+    """
+    
+    if not spectra_list:
+        raise ValueError("Список масс-листов пустой")
+    
+    # Группируем спектры по классам гуминовых веществ
+    from collections import defaultdict
+    
+    humic_groups = defaultdict(list)
+    
+    for spec in spectra_list:
+        # Проверяем наличие колонки class
+        if 'class' not in spec.columns:
+            raise ValueError(f"В масс-листе {spec.attrs['name']} отсутствует столбец 'class'")
+        
+        # Получаем класс гуминового вещества
+        if hasattr(spec, 'attrs') and 'class' in spec.attrs:
+            humic_class = spec.attrs['class']
+        else:
+            humic_class = 'Unknown'
+        
+        # Получаем распределение классов формул (нормализованное для каждого спектра)
+        value_counts, _, _ = ensure_all_classes_present(spec)
+        
+        if normalize:
+            total = value_counts.sum()
+            if total > 0:
+                value_counts = (value_counts / total) * 100
+        
+        humic_groups[humic_class].append(value_counts)
+    
+    # Вычисляем средние значения и стандартные отклонения для каждой группы
+    group_means = {}
+    group_stds = {}
+    
+    for humic_class, distributions in humic_groups.items():
+        # Создаем DataFrame из распределений
+        group_df = pd.DataFrame(distributions)
+        group_means[humic_class] = group_df.mean()
+        group_stds[humic_class] = group_df.std()
+    
+    # Создаем DataFrame с результатами
+    means_df = pd.DataFrame(group_means).T
+    stds_df = pd.DataFrame(group_stds).T
+    
+    # Сортируем по алфавиту для консистентности
+    means_df = means_df.sort_index()
+    stds_df = stds_df.loc[means_df.index]
+    
+    # Создаем оси если не переданы
+    if ax is None:
+        fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    # Строим grouped bar plot
+    humic_classes = means_df.index.tolist()
+    formula_classes = means_df.columns.tolist()
+    
+    x = np.arange(len(humic_classes))
+    width = 0.8 / len(formula_classes)
+    multipliers = np.arange(len(formula_classes)) - (len(formula_classes) - 1) / 2
+    
+    for i, (formula_class, color) in enumerate(zip(formula_classes, perminova_class_colors_list)):
+        offset = width * multipliers[i]
+        values = means_df[formula_class].values
+        errors = stds_df[formula_class].values
+        
+        bars = ax.bar(x + offset, values, width, 
+                     label=perminova_class_names_translate_dict.get(formula_class, formula_class),
+                     color=color,
+                     yerr=errors,
+                     capsize=3,
+                     error_kw={'elinewidth': 1, 'capthick': 1})
+        
+        if show_values:
+            for j, bar in enumerate(bars):
+                height = bar.get_height()
+                if height > 0 and not np.isnan(height):
+                    y_pos = height + (height * 0.02)
+                    if not np.isnan(errors[j]):
+                        y_pos += errors[j]
+                    
+                    ax.text(bar.get_x() + bar.get_width()/2., y_pos,
+                           f'{height:.1f}',
+                           ha='center', va='bottom', fontsize=8, 
+                           color='black', rotation=0)
+    
+    # Настройки осей
+    ax.set_xticks(x)
+    
+    # Добавляем информацию о количестве образцов в каждой группе
+    xtick_labels = []
+    for humic_class in humic_classes:
+        n_samples = len(humic_groups[humic_class])
+        xtick_labels.append(f"{humic_class}\n(n={n_samples})")
+    ax.set_xticklabels(xtick_labels, rotation=rotation)
+    
+    ax.set_xlabel('Класс гуминового вещества')
+    ax.set_ylabel('Средняя доля, %' if normalize else 'Среднее количество формул')
+    ax.set_title('Среднее распределение классов формул по типам гуминовых веществ')
+    
+    if legend:
+        ax.legend(title='Классы формул', bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    ax.grid(True, alpha=0.3, axis='y')
+    ax.set_axisbelow(True)
+    
+    # Устанавливаем нижнюю границу y=0
+    max_val = (means_df.values + stds_df.values).max()
+    if not np.isnan(max_val):
+        ax.set_ylim(0, max_val * 1.2)
+    
+    plt.tight_layout()
+    
+    return means_df, stds_df, ax
