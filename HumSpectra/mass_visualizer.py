@@ -1271,7 +1271,7 @@ def plot_class_dist(spectra_list: list,
         left = np.zeros(len(sample_names))
         
         for class_name, color in zip(result_df.columns, perminova_class_colors_list):
-            values = result_df[class_name].values
+            values = result_df[class_name].to_numpy()
             label = perminova_class_names_translate_dict.get(class_name, class_name)
             
             bars = ax.barh(sample_names, values, left=left, 
@@ -1300,7 +1300,7 @@ def plot_class_dist(spectra_list: list,
         bottom = np.zeros(len(sample_names))
         
         for class_name, color in zip(result_df.columns, perminova_class_colors_list):
-            values = result_df[class_name].values
+            values = result_df[class_name].to_numpy()
             label = perminova_class_names_translate_dict.get(class_name, class_name)
             
             bars = ax.bar(sample_names, values, bottom=bottom, 
@@ -1332,7 +1332,6 @@ def plot_class_dist(spectra_list: list,
     
     plt.tight_layout()
     return result_df, ax
-
 
 def plot_class_dist_humic_stacked(spectra_list: list,
                                                    normalize: bool = True,
@@ -1426,7 +1425,7 @@ def plot_class_dist_humic_stacked(spectra_list: list,
     bottom = np.zeros(len(humic_classes))
     
     for class_name, color in zip(means_df.columns, perminova_class_colors_list):
-        values = means_df[class_name].values
+        values = means_df[class_name].to_numpy()
         label = perminova_class_names_translate_dict.get(class_name, class_name)
         
         bars = ax.bar(humic_classes, values, bottom=bottom, 
@@ -1474,7 +1473,6 @@ def plot_class_dist_humic_stacked(spectra_list: list,
     plt.tight_layout()
     
     return means_df, ax
-
 
 def plot_class_dist_humic_grouped(spectra_list: list,
                                                    normalize: bool = True,
@@ -1575,8 +1573,8 @@ def plot_class_dist_humic_grouped(spectra_list: list,
     
     for i, (formula_class, color) in enumerate(zip(formula_classes, perminova_class_colors_list)):
         offset = width * multipliers[i]
-        values = means_df[formula_class].values
-        errors = stds_df[formula_class].values
+        values = means_df[formula_class].to_numpy()
+        errors = stds_df[formula_class].to_numpy()
         
         bars = ax.bar(x + offset, values, width, 
                      label=perminova_class_names_translate_dict.get(formula_class, formula_class),
@@ -1626,3 +1624,111 @@ def plot_class_dist_humic_grouped(spectra_list: list,
     plt.tight_layout()
     
     return means_df, stds_df, ax
+
+def plot_stacked_barplot(df, name_col='name', figsize=(12, 6), 
+                         colormap='viridis', title=None,
+                         show_values=True, value_format='{:.2f}'):
+    """
+    Строит stacked barplot для DataFrame с нормализованными значениями.
+    
+    Параметры:
+    -----------
+    df : pandas.DataFrame
+        DataFrame с нормализованными данными (сумма числовых столбцов в каждой строке = 1)
+    name_col : str, default='name'
+        Название столбца с именами образцов/точек
+    figsize : tuple, default=(12, 6)
+        Размер фигуры (ширина, высота)
+    colormap : str or list, default='viridis'
+        Цветовая схема для числовых столбцов
+    title : str, optional
+        Заголовок графика
+    show_values : bool, default=True
+        Показывать ли значения на столбцах
+    value_format : str, default='{:.2f}'
+        Формат отображения значений (например, '{:.1%}' для процентов)
+    
+    Returns:
+    --------
+    fig, ax : matplotlib figure and axes objects
+    """
+    # Копируем DataFrame, чтобы не изменять исходный
+    df_plot = df.copy()
+    
+    # Определяем числовые столбцы (исключая столбец с именами)
+    numeric_cols = df_plot.select_dtypes(include=[np.number]).columns.tolist()
+    
+    # Проверяем, что столбец с именами существует
+    if name_col not in df_plot.columns:
+        raise ValueError(f"Столбец '{name_col}' не найден в DataFrame")
+    
+    # Убеждаемся, что столбец с именами - первый
+    cols_order = [name_col] + numeric_cols
+    df_plot = df_plot[cols_order]
+    
+    # Проверяем, что данные нормализованы (опционально)
+    sums = df_plot[numeric_cols].sum(axis=1)
+    if not np.allclose(sums, 1, rtol=1e-5):
+        print("Предупреждение: Суммы строк не равны 1. Результат может быть некорректным.")
+    
+    # Создаем фигуру
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Получаем список имен и числовых столбцов
+    names = df_plot[name_col].values
+    n_names = len(names)
+    
+    # Получаем цветовую палитру
+    if isinstance(colormap, str):
+        colors = plt.cm.get_cmap(colormap)(np.linspace(0, 1, len(numeric_cols)))
+    else:
+        colors = colormap
+    
+    # Рисуем stacked bars
+    bottom = np.zeros(n_names)
+    
+    for idx, col in enumerate(numeric_cols):
+        values = df_plot[col].values
+        bars = ax.bar(names, values, bottom=bottom, 
+                     label=col, color=colors[idx], 
+                     edgecolor='white', linewidth=0.5)
+        
+        # Добавляем значения на столбцы (опционально)
+        if show_values:
+            for i, (bar, val) in enumerate(zip(bars, values)):
+                if val > 0.02:  # Показываем только значимые значения (>2%)
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., 
+                           bottom[i] + height/2.,
+                           value_format.format(val),
+                           ha='center', va='center', 
+                           fontsize=8, fontweight='bold',
+                           color='white' if np.mean(colors[idx][:3]) < 0.5 else 'black')
+        
+        bottom += values
+    
+    # Настройка графика
+    ax.set_xlabel('Образцы', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Относительная доля', fontsize=12, fontweight='bold')
+    
+    if title is None:
+        title = f'Stacked Barplot: распределение по {len(numeric_cols)} категориям'
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+    
+    # Легенда
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), 
+             title='Категории', title_fontsize=10)
+    
+    # Поворот подписей оси X, если нужно
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right', rotation_mode='anchor')
+    
+    # Сетка
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    ax.set_axisbelow(True)
+    
+    # Устанавливаем лимиты
+    ax.set_ylim(0, 1.05)
+    
+    plt.tight_layout()
+    
+    return fig, ax

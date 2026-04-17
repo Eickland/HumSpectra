@@ -4,6 +4,7 @@ import pandas as pd
 import HumSpectra.mass_spectra as ms
 import HumSpectra.mass_visualizer as msv
 import HumSpectra.utilits as ut
+import HumSpectra.mass_descriptors as md
 import matplotlib.pyplot as plt
 import numpy as np
 import subprocess
@@ -160,6 +161,7 @@ def interactive_spectrum_bokeh(spec: pd.DataFrame,
         p.y_range.end = ylim[1] # type: ignore
     
     return p
+
 def gmm_noise_filter(df, intensity_col='intensity'):
     """
     Автоматическая очистка шума в масс-спектре на основе GMM.
@@ -700,7 +702,6 @@ def extract_mass_list_optimal_percentile(mzml_file, ms_level=1, rt_range=None,
         'intensity': all_intensities_filtered,
     }), best_percentile
 
-
 def evaluate_mass_distribution(smoothed_hist, bin_edges, mass_bin_width):
     """
     Оценка качества распределения масс.
@@ -878,10 +879,10 @@ for folder in list_data_folder:
         spectra = spectra.loc[spectra['O'] != 0]
         
         
-        spectra = ms.normalize(ms.calc_all_metrics(spectra))
+        spectra = ms.normalize(md.calc_all_metrics(spectra))
         spectra = spectra.loc[spectra.groupby('brutto')['rel_error'].apply(lambda x: (x.abs() == x.abs().min()).idxmax())
                             ].reset_index(drop=True)
-        spectra = ms.mol_class(spectra,how="perminova")
+        spectra = md.mol_class(spectra,how="perminova")
         
 
         spectra.dropna().to_csv(Path.joinpath(document_save_path,'mzlist',f'{name}__mzlist.csv'),sep=',',index=False)

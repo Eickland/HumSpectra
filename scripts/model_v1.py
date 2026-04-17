@@ -21,6 +21,7 @@ warnings.filterwarnings('ignore')
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.ensemble import IsolationForest
 from scipy.spatial.distance import mahalanobis
+import HumSpectra.mass_descriptors as md
 
 def build_formula(row):
     return 'C'+str(row['C']) +'H'+ str(row['H']) +'O'+ str(row['O'])+'N'+ str(row['N'])
@@ -363,7 +364,7 @@ square_14_list = []
 
 for spectra in spectra_list:
     
-    square_data = ms.get_squares_vk(spectra)
+    square_data = md.get_squares_vk(spectra)
     
     square_7_list.append(square_data.iloc[6]['value'])
     square_12_list.append(square_data.iloc[11]['value'])

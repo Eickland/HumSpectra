@@ -15,6 +15,7 @@ from tqdm import tqdm
 from scipy.signal import find_peaks
 
 import HumSpectra.utilits as ut
+import HumSpectra.mass_descriptors as md
 
 def read_mass_list(path: str,
                 map_columns: dict|None = {"m/z":"mass","I":"intensity"},
@@ -353,7 +354,7 @@ def merge_duplicates(self) -> "pd.DataFrame":
     pd.DataFrame
     """
     if 'calc_mass' not in self.columns:
-        self = calc_mass(self)
+        self = md.calc_mass(self)
 
     cols = {col: ('sum' if col=='intensity' else 'max') for col in self.columns}
     self = self.groupby(['calc_mass'],as_index = False).agg(cols)
@@ -470,838 +471,6 @@ def merge_isotopes(self) -> "pd.DataFrame":
             self = self.drop(columns=[el])
     
     self.attrs['merge_isotopes'] = True
-
-    return self
-
-@_copy
-def calc_mass(self,debug=False) -> pd.DataFrame:
-    """
-    Calculate mass from assigned brutto formulas and elements exact masses
-
-    Add column "calc_mass" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-    
-    elems = find_elements(self)
-    
-    if debug:
-        print(elems)
-        print(self.loc[:,elems])
-        
-    table = self.loc[:,elems].copy(deep=True)
-    
-    masses = get_elements_masses(elems)
-
-    self["calc_mass"] = table.multiply(masses).sum(axis=1)
-    self["calc_mass"] = np.round(self["calc_mass"], 6)
-    self.loc[self["calc_mass"] == 0, "calc_mass"] = np.nan
-
-    return self
-
-@_copy
-def _calc_sign(self) -> str:
-    """
-    Determine sign from mass and calculated mass
-
-    '-' for negative mode
-    '+' for positive mode
-    '0' for neutral
-
-    Return
-    ------
-    str            
-    """
-
-    self = drop_unassigned(self)
-
-    if "calc_mass" not in self:
-        self = calc_mass(self)
-
-    if "charge" not in self.columns:
-        self["charge"] = 1
-
-    value = (self["calc_mass"]/self["charge"] - self["mass"]).mean()
-    value = np.round(value,4)
-    if value > 1:
-        return '-'
-    elif value > 0.0004 and value < 0.01:
-        return '+'
-    else:
-        return '0'
-
-@_copy
-def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
-    """
-    Calculate relative and absolute error of assigned peaks from measured and calculated masses
-
-    Add columns "abs_error" and "rel_error" to self
-
-    Parameters
-    ----------
-    sign: {'-', '+', '0'}
-        Optional. Default None and get from metatdata or calculated by self. 
-        Mode in which mass spectrum was gotten. 
-        '-' for negative mode
-        '+' for positive mode
-        '0' for neutral
-    
-    Return
-    ------
-    Spectrum
-    """
-
-    if "calc_mass" not in self:
-        self = calc_mass(self)
-
-    if "charge" not in self.columns:
-        self["charge"] = 1
-
-    if sign is None:
-        if 'sign' in self.attrs:
-            sign = self.attrs['sign']
-        else:
-            sign = _calc_sign(self)
-
-    if sign == '-':
-        self["abs_error"] = ((self["mass"] + (- 0.00054858 + 1.007825)) * self["charge"]) - self["calc_mass"] #-electron + proton
-    elif sign == '+':
-        self["abs_error"] = ((self["mass"] + 0.00054858) * self["charge"]) - self["calc_mass"]#+electron
-    elif sign == '0':
-        self["abs_error"] = (self["mass"] * self["charge"]) - self["calc_mass"]
-    else:
-        raise ValueError('Sended sign or sign in attrs is not correct. May be "+","-","0"')
-    
-    self["rel_error"] = self["abs_error"] / self["mass"] * 1e6
-    
-    return self
-
-@_copy
-def brutto(self) -> pd.DataFrame:
-    """
-    Calculate string with brutto from assign table
-
-    Add column "britto" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-
-    elems = find_elements(self)
-    out = []
-    for i, row in self.iterrows():
-        s = ''
-        for el in elems:
-            if len(el.split('_')) == 2:
-                ele = f'({el})'
-            else:
-                ele = el
-            if row[el] == 1:
-                s = s + f'{ele}'
-            elif row[el] > 0:
-                s = s + f'{ele}{int(row[el])}'
-        out.append(s)
-    
-    self['brutto'] = out
-
-    return self
-
-@_copy
-def cram(self) -> pd.DataFrame:
-    """
-    Mark rows that fit CRAM conditions
-    (carboxylic-rich alicyclic molecules)
-
-    Add column "CRAM" to self
-
-    Return
-    ------
-    Spectrum
-
-    References
-    ----------
-    Hertkorn, N. et al. Characterization of a major 
-    refractory component of marine dissolved organic matter.
-    Geochimica et. Cosmochimica Acta 70, 2990-3010 (2006)
-    """
-
-    if "DBE" not in self:
-        self = dbe(self)        
-
-    def check(row):
-        if row['DBE']/row['C'] < 0.3 or row['DBE']/row['C'] > 0.68:
-            return False
-        if row['DBE']/row['H'] < 0.2 or row['DBE']/row['H'] > 0.95:
-            return False
-        if row['O'] == 0:
-            return False
-        elif row['DBE']/row['O'] < 0.77 or row['DBE']/row['O'] > 1.75:
-            return False
-        return True
-
-    table = merge_isotopes(self.copy(deep=True))
-    self['CRAM'] = table.apply(check, axis=1)
-
-    return self
-
-@_copy
-def ai(self) -> pd.DataFrame:
-    """
-    Calculate AI (aromaticity index)
-
-    Add column "AI" to self
-
-    Return
-    ------
-    Spectrum
-
-    References
-    ----------
-    Koch, Boris P., and T. Dittmar. "From mass to structure: An aromaticity 
-    index for high resolution mass data of natural organic matter." 
-    Rapid communications in mass spectrometry 20.5 (2006): 926-932.
-    """
-
-    if "DBE_AI" not in self:
-        self = dbe_ai(self)
-
-    if "CAI" not in self:
-        self = cai(self)
-
-    self["AI"] = self["DBE_AI"] / self["CAI"]
-
-    clear  = self["AI"].values[np.isfinite(self["AI"].values.astype('float'))].astype('float')
-    self['AI'] = self['AI'].replace(-np.inf, np.min(clear))
-    self['AI'] = self['AI'].replace(np.inf, np.max(clear))
-    self['AI'] = self['AI'].replace(np.nan, np.mean(clear))
-
-    return self
-
-@_copy
-def cai(self) -> pd.DataFrame:
-    """
-    Calculate CAI (C - O - N - S - P)
-
-    Add column "CAI" to self
-
-    Return
-    ------
-    Spectrum
-    """
-    
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-
-    table = merge_isotopes(self)
-
-    for element in "CONSP":
-        if element not in table:
-            table[element] = 0
-
-    self['CAI'] = table["C"] - table["O"] - table["N"] - table["S"] - table["P"]
-
-    return self
-
-@_copy
-def dbe_ai(self) -> pd.DataFrame:
-    """
-    Calculate DBE_AI (1 + C - O - S - 0.5 * (H + N + P))
-
-    Add column "DBE_AI" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-
-    table = merge_isotopes(self)
-
-    for element in "CHONPS":
-        if element not in table:
-            table[element] = 0
-
-    self['DBE_AI'] = 1.0 + table["C"] - table["O"] - table["S"] - 0.5 * (table["H"] + table['N'] + table["P"])
-
-    return self
-
-@_copy
-def dbe(self) -> pd.DataFrame:
-    """
-    Calculate DBE (1 + C - 0.5 * (H + N))
-
-    Add column "DBE" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-
-    table = merge_isotopes(self)
-
-    for element in "CHON":
-        if element not in table:
-            table[element] = 0
-
-    self['DBE'] = 1.0 + table["C"] - 0.5 * (table["H"] - table['N'])
-
-    return self
-
-@_copy
-def dbe_o(self) -> pd.DataFrame:
-    """
-    Calculate DBE - O
-
-    Add column "DBE-O" to self
-
-    Return
-    ------
-    Spectrum 
-    """
-
-    if "DBE" not in self:
-        self = dbe(self)
-
-    table = merge_isotopes(self)
-    self['DBE-O'] = table['DBE'] - table['O']
-
-    return self
-
-@_copy
-def dbe_oc(self) -> pd.DataFrame:
-    """
-    Calculate (DBE - O) / C
-
-    Add column "DBE-OC" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "DBE" not in self:
-        self = dbe(self)
-
-    table = merge_isotopes(self)
-    self['DBE-OC'] = (table['DBE'] - table['O'])/table['C']
-
-    return self
-
-@_copy
-def hc_oc(self) -> pd.DataFrame:
-    """
-    Calculate H/C and O/C
-
-    Add columns "H/C" and "O/C" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-
-    table = merge_isotopes(self)
-    self['H/C'] = table['H']/table['C']
-    self['O/C'] = table['O']/table['C']
-
-    return self
-
-@_copy
-def kendrick(self) -> pd.DataFrame:
-    """
-    Calculate Kendrick mass and Kendrick mass defect
-
-    Add columns "Ke" and 'KMD" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if 'calc_mass' not in self:
-        self = calc_mass(self)
-
-    self['Ke'] = self['calc_mass'] * 14/14.01565
-    self['KMD'] = np.floor(self['calc_mass'].values.astype('float')) - np.array(self['Ke'].values)
-    self.loc[self['KMD']<=0, 'KMD'] = self.loc[self['KMD']<=0, 'KMD'] + 1
-
-    return self
-
-@_copy
-def nosc(self) -> pd.DataFrame:
-    """
-    Calculate Normal oxidation state of carbon (NOSC)
-
-    Add column "NOSC" to self
-
-    Notes
-    -----
-    >0 - oxidate state.
-    <0 - reduce state.
-    0 - neutral state
-
-    References
-    ----------
-    Boye, Kristin, et al. "Thermodynamically 
-    controlled preservation of organic carbon 
-    in floodplains."
-    Nature Geoscience 10.6 (2017): 415-419.
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-
-    table = merge_isotopes(self)
-
-    for element in "CHONS":
-        if element not in table:
-            table[element] = 0
-
-    self['NOSC'] = 4.0 - (table["C"] * 4 + table["H"] - table['O'] * 2 - table['N'] * 3 - table['S'] * 2)/table['C']
-
-    return self
-
-@_copy
-def mol_class(self, how: Optional[str] = None) -> pd.DataFrame:
-    """
-    Assign molecular class for formulas
-
-    Add column "class" to self
-
-    Parameters
-    ----------
-    how: {'kellerman', 'perminova', 'laszakovits'}
-        How devide to calsses. Optional. Default 'laszakovits'
-
-    Return
-    ------
-    Spectrum
-
-    References
-    ----------
-    Laszakovits, J. R., & MacKay, A. A. Journal of the American Society for Mass Spectrometry, 2021, 33(1), 198-202.
-    A. M. Kellerman, T. Dittmar, D. N. Kothawala, L. J. Tranvik. Nat. Commun. 2014, 5, 3804
-    Perminova I. V. Pure and Applied Chemistry. 2019. Vol. 91, № 5. P. 851-864
-    """
-
-    if 'AI' not in self:
-        self = ai(self)
-    if 'H/C' not in self or 'O/C' not in self:
-        self = hc_oc(self)
-
-    table = merge_isotopes(self)
-
-    for element in "CHON":
-        if element not in table:
-            table[element] = 0
-
-    def get_zone_kell(row):
-
-        if row['H/C'] >= 1.5:
-            if row['O/C'] < 0.3 and row['N'] == 0:
-                return 'lipids'
-            elif row['N'] >= 1:
-                return 'N-satureted'
-            else:
-                return 'aliphatics'
-        elif row['H/C'] < 1.5 and row['AI'] < 0.5:
-            if row['O/C'] <= 0.5:
-                return 'unsat_lowOC'
-            else:
-                return 'unsat_highOC'
-        elif row['AI'] > 0.5 and row['AI'] <= 0.67:
-            if row['O/C'] <= 0.5:
-                return 'aromatic_lowOC'
-            else:
-                return 'aromatic_highOC'
-        elif row['AI'] > 0.67:
-            if row['O/C'] <= 0.5:
-                return 'condensed_lowOC'
-            else:
-                return 'condensed_highOC'
-        else:
-            return 'undefinded'
-    
-    def get_zone_perm(row):
-
-        if row['O/C'] < 0.5:
-            if row['H/C'] < 1:
-                return 'condensed_tanins'
-            elif row['H/C'] < 1.4:
-                return 'phenylisopropanoids'
-            elif row['H/C'] < 1.8:
-                return 'terpenoids'
-            elif row['H/C'] <= 2.2:
-                if row['O/C'] < 0.25:
-                    return 'lipids'
-                else:
-                    return 'proteins'
-            else:
-                return 'undefinded'
-        elif row['O/C'] <= 1:
-            if row['H/C'] < 1.4:
-                return 'hydrolyzable_tanins'
-            elif row['H/C'] <= 2.2:
-                return 'carbohydrates'
-            else:
-                return 'undefinded'
-        else:
-            return 'undefinded'
-
-    def get_zone_lasz(row):
-        if row['H/C'] >= 0.86 and row['H/C'] <=1.34 and row['O/C'] >= 0.21 and row['O/C'] <=0.44:
-            return 'lignin'
-        elif row['H/C'] >= 0.7 and row['H/C'] <=1.01 and row['O/C'] >= 0.16 and row['O/C'] <=0.84:
-            return 'tannin'
-        elif row['H/C'] >= 1.33 and row['H/C'] <=1.84 and row['O/C'] >= 0.17 and row['O/C'] <=0.48:
-            return 'peptide'
-        elif row['H/C'] >= 1.34 and row['H/C'] <=2.18 and row['O/C'] >= 0.01 and row['O/C'] <=0.35:
-            return 'lipid'
-        elif row['H/C'] >= 1.53 and row['H/C'] <=2.2 and row['O/C'] >= 0.56 and row['O/C'] <=1.23:
-            return 'carbohydrate'
-        elif row['H/C'] >= 1.62 and row['H/C'] <=2.35 and row['O/C'] >= 0.56 and row['O/C'] <=0.95:
-            return 'aminosugar'
-        else:
-            return 'undefinded'
-    
-    if how == 'perminova':
-        self['class'] = table.apply(get_zone_perm, axis=1)
-    elif how == 'kellerman':
-        self['class'] = table.apply(get_zone_kell, axis=1)
-    else:
-        self['class'] = table.apply(get_zone_lasz, axis=1)
-
-    return self
-
-@_copy
-def get_mol_class(self, how_average: str = "weight", how: Optional[str] = None) -> pd.DataFrame:
-    """
-    get molercular class density
-
-    Parameters
-    ----------
-    how_average: {'weight', 'count'}
-        how average density. Default "weight" - weight by intensity.
-        Also can be "count".
-    how: {'kellerman', 'perminova', 'laszakovits'}
-        How devide to calsses. Optional. Default 'laszakovits'
-
-    Return
-    ------
-    pandas Dataframe
-    
-    References
-    ----------
-    Laszakovits, J. R., & MacKay, A. A. Journal of the American Society for Mass Spectrometry, 2021, 33(1), 198-202.
-    A. M. Kellerman, T. Dittmar, D. N. Kothawala, L. J. Tranvik. Nat. Commun. 5, 3804 (2014)
-    Perminova I. V. Pure and Applied Chemistry. 2019. Vol. 91, № 5. P. 851-864
-    """
-
-    self = mol_class(drop_unassigned(self),how=how)
-    count_density = len(self)
-    sum_density = self["intensity"].sum()
-
-    out = []
-
-    if how == 'perminova':
-        zones = ['condensed_tanins',
-                'hydrolyzable_tanins',
-                'phenylisopropanoids',
-                'terpenoids',
-                'lipids',
-                'proteins',
-                'carbohydrates',
-                'undefinded']
-    elif how == 'kellerman':
-        zones = ['unsat_lowOC',
-                'unsat_highOC',
-                'condensed_lowOC',
-                'condensed_highOC',
-                'aromatic_lowOC',
-                'aromatic_highOC',
-                'aliphatics',            
-                'lipids',
-                'N-satureted',
-                'undefinded']
-    else:
-        zones = ['aminosugar',
-                'carbohydrate',
-                'lignin',
-                'lipid',
-                'peptide',
-                'tannin',
-                'undefinded']
-
-
-    for zone in zones:
-
-        if how_average == "count":
-            out.append([zone, len(self.loc[self['class'] == zone])/count_density])
-
-        elif how_average == "weight":
-            out.append([zone, self.loc[self['class'] == zone, 'intensity'].sum()/sum_density])
-
-        else:
-            raise ValueError(f"how_average should be count or intensity not {how_average}")
-    
-    return pd.DataFrame(data=out, columns=['class', 'density'])
-
-@_copy
-def get_dbe_vs_o(self, 
-                    olim: Optional[Tuple[int, int]] = None, 
-                    draw: bool = True, 
-                    ax: Union[Axes, None] = None, 
-                    **kwargs) -> Tuple[float, float]:
-    """
-    Calculate DBE vs nO by linear fit
-    
-    Parameters
-    ----------
-    olim: tuple of two int
-        limit for nO. Deafult None
-    draw: bool
-        draw scatter DBE vs nO and how it is fitted
-    ax: matplotlib axes
-        ax fo outer plot. Default None
-    **kwargs: dict
-        dict for additional condition to scatter matplotlib
-
-    Return
-    ------
-    (float, float)
-        a and b in fit DBE = a * nO + b
-
-    References
-    ----------
-    Bae, E., Yeo, I. J., Jeong, B., Shin, Y., Shin, K. H., & Kim, S. (2011). 
-    Study of double bond equivalents and the numbers of carbon and oxygen 
-    atom distribution of dissolved organic matter with negative-mode FT-ICR MS.
-    Analytical chemistry, 83(11), 4193-4199.
-    """
-
-    if 'DBE' not in self:
-        self = dbe(self)
-    
-    self = drop_unassigned(self)
-    if olim is None:
-        no = list(range(int(self['O'].min())+5, int(self['O'].max())-5))
-    else:
-        no = list(range(olim[0],olim[1]))
-    
-    dbe_o = []
-    
-    for i in no:
-        dbes = self.loc[self['O'] == i, 'DBE']
-        intens = self.loc[self['O'] == i, 'intensity']
-        dbe_o.append((dbes*intens).sum()/intens.sum())
-
-    def linear(x, a, b):
-        return a*x + b
-
-    x = np.array(no)
-    y = np.array(dbe_o)
-
-    popt, pcov = curve_fit(linear, x, y)
-    residuals = y- linear(x, *popt)
-    ss_res = np.sum(residuals**2)
-    ss_tot = np.sum((y-np.mean(y))**2)
-    r_squared = 1 - (ss_res / ss_tot)
-    
-    if draw:
-        if ax is None:
-            fig,ax = plt.subplots(figsize=(3,3), dpi=100)
-        
-        ax.scatter(x, y, **kwargs)
-        ax.plot(x, linear(x, *popt), label=f'y={round(popt[0],2)}x + {round(popt[1],1)} R2={round(r_squared, 4)}', **kwargs)
-        ax.set_xlim(4)
-        ax.set_ylim(5)
-        ax.set_xlabel('number of oxygen')
-        ax.set_ylabel('DBE average')
-        ax.legend()
-
-    return popt[0], popt[1]
-
-@_copy
-def get_squares_vk(self,
-                    how_average: str = 'weight',
-                    ax: Union[Axes, None] = None, 
-                    draw: bool = False) -> pd.DataFrame:
-    """
-    Calculate density in Van Krevelen diagram divided into 20 squares
-
-    Squares index in Van-Krevelen diagram if H/C is rows, O/C is columns:
-    [[5, 10, 15, 20],
-        [4, 9, 14, 19],
-        [3, 8, 13, 18],
-        [2, 7, 12, 17],
-        [1, 6, 11, 16]]
-
-    H/C divided by [0-0.6, 0.6-1, 1-1.4, 1.4-1.8, 1.8-2.2]
-    O/C divided by [0-0.25, 0.25-0.5, 0.5-0.75, 0.75-1.0]
-
-    Parameters
-    ----------
-    how_average: {'weight', 'count'}
-        How calculate average. My be "count" or "weight" (default)
-    ax: matplotlib ax
-        Optional. external ax
-    draw: bool
-        Optional. Default False. Plot heatmap
-
-    Return
-    ------
-    Pandas Dataframe
-
-    References
-    ----------
-    Perminova I. V. From green chemistry and nature-like technologies towards 
-    ecoadaptive chemistry and technology // Pure and Applied Chemistry. 
-    2019. Vol. 91, № 5. P. 851-864.
-    """
-
-    if 'H/C' not in self or 'O/C' not in self:
-        self = drop_unassigned(hc_oc(self))
-
-    d_table = []
-    sq = []
-
-    for y in [ (1.8, 2.2), (1.4, 1.8), (1, 1.4), (0.6, 1), (0, 0.6)]:
-        hc = []
-        for x in  [(0, 0.25), (0.25, 0.5), (0.5, 0.75), (0.75, 1)]:
-            temp = self.copy(deep=True)
-            temp = temp.loc[(temp['O/C'] >= x[0]) & (temp['O/C'] < x[1]) & (temp['H/C'] >= y[0]) & (temp['H/C'] < y[1])]
-
-            if how_average == 'count':
-                res = len(temp)/len(self)
-                hc.append(res)
-                sq.append(res)
-            elif how_average == 'weight':
-                res = temp['intensity'].sum()/self['intensity'].sum()
-                hc.append(res)
-                sq.append(res)
-        d_table.append(hc)
-
-    out = pd.DataFrame(data = d_table, columns=['0-0.25', '0,25-0.5','0.5-0.75','0.75-1'], index=['1.8-2.2', '1.4-1.8', '1-1.4', '0.6-1', '0-0.6'])
-
-    if draw:
-        if ax is None:
-            fig, ax = plt.subplots(figsize=(4, 4), dpi=75)
-        sns.heatmap(out.round(4),cmap='coolwarm',annot=True, linewidths=.5, ax=ax)
-        bottom, top = ax.get_ylim()
-        plt.yticks(rotation=0)
-        plt.xticks(rotation=90) 
-        ax.set_ylim(bottom + 0.5, top - 0.5)
-
-        ax.set_xlabel('O/C')
-        ax.set_ylabel('H/C')
-
-    # just for proper naming of squars. bad solution
-    square = pd.DataFrame()
-    square['value'] = sq
-    square['square'] = [5,10,15,20,   4,9,14,19,   3,8,13,18,    2,7,12,17,   1,6,11,16]
-    
-    return square.sort_values(by='square').reset_index(drop=True)
-
-@_copy
-def get_mol_metrics(self, 
-                    metrics: set[str], 
-                    func: Optional[str] = None) -> pd.DataFrame:
-    """
-    Get average metrics
-
-    Parameters
-    ----------
-    metrics: Sequence[str]
-        Optional. Default None. Chose metrics fot watch.
-    func: {'weight', 'mean', 'median', 'max', 'min', 'std'}
-        How calculate average. My be "weight" (default - weight average on intensity),
-        "mean", "median", "max", "min", "std" (standard deviation)
-
-    Return
-    ------
-    pandas DataFrame
-    """
-
-    #self = self.calc_all_metrics().drop_unassigned().normalize()
-    self = normalize(
-        drop_unassigned(
-            calc_all_metrics(self)
-            )
-            )
-
-    if metrics is None:
-        metrics = set(self.columns) - set(['intensity', 'calc_mass', 'rel_error','abs_error',
-                                                'assign', 'charge', 'class', 'brutto', 'Ke', 'KMD'])
-
-    res = []
-    sorted_metrics = np.sort(np.array(list(metrics)))
-
-    if func is None:
-        func = 'weight'
-
-    func_dict = {'mean': lambda col : np.average(self[col]),
-                'weight': lambda col : np.average(self[col], weights=self['intensity']),
-                'median': lambda col : np.median(self[col]),
-                'max': lambda col : np.max(self[col]),
-                'min': lambda col : np.min(self[col]),
-                'std': lambda col : np.std(self[col])}
-    if func not in func_dict:
-        raise ValueError(f'not correct value - {func}')
-    else:
-        f = func_dict[func]
-
-    for col in sorted_metrics:
-        try:
-            res.append([col, f(col)])
-        except:
-            res.append([col, np.nan])
-
-    return pd.DataFrame(data=res, columns=['metric', 'value'])
-
-@_copy
-def calc_all_metrics(self) -> pd.DataFrame:
-    """
-    Calculated all available metrics
-
-    Return
-    ------
-    Spectrum
-    """
-
-    self = calc_mass(self)
-    self = calc_error(self)
-    self = dbe(self)
-    self = dbe_o(self)
-    self = ai(self)
-    self = dbe_oc(self)
-    self = dbe_ai(self)
-    self = mol_class(self)
-    self = hc_oc(self)
-    self = cai(self)
-    self = cram(self)
-    self = nosc(self)
-    self = brutto(self)
-    self = kendrick(self)
 
     return self
 
@@ -1428,33 +597,6 @@ def _merge_isotopes(gdf: pd.DataFrame) -> pd.DataFrame:
 
     return gdf
 
-def get_elements_masses(elems: Sequence[str]) -> np.ndarray :
-    """
-    Get elements masses from list
-
-    Parameters
-    ----------
-    elems: Sequence[str]
-        List of elements. Example: ['C', 'H', 'N', 'C_13', 'O']
-
-    Return
-    ------
-    numpy array
-    """
-    
-    elements = elements_table()    
-    elems_masses = []
-
-    for el in elems:
-        if '_' not in el:
-            temp = elements.loc[elements['element']==el].sort_values(by='abundance',ascending=False).reset_index(drop=True)
-            elems_masses.append(temp.loc[0,'mass'])
-        else:
-            temp = elements.loc[elements['element_isotop']==el].reset_index(drop=True)
-            elems_masses.append(temp.loc[0,'mass'])
-
-    return np.array(elems_masses)
-
 def gen_from_brutto(table: pd.DataFrame) -> pd.DataFrame:
     """
     Generate mass from brutto table
@@ -1469,7 +611,7 @@ def gen_from_brutto(table: pd.DataFrame) -> pd.DataFrame:
     pandas DataFrame
         Dataframe with elements and masses
     """
-    masses = get_elements_masses(table.columns.to_list())
+    masses = md.get_elements_masses(table.columns.to_list())
 
     table["calc_mass"] = table.multiply(masses).sum(axis=1)
     table["calc_mass"] = np.round(table["calc_mass"], 6)
@@ -1901,7 +1043,6 @@ def recallibrate_optimize(spec: pd.DataFrame,
     spec.attrs['recallibrate'] = how
     return spec
 
-
 @staticmethod
 def md_error_map(
     spec: pd.DataFrame, 
@@ -2088,7 +1229,7 @@ def assign_error(
 
     spectr = copy.deepcopy(spec)
     spectr = assign(spectr,rel_error=ppm, brutto_dict=brutto_dict, sign=mode)
-    spectr = calc_error(calc_mass(spectr))
+    spectr = md.calc_error(md.calc_mass(spectr))
 
     error_table = spectr
     error_table = error_table.loc[:,['mass','rel_error']]
@@ -2310,7 +1451,7 @@ def assign_by_tmds(
     if tmds_spec is None:
         tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
         tmds_spec = assign_tmds(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
-        tmds_spec = calc_mass(tmds_spec)
+        tmds_spec = md.calc_mass(tmds_spec)
 
     #prepare tmds table
     tmds = tmds_spec.sort_values(by='intensity', ascending=False).reset_index(drop=True)
@@ -2359,7 +1500,7 @@ def assign_by_tmds(
 
     assign_true = pd.concat([assign_true, assign_false], ignore_index=True).sort_values(by='mass').reset_index(drop=True)
     
-    out = calc_mass(assign_true)
+    out = md.calc_mass(assign_true)
 
     out=out[out['calc_mass'].isnull() | ~out[out['calc_mass'].notnull()].duplicated(subset='calc_mass',keep='first')] 
     spec = out.sort_values(by='mass').reset_index(drop=True)
@@ -2426,7 +1567,7 @@ def assign_by_tmds_optimize(
     if tmds_spec is None:
         tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
         tmds_spec = assign_tmds(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
-        tmds_spec = calc_mass(tmds_spec)
+        tmds_spec = md.calc_mass(tmds_spec)
 
     #prepare tmds table
     tmds = tmds_spec.sort_values(by='intensity', ascending=False).reset_index(drop=True)
@@ -2474,7 +1615,7 @@ def assign_by_tmds_optimize(
         if hit_mask.any():
             assigned_mask |= hit_mask
             # Векторное сложение составов: состав найденного + состав разности
-            tmds_comp = row_tmds[elem_list].values.astype(float)
+            tmds_comp = row_tmds[elem_list].to_numpy()
             false_elements[hit_mask] = true_elements[closer_idx[hit_mask]] + tmds_comp
 
     # Обновляем DataFrame один раз в конце
@@ -2483,14 +1624,13 @@ def assign_by_tmds_optimize(
 
     assign_true = pd.concat([assign_true, assign_false], ignore_index=True).sort_values(by='mass').reset_index(drop=True)
     
-    out = calc_mass(assign_true)
+    out = md.calc_mass(assign_true)
 
     out=out[out['calc_mass'].isnull() | ~out[out['calc_mass'].notnull()].duplicated(subset='calc_mass',keep='first')] 
     spec = out.sort_values(by='mass').reset_index(drop=True)
 
     
     return spec
-
 
 def calc(
     self: pd.DataFrame,
@@ -2588,7 +1728,7 @@ def calc_by_brutto(self) -> "pd.DataFrame":
     pd.DataFrame
     """
     name = self.attrs['name']
-    mass = calc_error(
+    mass = md.calc_error(
         drop_unassigned(self)
     )['calc_mass'].values
 
@@ -3043,7 +2183,6 @@ def assign_optimized(data: pd.DataFrame,
         out = pd.concat([data[['mass', 'intensity']], res_df], axis=1)
         out.attrs['name'] = name
         return out
-
 
 if __name__ == '__main__':
     pass
