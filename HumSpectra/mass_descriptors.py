@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Sequence, Union, Optional, Mapping, Tuple, Any, List
+from typing import Callable, Dict, Sequence, Union, Optional, Mapping, Tuple, Any, List, Set
 from functools import wraps, lru_cache
 import copy
 import matplotlib.pyplot as plt
@@ -973,7 +973,7 @@ def extract_square_intensities(
 
 @_copy
 def get_mol_metrics(self, 
-                    metrics: set[str], 
+                    metrics: Set[str], 
                     func: Optional[str] = None) -> pd.DataFrame:
     """
     Get average metrics
@@ -1026,6 +1026,59 @@ def get_mol_metrics(self,
             res.append([col, np.nan])
 
     return pd.DataFrame(data=res, columns=['metric', 'value'])
+
+def calculate_metrics_for_spectra_list(
+    spectra_list: List[pd.DataFrame],
+    metrics: Optional[Set[str]],
+    func: Optional[str] = 'weight'
+) -> pd.DataFrame:
+    """
+    Рассчитывает молекулярные метрики для списка спектров FT-ICR MS.
+    
+    Параметры:
+    ----------
+    spectra_list : List[pd.DataFrame]
+        Также должен содержать атрибут df.attrs['name'] с именем образца.
+    metrics : Optional[Set[str]], default None
+        Набор метрик для расчета. Если None - используются все доступные метрики
+        (исключая служебные колонки).
+    func : Optional[str], default 'weight'
+        Способ агрегации: 'weight' (средневзвешенное по интенсивности), 'mean', 
+        'median', 'max', 'min', 'std'.
+    
+    Возвращает:
+    -----------
+    pd.DataFrame
+        DataFrame с колонками: ['sample_name'] + [метрики]
+        Каждая строка соответствует одному образцу.
+    """
+    
+    results = []
+    
+    for i, spectrum_df in enumerate(spectra_list):
+        sample_name = spectrum_df.attrs.get('name', f'sample_{i}')
+        
+        try:
+
+            metrics_df = get_mol_metrics(spectrum_df, metrics=metrics, func=func) # type: ignore
+            sample_metrics = dict(zip(metrics_df['metric'], metrics_df['value']))
+
+                
+        except Exception as e:
+            raise ValueError(f"Ошибка при обработке образца '{sample_name}': {e}")
+        
+        # Добавляем имя образца
+        sample_metrics['sample_name'] = sample_name
+        results.append(sample_metrics)
+    
+    # Создаем итоговый DataFrame
+    result_df = pd.DataFrame(results)
+    
+    # Переставляем колонку 'sample_name' на первую позицию
+    cols = ['sample_name'] + [col for col in result_df.columns if col != 'sample_name']
+    result_df = result_df[cols]
+    
+    return result_df
 
 @_copy
 def calc_mass(self,debug=False) -> pd.DataFrame:
