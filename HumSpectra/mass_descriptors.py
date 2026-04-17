@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 from scipy.optimize import curve_fit
 from matplotlib.axes import Axes
+import warnings
 
 import HumSpectra.mass_spectra as ms
 import HumSpectra.utilits as ut
@@ -1295,3 +1296,161 @@ def average_formulas_per_mass_interval(
         print(f"\nГотово! Средние значения вычислены для {len(avg_df)} образцов.")
 
     return avg_df
+
+def calculate_spectrum_entropy(
+    spectrum_df: pd.DataFrame,
+    intensity_col: str = 'intensity',
+    mass_col: str = 'calc_mass',
+    normalize: bool = True,
+    base: float = 2.0
+) -> float:
+    """
+    Расчет информационной энтропии Шеннона для одного масс-спектра FT-ICR MS.
+    
+    Параметры
+    ----------
+    spectrum_df : pd.DataFrame
+        DataFrame с данными спектра. Должен содержать колонки интенсивности и массы.
+        Может иметь атрибуты df.attrs['name'] и df.attrs['class'].
+    intensity_col : str, default='intensity'
+        Название колонки с интенсивностями пиков.
+    mass_col : str, default='calc_mass'
+        Название колонки с массами (используется для фильтрации изотопов).
+    remove_isotopes : bool, default=True
+        Удалять ли изотопные пики (на основе массового дельта).
+        Если True, оставляет только пики с массой, соответствующей наиболее распространенному изотопу.
+    normalize : bool, default=True
+        Нормировать ли интенсивности на сумму перед расчетом вероятностей.
+    base : float, default=2.0
+        Основание логарифма (2 - биты, e - наты, 10 - диты).
+    
+    Возвращает
+    ----------
+    float
+        Значение энтропии в выбранных единицах.
+    """
+    
+    # Проверка входных данных
+    if spectrum_df.empty:
+        warnings.warn("DataFrame пуст. Возвращаю 0.0")
+        return 0.0
+    
+    if intensity_col not in spectrum_df.columns:
+        raise ValueError(f"Колонка '{intensity_col}' не найдена в DataFrame")
+    
+    # Копируем данные, чтобы не изменять оригинал
+    df = spectrum_df.copy()
+    
+    # Получение интенсивностей
+    intensities = df[intensity_col].to_numpy()
+    
+    # Убираем нулевые и отрицательные интенсивности
+    intensities = intensities[intensities > 0]
+    
+    if len(intensities) == 0:
+        warnings.warn("Нет положительных интенсивностей. Возвращаю 0.0")
+        return 0.0
+    
+    # Нормировка на сумму
+    if normalize:
+        probabilities = intensities / intensities.sum()
+    else:
+        # Если не нормируем, предполагаем, что уже вероятности
+        probabilities = intensities
+        # Проверяем, что сумма близка к 1
+        if not np.isclose(probabilities.sum(), 1.0, atol=1e-6):
+            warnings.warn("Сумма вероятностей не равна 1. Принудительная нормировка")
+            probabilities = probabilities / probabilities.sum()
+    
+    # Расчет энтропии: H = -sum(p * log(p))
+    # Избегаем log(0)
+    probabilities = probabilities[probabilities > 0]
+    entropy = -np.sum(probabilities * np.log(probabilities) / np.log(base))
+    
+    return entropy
+
+def calculate_entropy_for_spectra(
+    spectra_list: List[pd.DataFrame],
+    intensity_col: str = 'intensity',
+    mass_col: str = 'calc_mass',
+    normalize: bool = True,
+    base: float = 2.0,
+    name_attr: str = 'name',
+    class_attr: str = 'class'
+) -> pd.DataFrame:
+    """
+    Расчет энтропии для списка масс-спектров с возвратом DataFrame.
+    
+    Параметры
+    ----------
+    spectra_list : List[pd.DataFrame]
+        Список DataFrame'ов со спектрами. Каждый должен иметь атрибуты
+        df.attrs['name'] и df.attrs['class'] (если не указаны другие имена атрибутов).
+    intensity_col : str, default='intensity'
+        Название колонки с интенсивностями.
+    mass_col : str, default='calc_mass'
+        Название колонки с массами.
+    remove_isotopes : bool, default=True
+        Удалять ли изотопные пики.
+    normalize : bool, default=True
+        Нормировать ли интенсивности.
+    base : float, default=2.0
+        Основание логарифма.
+    name_attr : str, default='name'
+        Имя атрибута в df.attrs для названия спектра.
+    class_attr : str, default='class'
+        Имя атрибута в df.attrs для класса образца.
+    
+    Возвращает
+    ----------
+    pd.DataFrame
+        DataFrame с колонками: ['name', 'class', 'entropy', 'n_peaks', 'max_intensity']
+        Каждая строка соответствует одному спектру.
+    """
+    
+    results = []
+    
+    for i, spectrum in enumerate(spectra_list):
+        try:
+            # Получение метаданных из атрибутов
+            name = spectrum.attrs.get(name_attr, f"spectrum_{i}")
+            class_label = spectrum.attrs.get(class_attr, "unknown")
+            
+            # Расчет энтропии
+            entropy = calculate_spectrum_entropy(
+                spectrum_df=spectrum,
+                intensity_col=intensity_col,
+                mass_col=mass_col,
+                normalize=normalize,
+                base=base
+            )
+            
+            # Дополнительные метрики
+            intensities = spectrum[intensity_col]
+            n_peaks = len(intensities[intensities > 0])
+            max_intensity = intensities.max()
+            
+            results.append({
+                'name': name,
+                'class': class_label,
+                'entropy': entropy,
+                'n_peaks': n_peaks,
+                'max_intensity': max_intensity,
+                'evenness': entropy / np.log2(n_peaks) if n_peaks > 1 else 0  # Выравненность Пилу
+            })
+            
+        except Exception as e:
+            warnings.warn(f"Ошибка при обработке спектра {i}: {e}")
+            results.append({
+                'name': spectrum.attrs.get(name_attr, f"spectrum_{i}"),
+                'class': spectrum.attrs.get(class_attr, "unknown"),
+                'entropy': np.nan,
+                'n_peaks': 0,
+                'max_intensity': 0,
+                'evenness': np.nan
+            })
+    
+    # Создание итогового DataFrame
+    result_df = pd.DataFrame(results)
+    
+    return result_df
