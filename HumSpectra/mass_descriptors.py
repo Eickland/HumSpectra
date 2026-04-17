@@ -8,6 +8,7 @@ import seaborn as sns
 from scipy.optimize import curve_fit
 from matplotlib.axes import Axes
 import warnings
+import os
 
 import HumSpectra.mass_spectra as ms
 import HumSpectra.utilits as ut
@@ -1243,7 +1244,7 @@ def average_formulas_per_mass_interval(
     spectra_list : List[pd.DataFrame]
         Список DataFrame, каждый из которых соответствует одному образцу.
         Должен содержать колонку 'calc_mass' и атрибут attrs['name'] с именем образца.
-    mass_range : Tuple[float, float], default (300.0, 450.0)
+    mass_range : Tuple[float, float], default (225.0, 700.0)
         Начало и конец диапазона масс (конец не включается в последний интервал).
     verbose : bool, default True
         Выводить ли сообщения о ходе выполнения.
@@ -1296,6 +1297,140 @@ def average_formulas_per_mass_interval(
         print(f"\nГотово! Средние значения вычислены для {len(avg_df)} образцов.")
 
     return avg_df
+
+def analyze_mass_intervals(
+    spectra_list: List[pd.DataFrame],
+    mass_range: Tuple[float, float] = (225.0, 700.0),
+    top_n_intervals: Optional[int] = None,
+    save_to_folder: Optional[str] = None,
+    verbose: bool = True
+) -> Tuple[pd.DataFrame, List[pd.DataFrame]]:
+    """
+    Подсчитывает количество формул в интервалах масс шириной 1 Да для каждого образца.
+    Возвращает сводную таблицу, где каждый столбец соответствует конкретному диапазону масс.
+    
+    Параметры:
+    ----------
+    spectra_list : List[pd.DataFrame]
+        Список DataFrame, каждый из которых соответствует одному образцу.
+        Должен содержать колонку 'calc_mass' и атрибуты attrs['name'] и attrs['class'].
+    mass_range : Tuple[float, float], default (225.0, 700.0)
+        Начало и конец диапазона масс (конец не включается в последний интервал).
+    top_n_intervals : Optional[int], default None
+        Количество лучших диапазонов для отображения в сводной таблице.
+        Если None - отображаются все диапазоны.
+        Если указано число - отображаются только top N диапазонов с максимальным количеством формул.
+    save_to_folder : str, optional
+        Если указана папка, сохраняет CSV-файлы с распределением для каждого образца.
+    verbose : bool, default True
+        Выводить ли сообщения о ходе выполнения.
+    
+    Возвращает:
+    -----------
+    summary_df : pd.DataFrame
+        DataFrame с индексами = имена образцов и колонками:
+        - 'class' (если есть в attrs)
+        - Для каждого массового диапазона (например '300-301') - количество формул
+        - Если top_n_intervals указан, добавляются колонки 'best_interval_1', 'count_1' и т.д.
+    formula_list : List[pd.DataFrame]
+        Список DataFrame с детальным распределением для каждого образца.
+    """
+    
+    if not spectra_list:
+        return pd.DataFrame(), []
+
+    # Подготовка папки для сохранения
+    if save_to_folder is not None:
+        os.makedirs(save_to_folder, exist_ok=True)
+
+    # Границы бинов: целые числа от start до end+1, чтобы интервалы были [i, i+1)
+    start_mass = int(np.floor(mass_range[0]))
+    end_mass = int(np.ceil(mass_range[1]))
+    bins = np.arange(start_mass, end_mass + 1, 1)
+    
+    # Создание названий интервалов
+    interval_names = [f"{int(bins[i])}-{int(bins[i+1])}" for i in range(len(bins)-1)]
+    
+    # Словарь для сбора данных по всем образцам
+    all_samples_data = {}
+    formula_list = []
+    total_samples = len(spectra_list)
+
+    for idx, df in enumerate(spectra_list):
+        sample_name = df.attrs.get('name', f'sample_{idx}')
+        sample_class = df.attrs.get('class', 'unknown')
+        
+        if verbose:
+            print(f"Обработка образца: {sample_name} ({idx+1}/{total_samples})")
+
+        if 'calc_mass' not in df.columns:
+            raise ValueError(f"В DataFrame образца '{sample_name}' отсутствует колонка 'calc_mass'")
+
+        masses = df['calc_mass'].to_numpy()
+        
+        # Подсчет количества формул в каждом интервале
+        counts, bin_edges = np.histogram(masses, bins=bins)
+        
+        # Создание словаря с данными для текущего образца
+        sample_data = {
+            'class': sample_class
+        }
+        
+        # Добавление количества формул для каждого интервала
+        for i, interval_name in enumerate(interval_names):
+            sample_data[interval_name] = counts[i]
+        
+        # Создание DataFrame распределения для детального анализа
+        distrib_df = pd.DataFrame({
+            'mass_start': bins[:-1],
+            'mass_end': bins[1:],
+            'interval_name': interval_names,
+            'formula_count': counts
+        })
+        distrib_df.attrs['name'] = sample_name
+        distrib_df.attrs['class'] = sample_class
+        formula_list.append(distrib_df)
+
+        # Сохранение в файл, если требуется
+        if save_to_folder is not None:
+            # Очищаем имя файла от недопустимых символов
+            safe_name = "".join(c for c in sample_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            filename = f"{safe_name}_mass_distribution.csv"
+            filepath = os.path.join(save_to_folder, filename)
+            distrib_df.to_csv(filepath, index=False)
+            if verbose:
+                print(f"  Сохранено распределение в {filepath}")
+        
+        all_samples_data[sample_name] = sample_data
+
+    # Создание сводной таблицы
+    summary_df = pd.DataFrame.from_dict(all_samples_data, orient='index')
+    summary_df.index.name = 'sample_name'
+    summary_df.reset_index(inplace=True)
+    
+    # Если нужно отобразить только top N интервалов
+    if top_n_intervals is not None and top_n_intervals > 0:
+        if verbose:
+            print(f"\nВыбор top-{top_n_intervals} интервалов с максимальным количеством формул...")
+        
+        # Находим топ интервалов по сумме по всем образцам
+        interval_columns = [col for col in summary_df.columns if col not in ['class','sample_name']]
+        total_counts = summary_df[interval_columns].sum(axis=0)
+        top_intervals = total_counts.nlargest(top_n_intervals).index.tolist()
+        
+        if verbose:
+            print(f"Выбраны интервалы: {', '.join(top_intervals)}")
+        
+        # Создаем новый DataFrame только с топ интервалами
+        top_columns = ['class']+ ['sample_name'] + top_intervals
+        summary_df = summary_df[top_columns]
+    
+    if verbose:
+        print(f"\nГотово! Сводная таблица содержит {len(summary_df.columns)-2} массовых диапазонов.")
+        print(f"Обработано образцов: {len(summary_df)}")
+        print(f"Диапазон масс: {start_mass} - {end_mass} Да")
+
+    return summary_df, formula_list
 
 def calculate_spectrum_entropy(
     spectrum_df: pd.DataFrame,
@@ -1431,7 +1566,7 @@ def calculate_entropy_for_spectra(
             max_intensity = intensities.max()
             
             results.append({
-                'name': name,
+                'sample_name': name,
                 'class': class_label,
                 'entropy': entropy,
                 'n_peaks': n_peaks,
@@ -1442,7 +1577,7 @@ def calculate_entropy_for_spectra(
         except Exception as e:
             warnings.warn(f"Ошибка при обработке спектра {i}: {e}")
             results.append({
-                'name': spectrum.attrs.get(name_attr, f"spectrum_{i}"),
+                'sample_name': spectrum.attrs.get(name_attr, f"spectrum_{i}"),
                 'class': spectrum.attrs.get(class_attr, "unknown"),
                 'entropy': np.nan,
                 'n_peaks': 0,
