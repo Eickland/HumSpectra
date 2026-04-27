@@ -3,8 +3,8 @@ from pathlib import Path
 import pandas as pd
 import HumSpectra.mass_spectra as ms
 import HumSpectra.mass_visualizer as msv
-import HumSpectra.utilits as ut
 import HumSpectra.mass_descriptors as md
+import HumSpectra.utilits as ut
 import matplotlib.pyplot as plt
 import numpy as np
 import subprocess
@@ -161,7 +161,6 @@ def interactive_spectrum_bokeh(spec: pd.DataFrame,
         p.y_range.end = ylim[1] # type: ignore
     
     return p
-
 def gmm_noise_filter(df, intensity_col='intensity'):
     """
     Автоматическая очистка шума в масс-спектре на основе GMM.
@@ -498,10 +497,10 @@ def extract_mass_list_percentile(mzml_file, ms_level=1, rt_range=None,
             
         mz, intensities = spectrum.get_peaks()
         
-        mask = (intensities >= low_percentile_threshold)
+        mask = (intensities >= low_percentile_threshold) & (intensities <= high_percentile_threshold)
         filtered_mz = mz[mask]
         filtered_intensities = intensities[mask]
-        
+               
         all_mz.extend(filtered_mz)
         all_intensities_filtered.extend(filtered_intensities)
     
@@ -820,7 +819,7 @@ def extract_mass_list_gmm_fast(mzml_file, ms_level=1, rt_range=None, max_samples
     })
   
 list_data_folder = ['2026_01_28','2026_02_05','2026_02_18','2026_03_12','2026_03_19','2026_03_26','2026_04_01']
-#list_data_folder =['2025_09_17','2025_09_23','2025_10_24']
+list_data_folder =['2026_04_23']
 
 raw = False
 
@@ -829,8 +828,8 @@ for folder in list_data_folder:
     #convert_mass_spectra_batch(source_dir = fr"D:\lab\MassSpectraNew\Catalog\{folder}",output_base = fr"D:\lab\MassSpectraNew\Converted_Data\{folder}")
 
     mass_path = Path(fr"D:\lab\MassSpectraNew\Converted_Data\{folder}")
-    document_save_path = Path(fr"D:\lab\MassSpectraNew\processed_results")
-    #document_save_path = Path(fr"D:\lab\mass-spec-server\processed_results")
+    #document_save_path = Path(fr"D:\lab\MassSpectraNew\processed_results")
+    document_save_path = Path(fr"D:\lab\mass-spec-server\processed_results")
 
     for windows_path in mass_path.rglob('*.mzML'):
         
@@ -838,6 +837,9 @@ for folder in list_data_folder:
         name = ut.extract_name_from_path(str(path))
         name = replace_except_last(name)
         print(name)
+        
+        if name != 'turf':
+            continue
         
         if raw:
             ms_list = extract_mass_list_percentile(str(path), low_percentile=90)
@@ -849,19 +851,15 @@ for folder in list_data_folder:
             save(p)
             continue       
         
-        ms_list,_ = extract_mass_list_optimal_percentile(str(path))
+        ms_list = extract_mass_list_percentile(str(path), low_percentile=99.8,high_percentile=99.99)
         print(f'Число пиков: {len(ms_list)}')        
-
-        if 'ADOM' not in name:
-            continue
-
-        ms_list.attrs['name'] = name
         
- 
+        
+        ms_list.attrs['name'] = name
         
         ms_list = ms.recallibrate_optimize(ms_list,draw=False)
         #ms_list,_ = gmm_noise_filter(ms_list)
-        spectra = ms.assign_optimized(ms_list,brutto_dict={'C':(4,50),'H':(4,80),'O':(0,50),'N':(0,3),'C_13':(0,1),'S':(0,1)},rel_error=1, sulfur_precision_factor=10,nitrogen_precision_factor=4)
+        spectra = ms.assign_optimized(ms_list,brutto_dict={'C':(4,50),'H':(4,80),'O':(0,50),'N':(0,3),'C_13':(0,1),'S':(0,2)},rel_error=0.5, sulfur_precision_factor=10,nitrogen_precision_factor=4)
         '''
         print(spectra.shape)
         spectra = ms.calc_mass(spectra)
@@ -885,40 +883,57 @@ for folder in list_data_folder:
         spectra = md.mol_class(spectra,how="perminova")
         
 
-        spectra.dropna().to_csv(Path.joinpath(document_save_path,'mzlist',f'{name}__mzlist.csv'),sep=',',index=False)
-        spectra.dropna().describe().to_excel(Path.joinpath(document_save_path,'statistic',f'{name}__statistic.xlsx'))
-        
-        msv.vk(spectra,sizes=(8,50))
-        plt.savefig(Path.joinpath(document_save_path,'vk',f'{name}__vk.png'))
+        paths = {
+            'mzlist': Path.joinpath(document_save_path, 'mzlist'),
+            'statistic': Path.joinpath(document_save_path, 'statistic'),
+            'vk': Path.joinpath(document_save_path, 'vk'),
+            'mass_scatter': Path.joinpath(document_save_path, 'mass_scatter'),
+            'density': Path.joinpath(document_save_path, 'density'),
+            'mir': Path.joinpath(document_save_path, 'mir'),
+            'bar': Path.joinpath(document_save_path, 'bar'),
+            'pie': Path.joinpath(document_save_path, 'pie'),
+            'comp': Path.joinpath(document_save_path, 'comp'),
+            'spectrum': Path.joinpath(document_save_path, 'spectrum')
+        }
+
+        # Создаем все необходимые директории (если их нет)
+        for path in paths.values():
+            path.mkdir(parents=True, exist_ok=True)
+
+        # Сохраняем файлы
+        spectra.dropna().to_csv(paths['mzlist'] / f'{name}__mzlist.csv', sep=',', index=False)
+        spectra.dropna().describe().to_excel(paths['statistic'] / f'{name}__statistic.xlsx')
+
+        msv.vk(spectra, sizes=(8,50))
+        plt.savefig(paths['vk'] / f'{name}__vk.png')
         plt.close()
-        
-        msv.vk(spectra,sizes=(8,50),plot_type='mass_scatter')
-        plt.savefig(Path.joinpath(document_save_path,'mass_scatter',f'{name}__mass_scatter.png'))
+
+        msv.vk(spectra, sizes=(8,50), plot_type='mass_scatter')
+        plt.savefig(paths['mass_scatter'] / f'{name}__mass_scatter.png')
         plt.close()
-        
-        msv.vk(spectra,sizes=(8,50),plot_type='density')
-        plt.savefig(Path.joinpath(document_save_path,'density',f'{name}__density.png'))  
+
+        msv.vk(spectra, sizes=(8,50), plot_type='density')
+        plt.savefig(paths['density'] / f'{name}__density.png')  
         plt.close()
-        
+
         msv.plot_mass_intensity_relationship(spectra)
-        plt.savefig(Path.joinpath(document_save_path,'mir',f'{name}__mir.png'))
+        plt.savefig(paths['mir'] / f'{name}__mir.png')
         plt.close()
-        
-        msv.plot_mol_class_distribution(spectra,mod='bar')
-        plt.savefig(Path.joinpath(document_save_path,'bar',f'{name}__bar.png')) 
+
+        msv.plot_mol_class_distribution(spectra, mod='bar')
+        plt.savefig(paths['bar'] / f'{name}__bar.png') 
         plt.close()
-                       
-        msv.plot_mol_class_distribution(spectra,mod='pie')
-        plt.savefig(Path.joinpath(document_save_path,'pie',f'{name}__pie.png'))
-        
+
+        msv.plot_mol_class_distribution(spectra, mod='pie')
+        plt.savefig(paths['pie'] / f'{name}__pie.png')
         plt.close()
+
         msv.elemental_composition(spectra)
-        
-        plt.savefig(Path.joinpath(document_save_path,'comp',f'{name}__comp.png'))            
+        plt.savefig(paths['comp'] / f'{name}__comp.png')            
         plt.close()
-                     
-        msv.spectrum(spectra)
-        plt.savefig(Path.joinpath(document_save_path,'spectrum',f'{name}__spectrum.png'))
+
+        msv.spectrum(spectra, xlim=(200,800))
+        plt.savefig(paths['spectrum'] / f'{name}__spectrum.png')
         plt.close()
 
 
