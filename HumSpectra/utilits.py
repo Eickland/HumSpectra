@@ -749,7 +749,7 @@ def plot_strong_correlations(corr_matrix,n=3,ax=None):
                 ha='center', va='center', 
                 color=text_color, fontweight='bold', fontsize=14)
         
-def add_median_labels(ax, fmt='.3f'):
+def add_median_labels(ax, fmt='.3f',fontsize=20):
     
     '''
     Добавление числовой подписи на медиану в seaborn.boxplot
@@ -767,7 +767,7 @@ def add_median_labels(ax, fmt='.3f'):
 
         value = x if (median.get_xdata()[1] - median.get_xdata()[0]) == 0 else y
         text = ax.text(x, y, f'{value:{fmt}}', ha='center', va='center',
-                       fontweight='bold', color='white')
+                       fontweight='bold', color='white',fontsize = fontsize)
         
         # create median-colored border around white text for contrast
         text.set_path_effects([
