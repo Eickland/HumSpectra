@@ -61,7 +61,11 @@ def vk(spec: pd.DataFrame,
                kde_levels=10,
                scatter_kde_enable=False,
                x='O/C',
-               y='H/C'):
+               y='H/C',
+               xlim=(0.0, 1.0),
+               ylim=(0.0, 2.2),
+               ylabel='H/C',
+               xlabel='O/C'):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -113,8 +117,8 @@ def vk(spec: pd.DataFrame,
     # Создаем оси если не переданы
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-        ax.set_xlim((0.0, 1.0))
-        ax.set_ylim((0.0, 2.2))
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
     
     # Базовый вариант (оригинальный)
