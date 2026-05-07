@@ -14,6 +14,7 @@ from scipy import stats
 import HumSpectra.mass_spectra as ms
 import HumSpectra.utilits as ut
 import HumSpectra.mass_descriptors as md
+import scipy.integrate as scp
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -903,7 +904,7 @@ ax2 = axes[0, 1]
 ax2.plot(fpr, tpr, 'b-', linewidth=2, label='PLS детектор')
 ax2.plot([0, 1], [0, 1], 'k--', alpha=0.5, label='Случайный')
 ax2.scatter(fpr[optimal_idx], tpr[optimal_idx], color='green', s=100, 
-            marker='o', label=f'Оптимальный порог (AUC={np.trapz(tpr, fpr):.3f})')
+            marker='o', label=f'Оптимальный порог (AUC={scp.trapezoid(tpr, fpr):.3f})')
 
 # Отмечаем пороги на ROC
 for name, thresh in thresholds.items():
