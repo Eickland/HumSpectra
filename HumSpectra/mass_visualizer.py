@@ -59,7 +59,9 @@ def vk(spec: pd.DataFrame,
                error_type='rel_error',
                kde_fill=True,
                kde_levels=10,
-               scatter_kde_enable=False):
+               scatter_kde_enable=False,
+               x='O/C',
+               y='H/C'):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -103,6 +105,11 @@ def vk(spec: pd.DataFrame,
         spec["O/C"] = spec["O"] / spec["C"]
         spec["H/C"] = spec["H"] / spec["C"]
     
+    if 'S' in x or 'S' in y:
+        spec["S/C"] = spec["S"] / spec["C"]
+        spec["S/H"] = spec["S"] / spec["H"]
+        spec["S/O"] = spec["S"] / spec["O"]
+    
     # Создаем оси если не переданы
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -113,7 +120,7 @@ def vk(spec: pd.DataFrame,
     # Базовый вариант (оригинальный)
     if plot_type == 'default':
         spec["Color value"] = spec.apply(lambda x: ChooseColor(x), axis=1)
-        sns.scatterplot(data=spec, x="O/C", y="H/C", 
+        sns.scatterplot(data=spec, x=x, y=y, 
                        hue="Color value", hue_order=["blue","orange","green","red"], 
                        size="intensity", alpha=0.7, legend=False, 
                        sizes=sizes, ax=ax)
