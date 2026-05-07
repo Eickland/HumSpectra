@@ -161,6 +161,7 @@ def interactive_spectrum_bokeh(spec: pd.DataFrame,
         p.y_range.end = ylim[1] # type: ignore
     
     return p
+
 def gmm_noise_filter(df, intensity_col='intensity'):
     """
     Автоматическая очистка шума в масс-спектре на основе GMM.
@@ -819,7 +820,7 @@ def extract_mass_list_gmm_fast(mzml_file, ms_level=1, rt_range=None, max_samples
     })
   
 list_data_folder = ['2026_01_28','2026_02_05','2026_02_18','2026_03_12','2026_03_19','2026_03_26','2026_04_01']
-list_data_folder =['2026_04_23']
+list_data_folder =['2026_04_01']
 
 raw = False
 
