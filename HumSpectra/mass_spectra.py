@@ -13,6 +13,8 @@ import scipy.stats as st
 from scipy.interpolate import CubicSpline
 from tqdm import tqdm
 from scipy.signal import find_peaks
+import subprocess
+from pathlib import Path
 
 import HumSpectra.utilits as ut
 import HumSpectra.mass_descriptors as md
@@ -1135,7 +1137,7 @@ def fit_kernel(
     kde_err = pd.DataFrame(data=out, columns=['i','ppm'])
     
     #smooth data
-    kde_err['ppm'] = savgol_filter(kde_err['ppm'], 31,3)
+    kde_err.loc['ppm'] = savgol_filter(kde_err['ppm'].to_numpy(), 31, 3) #type: ignore
     
     xmin = min(mass)
     xmax = max(mass)
@@ -2183,6 +2185,119 @@ def assign_optimized(data: pd.DataFrame,
         out = pd.concat([data[['mass', 'intensity']], res_df], axis=1)
         out.attrs['name'] = name
         return out
+
+def convert_mass_spectra_batch(source_dir, output_base, program_location=
+                               "C:\\Users\\mnbv2\\AppData\\Local\\Apps\\ProteoWizard 3.0.21229.9668f52 64-bit"):
+    """
+    Конвертирует масс-спектрометрические данные из папки с несколькими подпапками (.d)
+    
+    Args:
+        source_dir (str): Путь к папке, содержащей подпапки с исходными файлами
+        output_base (str): Путь для сохранения результатов
+        program_location (str): Путь к программе Proteo Wizard, пример:
+        "C:\\Users\\mnbv2\\AppData\\Local\\Apps\\ProteoWizard 3.0.21229.9668f52 64-bit"
+    """
+    
+    # PowerShell скрипт для пакетной обработки (рекурсивный поиск .d папок)
+    powershell_script = f'''
+    Set-Location {program_location}
+    $sourceDir = "{source_dir}"
+    $outputBase = "{output_base}"
+    $dFolders = Get-ChildItem -Path $sourceDir -Recurse -Directory | Where-Object {{ $_.Name -like "*.d" }}
+    Write-Host "Найдено .d папок: $($dFolders.Count)"
+    foreach ($folder in $dFolders) {{
+        $inputPath = $folder.FullName
+        $relativePath = $folder.FullName.Replace($sourceDir, "").Trim("\\")
+        $outputSubDir = Join-Path $outputBase $relativePath
+        $outputSubDir = $outputSubDir -replace '\\.d$', ''
+        New-Item -ItemType Directory -Path $outputSubDir -Force | Out-Null
+        Write-Host "Конвертируем: $($folder.Name) -> $outputSubDir"
+        .\\msconvert.exe "$inputPath" -o "$outputSubDir" --mzML --filter "zeroSamples removeExtra" --verbose
+    }}
+    '''
+    
+    try:
+        print(f"🔍 Поиск .d папок в: {source_dir}")
+        print(f"💾 Сохранение в: {output_base}")
+        print("⏳ Начинаем пакетную конвертацию...")
+        
+        # Запускаем PowerShell скрипт
+        result = subprocess.run([
+            'powershell', '-Command', powershell_script
+        ], capture_output=True, text=True, check=True)
+        
+        print("✅ Пакетная конвертация завершена успешно!")
+        print("📋 Вывод PowerShell:")
+        print(result.stdout)
+        
+        if result.stderr:
+            print("⚠️ Предупреждения:")
+            print(result.stderr)
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Ошибка при выполнении PowerShell скрипта: {e}")
+        print(f"🔴 Stderr: {e.stderr}")
+
+def convert_single_folder(single_folder, output_dir,program_location=
+                               "C:\\Users\\mnbv2\\AppData\\Local\\Apps\\ProteoWizard 3.0.21229.9668f52 64-bit"):
+    """
+    Конвертирует масс-спектрометрические данные из одной папки (.d)
+    
+    Args:
+        single_folder (str): Путь к конкретной папке .d с исходными файлами
+        output_dir (str): Путь для сохранения результатов
+        program_location (str): Путь к программе Proteo Wizard, пример:
+        "C:\\Users\\mnbv2\\AppData\\Local\\Apps\\ProteoWizard 3.0.21229.9668f52 64-bit"        
+    """
+    
+    # Проверяем, что это действительно .d папка
+    folder_path = Path(single_folder)
+    if not folder_path.name.endswith('.d'):
+        print(f"⚠️ Внимание: выбранная папка '{folder_path.name}' не имеет расширения .d")
+        response = input("Продолжить конвертацию? (y/n): ").lower()
+        if response != 'y':
+            print("❌ Конвертация отменена")
+            return
+    
+    # PowerShell скрипт для одиночной папки
+    powershell_script = f'''
+    Set-Location {program_location}
+    $inputPath = "{single_folder}"
+    $outputDir = "{output_dir}"
+    
+    # Создаем целевую папку
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+    
+    Write-Host "Конвертируем: $(Split-Path $inputPath -Leaf) -> $outputDir"
+    
+    # Запускаем конвертацию для одной папки
+    .\\msconvert.exe "$inputPath" -o "$outputDir" --mzML 
+    
+    Write-Host "Конвертация завершена!"
+    '''
+    
+    try:
+        print(f"📁 Конвертируем папку: {folder_path.name}")
+        print(f"💾 Сохранение в: {output_dir}")
+        print("⏳ Начинаем конвертацию...")
+        
+        # Запускаем PowerShell скрипт
+        result = subprocess.run([
+            'powershell', '-Command', powershell_script
+        ], capture_output=True, text=True, check=True)
+        
+        print("✅ Конвертация завершена успешно!")
+        print("📋 Вывод PowerShell:")
+        print(result.stdout)
+        
+        if result.stderr:
+            print("⚠️ Предупреждения:")
+            print(result.stderr)
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Ошибка при выполнении PowerShell скрипта: {e}")
+        print(f"🔴 Stderr: {e.stderr}")
+
 
 if __name__ == '__main__':
     pass
