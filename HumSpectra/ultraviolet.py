@@ -816,35 +816,52 @@ def read_excel_uv(path: str,
     else:
         raise KeyboardInterrupt("Нет доступного типа!")
 
-def standart_uv_formatting(data: DataFrame,debug=False)-> DataFrame:
+def standart_uv_formatting(data: DataFrame, debug=False) -> DataFrame:
     """
     :param data: DataFrame, сырой уф спектр
     :return: Отформатированный уф спектр
     Функция заменяет строковые данные на числовые в уф спектре
     """
     data_copy = data.copy()
-    data_copy = data_copy.apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
     
-    if all(isinstance(x, str) for x in data_copy[data_copy.columns[0]]):
-        data_copy = data_copy.replace(',', '.', regex=True)
-        data_copy = data_copy.replace(' ', '', regex=True)
+    # Удаляем пробелы в строковых столбцах
+    for col in data_copy.select_dtypes(include=['object']).columns:
+        data_copy[col] = data_copy[col].str.strip()
+    
+    # Для каждого строкового столбца заменяем запятые на точки и удаляем пробелы
+    for col in data_copy.select_dtypes(include=['object']).columns:
+        # Заменяем запятые на точки и удаляем все пробелы
+        data_copy[col] = data_copy[col].str.replace(',', '.', regex=False)
+        data_copy[col] = data_copy[col].str.replace(' ', '', regex=False)
         
         if debug:
-            print('Замена запятых произведена')
+            print(f'Замена запятых произведена в столбце {col}')
     
-    if all(isinstance(x, str) for x in data_copy.index):
-        data_copy.index = data_copy.index.str.replace(',', '.')
-        data_copy.index = data_copy.index.str.replace(' ', '')
-        
+    # Работа с индексом, если он строковый
+    if data_copy.index.dtype == 'object':
+        data_copy.index = data_copy.index.str.replace(',', '.', regex=False)
+        data_copy.index = data_copy.index.str.replace(' ', '', regex=False)
         if debug:
-            print('Замена запятых произведена')
-
+            print('Замена запятых в индексе произведена')
+    
     if debug:
-        print(data_copy)
-            
-    data_copy = data_copy.astype(float)
-    data_copy.index = data_copy.index.astype(float)
-
+        print(data_copy.head())
+        print("\nТипы данных после замены:")
+        print(data_copy.dtypes)
+    
+    # Конвертация в float
+    try:
+        data_copy = data_copy.astype(float)
+        data_copy.index = data_copy.index.astype(float)
+    except ValueError as e:
+        print(f"Ошибка конвертации: {e}")
+        print("Проблемные значения:")
+        for col in data_copy.columns:
+            problematic = data_copy[col][~data_copy[col].str.match(r'^[0-9\.\-]+$', na=False)]
+            if len(problematic) > 0:
+                print(f"Столбец {col}: {problematic.unique()}")
+        raise
+    
     return data_copy
 
 def check_uv_spectra_type_by_path(path: str):
