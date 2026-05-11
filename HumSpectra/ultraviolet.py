@@ -823,7 +823,8 @@ def standart_uv_formatting(data: DataFrame)-> DataFrame:
     Функция заменяет строковые данные на числовые в уф спектре
     """
     data_copy = data.copy()
-
+    data_copy = data_copy.apply(lambda x: x.str.strip() if x.dtype == 'object' else x)
+    
     if all(isinstance(x, str) for x in data_copy[data_copy.columns[0]]):
         data_copy = data_copy.replace(',', '.', regex=True)
         data_copy = data_copy.replace(' ', '', regex=True)
