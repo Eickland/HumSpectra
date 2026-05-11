@@ -816,7 +816,7 @@ def read_excel_uv(path: str,
     else:
         raise KeyboardInterrupt("Нет доступного типа!")
 
-def standart_uv_formatting(data: DataFrame)-> DataFrame:
+def standart_uv_formatting(data: DataFrame,debug=False)-> DataFrame:
     """
     :param data: DataFrame, сырой уф спектр
     :return: Отформатированный уф спектр
@@ -828,11 +828,20 @@ def standart_uv_formatting(data: DataFrame)-> DataFrame:
     if all(isinstance(x, str) for x in data_copy[data_copy.columns[0]]):
         data_copy = data_copy.replace(',', '.', regex=True)
         data_copy = data_copy.replace(' ', '', regex=True)
+        
+        if debug:
+            print('Замена запятых произведена')
     
     if all(isinstance(x, str) for x in data_copy.index):
         data_copy.index = data_copy.index.str.replace(',', '.')
         data_copy.index = data_copy.index.str.replace(' ', '')
+        
+        if debug:
+            print('Замена запятых произведена')
 
+    if debug:
+        print(data_copy)
+            
     data_copy = data_copy.astype(float)
     data_copy.index = data_copy.index.astype(float)
 
