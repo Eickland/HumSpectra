@@ -746,7 +746,7 @@ def read_excel_uv(path: str,
 
         data = pd.read_excel(path, index_col= index_col)
 
-        data = standart_uv_formatting(data)
+        data = standart_uv_formatting(data, debug=debug)
         data.sort_index(inplace=True)
         
         if spectra_type:
@@ -780,7 +780,7 @@ def read_excel_uv(path: str,
 
         for name, data in raw_data.items():
             
-            data = standart_uv_formatting(data)
+            data = standart_uv_formatting(data, debug=debug)
             data.sort_index(inplace=True)
             
             if spectra_type:
