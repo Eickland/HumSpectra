@@ -213,7 +213,7 @@ def check_file_type(path: str) -> str:
     if ext in ["txt","csv"]:
         file_type = "csv_type"
     
-    elif ext == "xlsx":
+    elif ext == "xlsx" or ext == "xls":
         
         xlsx = pd.ExcelFile(path)
         sheet_num = len(xlsx.sheet_names)
