@@ -842,7 +842,7 @@ for folder in list_data_folder:
             continue
         
         if raw:
-            ms_list = extract_mass_list_percentile(str(path), low_percentile=90)
+            ms_list = extract_mass_list_percentile(str(path), low_percentile=98)
             
             # Создаем интерактивный график
             p = interactive_spectrum_bokeh(ms_list, normalize=False, max_points=30000)

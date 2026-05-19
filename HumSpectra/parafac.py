@@ -758,6 +758,22 @@ class OpticalDataAnalyzer:
         
         df.reset_index().rename(columns={"index":"Sample"}).to_csv(filename, index=False)
         print(f"Таблица сохранена в {filename}")
+
+    def export_loadings_to_excel(self, filename, normalization='percentage'):
+        """
+        Экспорт таблицы нагрузок в CSV файл
+        
+        Args:
+            filename: имя файла
+            normalization: метод нормализации
+        """
+        if normalization == 'percentage':
+            df = self.get_relative_contributions(method='percentage')
+        else:
+            df = self.get_component_loadings(normalization=normalization)
+        
+        df.reset_index().rename(columns={"index":"Sample"}).to_excel(filename, index=False)
+        print(f"Таблица сохранена в {filename}")
     
     def get_component_eem_matrix(self, component_idx, sample_idx=None):
         """Получить EEM матрицу для компонента"""
