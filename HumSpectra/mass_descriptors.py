@@ -868,7 +868,7 @@ def extract_square_intensities(
     square_indices: Optional[List[int]] = None,
     normalize: bool = True,
     how_average: str = 'weight',
-    hc_range: Tuple[float, float] = (0, 2.2),
+    hc_range: Tuple[float, float] = (0.4, 1.8),
     oc_range: Tuple[float, float] = (0, 1),
     save_excel: bool = False,
     excel_path: Optional[str] = None,

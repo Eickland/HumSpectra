@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib.axes import Axes
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 elenemtal_colors_dict = {
     'CHO' : 'blue',
@@ -59,7 +61,13 @@ def vk(spec: pd.DataFrame,
                error_type='rel_error',
                kde_fill=True,
                kde_levels=10,
-               scatter_kde_enable=False):
+               scatter_kde_enable=False,
+               x='O/C',
+               y='H/C',
+               xlim=(0.0, 1.0),
+               ylim=(0.0, 2.2),
+               ylabel='H/C',
+               xlabel='O/C'):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -103,17 +111,22 @@ def vk(spec: pd.DataFrame,
         spec["O/C"] = spec["O"] / spec["C"]
         spec["H/C"] = spec["H"] / spec["C"]
     
+    if 'S' in x or 'S' in y:
+        spec["S/C"] = spec["S"] / spec["C"]
+        spec["S/H"] = spec["S"] / spec["H"]
+        spec["S/O"] = spec["S"] / spec["O"]
+    
     # Создаем оси если не переданы
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-        ax.set_xlim((0.0, 1.0))
-        ax.set_ylim((0.0, 2.2))
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
         ax.set_title(f"{spec.attrs['name']}, {spec.dropna().shape[0]} formulas")
     
     # Базовый вариант (оригинальный)
     if plot_type == 'default':
         spec["Color value"] = spec.apply(lambda x: ChooseColor(x), axis=1)
-        sns.scatterplot(data=spec, x="O/C", y="H/C", 
+        sns.scatterplot(data=spec, x=x, y=y, 
                        hue="Color value", hue_order=["blue","orange","green","red"], 
                        size="intensity", alpha=0.7, legend=False, 
                        sizes=sizes, ax=ax)
@@ -837,9 +850,8 @@ def spectrum(spec: 'pd.DataFrame',
         additional parameters to matplotlib plot method
     """
     
-    df = spec.copy() # Работаем с копией
-    #df,_ = gmm_noise_filter(df)
-    # Filter data based on xlim
+    df = spec.copy()
+
     mass = df['mass'].to_numpy()
     intensity = df['intensity'].to_numpy()
     
@@ -1732,3 +1744,83 @@ def plot_stacked_barplot(df, name_col='name', figsize=(12, 6),
     plt.tight_layout()
     
     return fig, ax
+
+def interactive_spectrum_plotly(spec: pd.DataFrame,
+                                 xlim=(None, None),
+                                 ylim=(None, None),
+                                 normalize: bool = False,
+                                 max_points: int = 50000,
+                                 title=None,
+                                 height=600,
+                                 width=1200):
+    """
+    Интерактивный спектр с использованием Plotly (более стабильный hover)
+    """
+    df = spec.copy()
+    mass = df['mass'].to_numpy()
+    intensity = df['intensity'].to_numpy()
+    
+    # Фильтр по xlim
+    if xlim[0] is not None and xlim[1] is not None:
+        mask = (mass >= xlim[0]) & (mass <= xlim[1])
+        mass = mass[mask]
+        intensity = intensity[mask]
+    
+    # Нормализация
+    if normalize and len(intensity) > 0:
+        intensity = (intensity / intensity.max()) * 100
+    
+    # Отбор топ пиков по интенсивности
+    if len(mass) > max_points:
+        indices = np.argsort(intensity)[-max_points:]
+        indices = np.sort(indices)
+        mass = mass[indices]
+        intensity = intensity[indices]
+        print(f"Selected top {len(mass)} peaks by intensity (from {len(df)})")
+    
+    # Создаем фигуру
+    fig = go.Figure()
+    
+    # Добавляем вертикальные линии (пики)
+    fig.add_trace(go.Scatter(
+        x=mass,
+        y=intensity,
+        mode='lines+markers',
+        line=dict(color='navy', width=1.5),
+        marker=dict(color='red', size=3, opacity=0.5),
+        name='Spectrum',
+        hovertemplate='<b>m/z</b>: %{x:.4f}<br>' +
+                      '<b>Intensity</b>: %{y:.2f}<extra></extra>'
+    ))
+    
+    # Добавляем линии от нуля до каждого пика (как в масс-спектрометрии)
+    for i in range(len(mass)):
+        fig.add_trace(go.Scatter(
+            x=[mass[i], mass[i]],
+            y=[0, intensity[i]],
+            mode='lines',
+            line=dict(color='navy', width=1.5, opacity=0.7),
+            showlegend=False,
+            hoverinfo='skip'
+        ))
+    
+    # Настройка layout
+    fig.update_layout(
+        title=title or f'Spectrum: {len(mass)} peaks',
+        height=height,
+        width=width,
+        xaxis_title='m/z, Da',
+        yaxis_title='Relative Intensity (%)' if normalize else 'Intensity',
+        hovermode='closest',
+        template='plotly_white',
+        showlegend=False
+    )
+    
+    # Установка диапазонов
+    if xlim[0] is not None and xlim[1] is not None:
+        fig.update_xaxes(range=[xlim[0], xlim[1]])
+    if ylim[0] is not None:
+        fig.update_yaxes(range=[ylim[0], ylim[1]])
+    
+    return fig
+

@@ -556,7 +556,6 @@ def random_forest_classification_batch(
         'n_features': len(numeric_columns)
     }
 
-
 def _fast_vif_filter(X: np.ndarray, feature_names: pd.Index, threshold: float = 10.0, **kwargs) -> Tuple[np.ndarray, pd.DataFrame]:
     """
     Быстрая фильтрация мультиколлинеарности с помощью VIF.
@@ -625,7 +624,6 @@ def _fast_vif_filter(X: np.ndarray, feature_names: pd.Index, threshold: float = 
     vif_df = pd.DataFrame(vif_results)
     
     return X_filtered, vif_df
-
 
 # ============================================================================
 # ИСПРАВЛЕННАЯ ВЕРСИЯ ДЛЯ ОДИНОЧНЫХ ВЫЧИСЛЕНИЙ С HTML ОТЧЕТОМ
@@ -800,7 +798,6 @@ def random_forest_classification(
         print(f"❌ Ошибка при выполнении анализа: {e}")
         raise
 
-
 def _perform_external_validation(model, scaler, label_encoder, numeric_columns,
                                  cv_dataset, target_column, index_level):
     """Вспомогательная функция для внешней валидации"""
@@ -863,6 +860,7 @@ def _perform_external_validation(model, scaler, label_encoder, numeric_columns,
         'classification_report': cv_clf_report,
         'present_classes': cv_present_names
     }
+
 def create_rf_classification_html_report(console_output, results_df, feature_importance, 
                          rf_model, class_names, label_encoder,
                          X_test, y_test, y_pred, output_html_path, vif_results,
@@ -1328,7 +1326,6 @@ def lda_classification_batch(
         'intercept_': lda_model.intercept_ if hasattr(lda_model, 'intercept_') else None
     }
 
-
 def _fast_vif_filter_lda(X: np.ndarray, feature_names: pd.Index, threshold: float = 10.0, **kwargs) -> Tuple[np.ndarray, pd.DataFrame]:
     """
     Быстрая фильтрация мультиколлинеарности для LDA.
@@ -1396,7 +1393,6 @@ def _fast_vif_filter_lda(X: np.ndarray, feature_names: pd.Index, threshold: floa
     
     return X_filtered, vif_df
 
-
 def _get_lda_equations(lda_model, feature_names, class_names) -> List[str]:
     """
     Генерирует уравнения LDA для вывода (только для отчета)
@@ -1430,7 +1426,6 @@ def _get_lda_equations(lda_model, feature_names, class_names) -> List[str]:
         equations.append(equation)
     
     return equations
-
 
 # ============================================================================
 # ИСПРАВЛЕННАЯ ВЕРСИЯ LDA ДЛЯ ОДИНОЧНЫХ ВЫЧИСЛЕНИЙ С HTML ОТЧЕТОМ
@@ -1628,7 +1623,6 @@ def lda_classification(
         sys.stdout = old_stdout
         print(f"❌ Ошибка при выполнении анализа: {e}")
         raise
-
 
 def _perform_external_validation_lda(model, scaler, label_encoder, numeric_columns,
                                      cv_dataset, target_column, index_level):

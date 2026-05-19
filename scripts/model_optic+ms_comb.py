@@ -10,10 +10,11 @@ from typing import List, Optional, Tuple
 from itertools import combinations
 from contextlib import contextmanager
 from sklearn.svm import SVC
-
+from scipy import stats
 import HumSpectra.mass_spectra as ms
 import HumSpectra.utilits as ut
 import HumSpectra.mass_descriptors as md
+import scipy.integrate as scp
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -27,6 +28,7 @@ from sklearn.metrics import classification_report, confusion_matrix, roc_auc_sco
 from sklearn.utils.class_weight import compute_class_weight
 from scipy.stats import chi2
 from matplotlib.patches import Ellipse
+import matplotlib.transforms as transforms
 
 @contextmanager
 def timer(name=""):
@@ -67,7 +69,7 @@ with timer("Чтение спектров"):
         
     optical_df=pd.read_csv(r"D:\lab\KNP-analysis\Received_data\Statistics\all_descriptors.csv")
     optical_df['sample_id'] = optical_df['sample_id'].apply(lambda x: x.replace('-2025',''))
-    optical_df.drop(columns=['lambda','Sample','Subclass'],inplace=True)
+    optical_df.drop(columns=['lambda','Sample','Subclass','pH','org_carbon','Eh'],inplace=True)
     optical_df = optical_df[optical_df['sample_id'].isin(spectra_list_name)]
     optical_df.dropna(inplace=True)
     optical_df.rename(columns={'sample_id':'sample_name','Class':'class'},inplace=True)
@@ -84,6 +86,421 @@ print(sqaure_data.columns)
 metric_data = md.calculate_metrics_for_spectra_list(spectra_list=spectra_list, metrics=None)
 print(metric_data.columns)
 metric_data.drop(columns=['S','C_13','mass'],inplace=True)
+
+if 'DBE_AI' not in metric_data.columns:
+    metric_data['DBE_AI'] = metric_data['AI']  # или df['DBE_AI'] = df['AI_mod'] если есть
+
+# Группировка по образцам для расчета статистик
+grouped = metric_data.groupby(['sample_name', 'class'])
+
+# Функция аггрегации метрик для одного образца
+def agg_metrics(x):
+    return pd.Series({
+        'HC': x['H/C'].mean(),
+        'OC': x['O/C'].mean(),
+        'NOSC': x['NOSC'].mean(),
+        'DBE': x['DBE'].mean(),
+        'AI': x['AI'].mean(),
+        'DBE_AI': x['DBE_AI'].mean(),
+        'CRAM': x['CRAM'].mean()  # т.к. CRAM bool -> среднее = доля True
+    })
+
+sample_stats = grouped.apply(agg_metrics).reset_index()
+
+# Также можно получить сводную статистику по классам
+class_stats = sample_stats.groupby('class').agg({
+    'HC': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)],
+    'OC': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)],
+    'NOSC': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)],
+    'DBE': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)],
+    'AI': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)],
+    'DBE_AI': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)],
+    'CRAM': ['mean', 'std', 'median', lambda x: x.quantile(0.25), lambda x: x.quantile(0.75)]
+}).round(4)
+
+# ===================== ВИЗУАЛИЗАЦИЯ =====================
+sns.set_style("whitegrid")
+plt.rcParams['figure.figsize'] = (12, 8)
+
+# 1. Тепловая карта средних значений метрик по образцам
+# Подготовка данных: строки образцы, колонки метрики
+heatmap_data = sample_stats.set_index('sample_name')[['HC', 'OC', 'NOSC', 'DBE', 'AI', 'DBE_AI', 'CRAM']]
+# Нормализация для лучшей визуализации (z-score)
+heatmap_norm = (heatmap_data - heatmap_data.mean()) / heatmap_data.std()
+plt.figure(figsize=(14, 10))
+sns.heatmap(heatmap_norm, annot=heatmap_data.round(2), fmt='', cmap='RdBu_r', center=0,
+            cbar_kws={'label': 'Z-score'}, linewidths=0.5)
+plt.title('Тепловая карта метрик (средние по образцам, нормализованные)', fontsize=14)
+plt.tight_layout()
+plt.savefig('heatmap_metrics.png', dpi=300)
+plt.show()
+
+def plot_metrics_vs_mass(spectra_list: List, 
+                         metrics: List[str] = ['O', 'AI', 'CAI'],
+                         mass_bins: int = 50,
+                         figsize: Tuple[int, int] = (15, 5),
+                         save_path: Optional[str] = None):
+    """
+    Построение зависимостей метрик от массы с усреднением по биннингу.
+    
+    Parameters
+    ----------
+    spectra_list : List
+        Список спектров (объектов с атрибутами)
+    metrics : List[str]
+        Список метрик для визуализации ('O', 'AI', 'CAI' и др.)
+    mass_bins : int
+        Количество бинов для массы (по умолчанию 50)
+    figsize : Tuple[int, int]
+        Размер фигуры
+    save_path : Optional[str]
+        Путь для сохранения графика
+    """
+    
+    # Сбор данных со всех спектров
+    all_data = []
+    
+    for spectrum in spectra_list:
+        # Извлекаем данные спектра
+        df_spectrum = pd.DataFrame({
+            'mass': spectrum['calc_mass'],
+            'intensity': spectrum['intensity'],
+            'O': spectrum['O'],  # количество атомов кислорода
+            'AI': spectrum['AI'],
+            'CAI': spectrum.get('CAI', spectrum['AI']),  # если CAI нет, используем AI
+            'class': spectrum.attrs['class'],
+            'sample_name': spectrum.attrs['name']
+        })
+        all_data.append(df_spectrum)
+    
+    # Объединяем все данные
+    df_all = pd.concat(all_data, ignore_index=True)
+    
+    # Создаем бины по массе
+    df_all['mass_bin'] = pd.cut(df_all['mass'], bins=mass_bins)
+    
+    # Вычисляем средние значения в каждом бине (с учетом интенсивности как веса)
+    binned_stats = []
+    for metric in metrics:
+        # Взвешенное среднее по интенсивности
+        weighted_mean = df_all.groupby('mass_bin').apply(
+            lambda x: np.average(x[metric], weights=x['intensity']) if x['intensity'].sum() > 0 else np.nan
+        )
+        # Среднее значение массы в бине
+        mass_center = df_all.groupby('mass_bin')['mass'].mean()
+        
+        binned_data = pd.DataFrame({
+            'mass_center': mass_center.values,
+            f'{metric}_weighted_mean': weighted_mean.values,
+            'metric': metric
+        })
+        binned_stats.append(binned_data)
+    
+    df_binned = pd.concat(binned_stats, ignore_index=True)
+    
+    # Построение графиков
+    fig, axes = plt.subplots(1, len(metrics), figsize=figsize)
+    if len(metrics) == 1:
+        axes = [axes]
+    
+    for idx, metric in enumerate(metrics):
+        ax = axes[idx]
+        metric_data = df_binned[df_binned['metric'] == metric]
+        
+        # Линия тренда (полином 2-й степени)
+        mask = ~np.isnan(metric_data[f'{metric}_weighted_mean'])
+        x = metric_data['mass_center'][mask].values
+        y = metric_data[f'{metric}_weighted_mean'][mask].values
+        
+        if len(x) > 5:
+            z = np.polyfit(x, y, 2)
+            p = np.poly1d(z)
+            x_smooth = np.linspace(x.min(), x.max(), 100)
+            ax.plot(x_smooth, p(x_smooth), '--', color='red', alpha=0.7, label='Poly trend (deg=2)')
+        
+        # Основная линия
+        ax.plot(metric_data['mass_center'], metric_data[f'{metric}_weighted_mean'], 
+                'o-', markersize=4, linewidth=1.5, alpha=0.8, label='Weighted mean')
+        
+        # Добавляем доверительный интервал (стандартное отклонение)
+        std_values = df_all.groupby('mass_bin').apply(
+            lambda x: np.average((x[metric] - np.average(x[metric], weights=x['intensity']))**2, 
+                                 weights=x['intensity'])**0.5
+        )
+        ax.fill_between(metric_data['mass_center'], 
+                        metric_data[f'{metric}_weighted_mean'] - std_values.values,
+                        metric_data[f'{metric}_weighted_mean'] + std_values.values,
+                        alpha=0.2, label='±1 std')
+        
+        ax.set_xlabel('Mass (Da)', fontsize=11)
+        ax.set_ylabel(f'{metric} (weighted mean)', fontsize=11)
+        ax.set_title(f'{metric} vs Mass', fontsize=12, fontweight='bold')
+        ax.legend(loc='best', fontsize=9)
+        ax.grid(True, alpha=0.3)
+    
+    plt.suptitle('Dependence of Molecular Metrics on Mass', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
+    
+    plt.show()
+    
+    return df_binned
+
+
+# ===================== 2. АНАЛИЗ СРЕДНИХ МАСС ДЛЯ КВАДРАТОВ ВАН-КРЕВЕЛЕНА =====================
+
+def analyze_square_masses(spectra_list: List,
+                         square_data: pd.DataFrame,  # результат extract_square_intensities
+                         hc_range: Tuple[float, float] = (0.5, 2.0),
+                         oc_range: Tuple[float, float] = (0.2, 0.8),
+                         n_hc: int = 5,
+                         n_oc: int = 4,
+                         save_path: Optional[str] = None):
+    """
+    Анализ средних масс для квадратов Ван-Кревелена.
+    
+    Parameters
+    ----------
+    spectra_list : List
+        Список спектров (оригинальные данные)
+    square_data : pd.DataFrame
+        Результат функции extract_square_intensities (содержит интенсивности по квадратам)
+    hc_range, oc_range : Tuple[float, float]
+        Диапазоны H/C и O/C (должны совпадать с использованными в extract_square_intensities)
+    n_hc, n_oc : int
+        Количество делений по осям
+    save_path : Optional[str]
+        Путь для сохранения результатов
+    """
+    
+    # Создание сетки квадратов
+    hc_edges = np.linspace(hc_range[0], hc_range[1], n_hc + 1)
+    oc_edges = np.linspace(oc_range[0], oc_range[1], n_oc + 1)
+    
+    # Словарь для хранения средних масс по квадратам
+    square_mass_data = {square_idx: [] for square_idx in range(1, n_hc * n_oc + 1)}
+    
+    for spectrum in spectra_list:
+        df_peak = pd.DataFrame({
+            'mass': spectrum['calc_mass'],
+            'intensity': spectrum['intensity'],
+            'H_C': spectrum['H/C'],
+            'O_C': spectrum['O/C']
+        })
+        
+        # Определяем квадрат для каждого пика
+        square_indices = []
+        for _, row in df_peak.iterrows():
+            hc = row['H_C']
+            oc = row['O_C']
+            
+            # Проверка границ
+            if hc < hc_range[0] or hc > hc_range[1] or oc < oc_range[0] or oc > oc_range[1]:
+                square_indices.append(-1)  # вне области
+                continue
+            
+            # Находим индексы бинов
+            hc_bin = np.digitize(hc, hc_edges) - 1
+            oc_bin = np.digitize(oc, oc_edges) - 1
+            
+            if hc_bin < 0 or hc_bin >= n_hc or oc_bin < 0 or oc_bin >= n_oc:
+                square_indices.append(-1)
+            else:
+                square_idx = oc_bin * n_hc + hc_bin + 1
+                square_indices.append(square_idx)
+        
+        df_peak['square_idx'] = square_indices
+        df_peak = df_peak[df_peak['square_idx'] != -1]
+        
+        # Взвешенная средняя масса для каждого квадрата
+        for square_idx in square_mass_data.keys():
+            square_peaks = df_peak[df_peak['square_idx'] == square_idx]
+            if len(square_peaks) > 0:
+                weighted_mass = np.average(square_peaks['mass'], weights=square_peaks['intensity'])
+            else:
+                weighted_mass = np.nan
+            square_mass_data[square_idx].append(weighted_mass)
+    
+    # Создание DataFrame со средними массами по квадратам
+    df_square_masses = pd.DataFrame(square_mass_data)
+    df_square_masses.insert(0, 'sample_name', [s.attrs['name'] for s in spectra_list])
+    df_square_masses.insert(1, 'class', [s.attrs['class'] for s in spectra_list])
+    
+    # Добавляем интенсивности из square_data
+    for col in square_mass_data.keys():
+        df_square_masses[f'intensity_{col}'] = square_data[col].values
+    
+    # Визуализация: тепловая карта средних масс для первого образца (или среднего по классам)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Для первого образца
+    sample0 = df_square_masses.iloc[0]
+    mass_matrix = np.array([sample0[i+1] for i in range(n_hc * n_oc)]).reshape(n_oc, n_hc)
+    
+    im1 = axes[0].imshow(mass_matrix, cmap='viridis', aspect='auto', origin='upper')
+    axes[0].set_xticks(range(n_hc))
+    axes[0].set_xticklabels([f'{hc_edges[i]:.2f}-{hc_edges[i+1]:.2f}' for i in range(n_hc)], rotation=45, ha='right')
+    axes[0].set_yticks(range(n_oc))
+    axes[0].set_yticklabels([f'{oc_edges[i]:.2f}-{oc_edges[i+1]:.2f}' for i in range(n_oc)])
+    axes[0].set_xlabel('H/C range', fontsize=10)
+    axes[0].set_ylabel('O/C range', fontsize=10)
+    axes[0].set_title(f'Average mass per square\nSample: {sample0["sample_name"]}', fontsize=10)
+    plt.colorbar(im1, ax=axes[0], label='Mass (Da)')
+    
+    # Среднее по классам
+    classes = df_square_masses['class'].unique()
+    class_avg_mass = {}
+    
+    for cls in classes:
+        cls_data = df_square_masses[df_square_masses['class'] == cls]
+        avg_mass = np.nanmean([cls_data[i+1].values for i in range(n_hc * n_oc)], axis=1)
+        class_avg_mass[cls] = avg_mass.reshape(n_oc, n_hc)
+    
+    # Выбираем первый класс для отображения (или можно сделать два subplot'а)
+    first_class = list(class_avg_mass.keys())[1]
+    im2 = axes[1].imshow(class_avg_mass[first_class], cmap='viridis', aspect='auto', origin='upper')
+    axes[1].set_xticks(range(n_hc))
+    axes[1].set_xticklabels([f'{hc_edges[i]:.2f}-{hc_edges[i+1]:.2f}' for i in range(n_hc)], rotation=45, ha='right')
+    axes[1].set_yticks(range(n_oc))
+    axes[1].set_yticklabels([f'{oc_edges[i]:.2f}-{oc_edges[i+1]:.2f}' for i in range(n_oc)])
+    axes[1].set_xlabel('H/C range', fontsize=10)
+    axes[1].set_ylabel('O/C range', fontsize=10)
+    axes[1].set_title(f'Average mass per square\nClass: {first_class} (mean across samples)', fontsize=10)
+    plt.colorbar(im2, ax=axes[1], label='Mass (Da)')
+    
+    plt.suptitle('Van Krevelen Square Analysis: Average Molecular Mass', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Square mass analysis saved to {save_path}")
+    
+    plt.show()
+    
+    # Статистическая таблица
+    stats_cols = [i+1 for i in range(n_hc * n_oc)]
+    class_stats = df_square_masses.groupby('class')[stats_cols].agg(['mean', 'std', 'count'])
+    
+    print("\n===== Statistics of average masses per square by class =====")
+    print(class_stats.round(2))
+    
+    return df_square_masses, class_stats
+
+
+# ===================== 3. ДОПОЛНИТЕЛЬНЫЕ ВИЗУАЛИЗАЦИИ =====================
+
+def plot_o_vs_ai_correlation(spectra_list: List, save_path: Optional[str] = None):
+    """
+    Корреляция между количеством кислорода (O) и AI/CAI с цветовой кодировкой по массе.
+    """
+    all_data = []
+    for spectrum in spectra_list:
+        df_temp = pd.DataFrame({
+            'O': spectrum['O'],
+            'AI': spectrum['AI'],
+            'CAI': spectrum.get('CAI', spectrum['AI']),
+            'mass': spectrum['calc_mass'],
+            'intensity': spectrum['intensity'],
+            'class': spectrum.attrs['class']
+        })
+        all_data.append(df_temp)
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # O vs AI
+    sc1 = axes[0].scatter(df_all['O'], df_all['AI'], c=df_all['mass'], 
+                         s=df_all['intensity']/df_all['intensity'].max()*50 + 10,
+                         alpha=0.6, cmap='coolwarm', edgecolors='black', linewidth=0.3)
+    axes[0].set_xlabel('Number of Oxygen atoms (O)', fontsize=11)
+    axes[0].set_ylabel('Aromaticity Index (AI)', fontsize=11)
+    axes[0].set_title('O vs AI (colored by mass)', fontsize=12)
+    plt.colorbar(sc1, ax=axes[0], label='Mass (Da)')
+    axes[0].grid(True, alpha=0.3)
+    
+    # O vs CAI
+    sc2 = axes[1].scatter(df_all['O'], df_all['CAI'], c=df_all['mass'],
+                         s=df_all['intensity']/df_all['intensity'].max()*50 + 10,
+                         alpha=0.6, cmap='coolwarm', edgecolors='black', linewidth=0.3)
+    axes[1].set_xlabel('Number of Oxygen atoms (O)', fontsize=11)
+    axes[1].set_ylabel('Condensed Aromaticity Index (CAI)', fontsize=11)
+    axes[1].set_title('O vs CAI (colored by mass)', fontsize=12)
+    plt.colorbar(sc2, ax=axes[1], label='Mass (Da)')
+    axes[1].grid(True, alpha=0.3)
+    
+    plt.suptitle('Correlation of Oxygen Number with Aromaticity Indices', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Correlation plot saved to {save_path}")
+    
+    plt.show()
+    
+    return df_all
+
+
+def plot_mass_distribution_by_class(spectra_list: List, save_path: Optional[str] = None):
+    """
+    Распределение масс с разделением по классам.
+    """
+    all_data = []
+    for spectrum in spectra_list:
+        df_temp = pd.DataFrame({
+            'mass': spectrum['calc_mass'],
+            'intensity': spectrum['intensity'],
+            'class': spectrum.attrs['class']
+        })
+        # Повторяем массы с учетом интенсивности для построения гистограммы
+        mass_weighted = np.repeat(df_temp['mass'].to_numpy(),  # type: ignore
+                                  (df_temp['intensity'] / df_temp['intensity'].min() * 10).astype(int).clip(lower=1)) # type: ignore
+        all_data.append(pd.DataFrame({'mass': mass_weighted, 'class': spectrum.attrs['class']}))
+    
+    df_all = pd.concat(all_data, ignore_index=True)
+    
+    plt.figure(figsize=(12, 6))
+    
+    # KDE plot
+    for cls in df_all['class'].unique():
+        cls_data = df_all[df_all['class'] == cls]['mass']
+        sns.kdeplot(cls_data, label=cls, linewidth=2.5, alpha=0.7)
+    
+    plt.xlabel('Mass (Da)', fontsize=12)
+    plt.ylabel('Density', fontsize=12)
+    plt.title('Molecular Mass Distribution by Class (Intensity-Weighted)', fontsize=14, fontweight='bold')
+    plt.legend(title='Class', fontsize=10)
+    plt.grid(True, alpha=0.3)
+    
+    # Добавляем статистику
+    mass_stats = df_all.groupby('class')['mass'].describe()
+    print("\n===== Mass distribution statistics =====")
+    print(mass_stats.round(2))
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Mass distribution plot saved to {save_path}")
+    
+    plt.show()
+    
+    return mass_stats
+
+binned_stats = plot_metrics_vs_mass(
+spectra_list,
+metrics=['O', 'AI', 'CAI'],
+mass_bins=50,
+save_path='metrics_vs_mass.png'
+)
+    
+    # 2. Анализ средних масс для квадратов Ван-Кревелена
+df_square_masses, square_stats = analyze_square_masses(spectra_list,sqaure_data,hc_range=(0.5, 2.0),oc_range=(0.2, 0.8),n_hc=5,n_oc=4,save_path='square_mass_analysis.png')
+    
+    # 3. Корреляция O vs AI/CAI
+df_corr = plot_o_vs_ai_correlation(spectra_list, save_path='o_vs_ai_corr.png')
+mass_stats = plot_mass_distribution_by_class(spectra_list, save_path='mass_distribution.png')
 
 mass_data = metric_data.merge(sqaure_data, on=['sample_name','class'])
 mass_data = mass_data.merge(interval_distrib_data, on=['sample_name','class'])
@@ -105,6 +522,7 @@ X_scaled = scaler.fit_transform(X)
 pls_viz = PLSRegression(n_components=2, scale=False)
 X_scores, _ = pls_viz.fit_transform(X_scaled, y)
 
+print(combined_data)
 # Создание фигуры с несколькими подграфиками
 fig = plt.figure(figsize=(16, 10))
 
@@ -486,7 +904,7 @@ ax2 = axes[0, 1]
 ax2.plot(fpr, tpr, 'b-', linewidth=2, label='PLS детектор')
 ax2.plot([0, 1], [0, 1], 'k--', alpha=0.5, label='Случайный')
 ax2.scatter(fpr[optimal_idx], tpr[optimal_idx], color='green', s=100, 
-            marker='o', label=f'Оптимальный порог (AUC={np.trapz(tpr, fpr):.3f})')
+            marker='o', label=f'Оптимальный порог (AUC={scp.trapezoid(tpr, fpr):.3f})')
 
 # Отмечаем пороги на ROC
 for name, thresh in thresholds.items():
@@ -548,7 +966,7 @@ plt.show()
 # Подготовка данных
 y = combined_data['class'].map({'Baikal': 1, 'ADOM': 0}).to_numpy()
 X = combined_data.drop(columns=['sample_name','class','name']).to_numpy()
-
+print(X)
 # Стандартизация
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
@@ -2004,7 +2422,6 @@ warnings.filterwarnings('ignore')
 np.random.seed(42)
 n_baikal = 5
 n_solzanka = 39
-n_total = n_baikal + n_solzanka
 
 # Названия признаков в вашем порядке
 optical_descriptors = ['Ag_275', 'Ag_380', 'Asm_280', 'Asm_350', 'B1', 'B2', 'Component_1',
@@ -2073,7 +2490,7 @@ for train_index, test_index in loo.split(X_scaled):
     
     # 2. Обучаем классификатор на PLS-компонентах
     # C=1.0 - стандартная регуляризация. Можно подобрать через GridSearch, но на 4 образцах это сложно.
-    clf = LogisticRegression(penalty='l2', C=1.0, solver='lbfgs', max_iter=1000)
+    clf = LogisticRegression(penalty='l2', C=2.0, solver='lbfgs', max_iter=1000)
     clf.fit(X_train_pls, y_train)
     
     # 3. Предсказания
@@ -2155,7 +2572,7 @@ axes[1].grid(True, linestyle=':', alpha=0.6)
 # 3. Матрица ошибок (Confusion Matrix)
 cm = confusion_matrix(y, y_pred_loo)
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=axes[2], 
-            xticklabels=['Baikal', 'Solzan'], yticklabels=['Baikal', 'Solzan'])
+            xticklabels=['Байкал', 'Надшламовые воды'], yticklabels=['Байкал', 'Надшламовые воды'])
 axes[2].set_title('Матрица ошибок (LOO CV)')
 axes[2].set_ylabel('Истинный класс')
 axes[2].set_xlabel('Предсказанный класс')
@@ -2206,4 +2623,220 @@ svm_pipe = SVC(kernel='rbf', C=10, gamma='scale', class_weight='balanced')
 y_pred_svm_loo = cross_val_predict(svm_pipe, X_scaled, y, cv=loo)
 print("\n--- SVM (RBF) Classification Report (LOO) ---")
 print(classification_report(y, y_pred_svm_loo, target_names=['Baikal', 'Solzanka']))
+
+# ==============================================================================
+# 1. ПОДГОТОВКА ДАННЫХ (ОПТИКА)
+# ==============================================================================
+# Предположим, у вас есть DataFrame df_optical с колонками дескрипторов и колонкой 'Class'
+# Class: 0 - Baikal, 1 - Solzan
+# Если данных нет под рукой, раскомментируйте блок ниже для генерации синтетики для теста:
+
+optical_df=pd.read_csv(r"D:\lab\KNP-analysis\Received_data\Statistics\all_descriptors.csv")
+optical_df = optical_df[optical_df['sample_id'].str.contains('2025')]
+optical_df.drop(columns=['lambda','Sample','Subclass','pH','org_carbon','Eh'],inplace=True)
+optical_df.dropna(inplace=True)
+optical_df.rename(columns={'sample_id':'sample_name','Class':'class'},inplace=True)
+
+
+# !!! ВСТАВЬТЕ СЮДА ВАШИ РЕАЛЬНЫЕ ДАННЫЕ !!!
+X_opt_raw = optical_df.drop(columns=['sample_name','class']).to_numpy()
+y_opt = optical_df['class'].map({'Baikal': 0, 'ADOM': 1}).to_numpy()
+# Для демонстрации кода будем использовать переменные X_opt_raw и y_opt
+# Убедитесь, что они определены выше.
+
+# Масштабирование признаков
+scaler_opt = StandardScaler()
+X_opt_scaled = scaler_opt.fit_transform(X_opt_raw)
+
+# ==============================================================================
+# 2. ОБУЧЕНИЕ МОДЕЛИ И LOO-CV
+# ==============================================================================
+
+loo = LeaveOneOut()
+
+# Массивы для результатов
+y_pred_opt_loo = np.zeros_like(y_opt, dtype=int)
+y_prob_opt_loo = np.zeros_like(y_opt, dtype=float)
+decision_scores_opt_loo = np.zeros_like(y_opt, dtype=float)
+
+log_data_opt = []
+
+# Подбор оптимального числа компонент (можно зафиксировать 2 для сравнения с MS, 
+# но лучше проверить 2-3). Зафиксируем 2 для чистоты сравнения визуализаций.
+n_components_opt = 2 
+
+for train_index, test_index in loo.split(X_opt_scaled):
+    X_train, X_test = X_opt_scaled[train_index], X_opt_scaled[test_index]
+    y_train, y_test = y_opt[train_index], y_opt[test_index]
+    
+    # PLS
+    pls_fold = PLSRegression(n_components=n_components_opt)
+    X_train_pls = pls_fold.fit_transform(X_train, y_train)[0]
+    X_test_pls = pls_fold.transform(X_test)
+    
+    # Classifier
+    clf = LogisticRegression(penalty='l2', C=1.0, solver='lbfgs', max_iter=1000)
+    clf.fit(X_train_pls, y_train)
+    
+    # Predictions
+    pred_class = clf.predict(X_test_pls)[0]
+    pred_prob = clf.predict_proba(X_test_pls)[0, 1] # type: ignore
+    dec_score = clf.decision_function(X_test_pls)[0]
+    
+    y_pred_opt_loo[test_index] = pred_class
+    y_prob_opt_loo[test_index] = pred_prob
+    decision_scores_opt_loo[test_index] = dec_score
+    
+    log_data_opt.append({
+        'Index': test_index[0],
+        'True_Class': 'Baikal' if y_test[0] == 0 else 'Solzan',
+        'Pred_Class': 'Baikal' if pred_class == 0 else 'Solzan',
+        'Decision_Score': dec_score,
+        'Correct': y_test[0] == pred_class
+    })
+
+# ==============================================================================
+# 3. ОЦЕНКА КАЧЕСТВА
+# ==============================================================================
+
+print("--- ОПТИЧЕСКАЯ МОДЕЛЬ: Отчет о классификации (LOO CV) ---")
+print(classification_report(y_opt, y_pred_opt_loo, target_names=['Baikal (Opt)', 'Solzan (Opt)']))
+
+acc_opt = accuracy_score(y_opt, y_pred_opt_loo)
+try:
+    auc_opt = roc_auc_score(y_opt, y_prob_opt_loo)
+except ValueError:
+    auc_opt = np.nan
+
+print(f"Optical Accuracy (LOO): {acc_opt:.4f}")
+print(f"Optical AUC-ROC (LOO): {auc_opt:.4f}")
+
+df_results_opt = pd.DataFrame(log_data_opt)
+
+
+# ==============================================================================
+# ПРЕДВАРИТЕЛЬНАЯ ПОДГОТОВКА (Убедитесь, что переменные определены)
+# ==============================================================================
+# X_opt_raw: исходные оптические данные (массив или DataFrame)
+# y_opt: метки классов (0 - Baikal, 1 - Solzan)
+# feature_names_opt: список названий признаков (например, ['Ag_275', 'SUVA', ...])
+
+# Если у вас DataFrame, извлеките значения:
+# X_vals = X_opt_raw.values if isinstance(X_opt_raw, pd.DataFrame) else X_opt_raw
+# names = X_opt_raw.columns if isinstance(X_opt_raw, pd.DataFrame) else [f'Feat_{i}' for i in range(X_opt_raw.shape[1])]
+
+# Для примера используем стандартные имена, если они не заданы
+
+feature_names_opt = optical_names
+# Масштабирование
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_opt_raw)
+
+# Обучение финальной PLS модели на всех данных ДЛЯ ВИЗУАЛИЗАЦИИ
+n_comp = 2
+pls_model = PLSRegression(n_components=n_comp)
+X_scores = pls_model.fit_transform(X_scaled, y_opt)[0] # Scores (координаты образцов)
+X_loadings = pls_model.x_loadings_                       # Loadings (вклад признаков)
+
+# ==============================================================================
+# БЛОК ВИЗУАЛИЗАЦИИ "ОПТИЧЕСКИЙ ДАТЧИК"
+# ==============================================================================
+
+fig = plt.figure(figsize=(16, 12))
+gs = fig.add_gridspec(2, 2, hspace=0.3, wspace=0.3)
+
+# --- 1. PLS Score Plot с эллипсами доверия ---
+ax1 = fig.add_subplot(gs[0, 0])
+colors_map = {0: '#1f77b4', 1: '#ff7f0e'} # Синий и Оранжевый
+labels_map = {0: 'Baikal (Reference)', 1: 'Solzan (Pollution)'}
+
+for class_id in [0, 1]:
+    mask = y_opt == class_id
+    ax1.scatter(X_scores[mask, 0], X_scores[mask, 1], 
+                c=colors_map[class_id], label=labels_map[class_id], 
+                alpha=0.7, edgecolors='black', s=60, zorder=5)
+
+# Функция для рисования эллипса доверия
+def confidence_ellipse(x, y, ax, n_std=2.0, facecolor='none', **kwargs):
+    cov = np.cov(x, y)
+    pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+    ellipse_radius_x = np.sqrt(1 + pearson)
+    ellipse_radius_y = np.sqrt(1 - pearson)
+    ellipse = Ellipse((0, 0), width=ellipse_radius_x * n_std * 2, height=ellipse_radius_y * n_std * 2,
+                      facecolor=facecolor, **kwargs)
+    scale_x = np.sqrt(cov[0, 0]) * n_std
+    scale_y = np.sqrt(cov[1, 1]) * n_std
+    transf = transforms.Affine2D().rotate_deg(45).scale(scale_x, scale_y).translate(np.mean(x), np.mean(y))
+    ellipse.set_transform(transf + ax.transData)
+    return ax.add_patch(ellipse)
+
+for class_id in [0, 1]:
+    mask = y_opt == class_id
+    if np.sum(mask) > 2: # Нужны хотя бы 3 точки для ковариации
+        confidence_ellipse(X_scores[mask, 0], X_scores[mask, 1], ax1, 
+                           n_std=2.0, edgecolor=colors_map[class_id], linestyle='--', linewidth=1.5)
+
+ax1.set_xlabel(f'PLS Component 1 ({pls_model.x_scores_.std(axis=0)[0]:.2f} var)', fontsize=10)
+ax1.set_ylabel(f'PLS Component 2 ({pls_model.x_scores_.std(axis=0)[1]:.2f} var)', fontsize=10)
+ax1.set_title('Пространство PLS-компонент (Оптика)\nС эллипсами 95% доверия', fontsize=12, fontweight='bold')
+ax1.legend(loc='best')
+ax1.grid(True, linestyle=':', alpha=0.5)
+ax1.axhline(0, color='grey', linewidth=0.5)
+ax1.axvline(0, color='grey', linewidth=0.5)
+
+# --- 2. Loadings Plot (Вклад признаков) ---
+ax2 = fig.add_subplot(gs[0, 1])
+# Выбираем топ-10 самых важных признаков по сумме квадратов нагрузок
+loading_importance = np.sum(X_loadings**2, axis=1)
+top_idx = np.argsort(loading_importance)[::-1][:12]
+top_features = [feature_names_opt[i] for i in top_idx]
+top_loadings = X_loadings[top_idx, :]
+
+y_pos = np.arange(len(top_features))
+# Рисуем стрелки или бары для первой компоненты (самой важной)
+bars = ax2.barh(y_pos, top_loadings[:, 0], color='steelblue', alpha=0.8)
+ax2.set_yticks(y_pos)
+ax2.set_yticklabels(top_features, fontsize=9)
+ax2.invert_yaxis()  # Самый важный сверху
+ax2.set_xlabel('Нагрузка на Компоненту 1', fontsize=10)
+ax2.set_title('Топ-10 оптических маркеров разделения\n(Влияние на PLS-1)', fontsize=12, fontweight='bold')
+ax2.axvline(0, color='black', linewidth=0.8)
+ax2.grid(True, axis='x', linestyle=':', alpha=0.5)
+
+# Добавим подписи значений
+for i, v in enumerate(top_loadings[:, 0]):
+    ax2.text(v + (0.01 if v >= 0 else -0.01), i, f'{v:.2f}', va='center', fontsize=8)
+
+
+ax3 = fig.add_subplot(gs[1, 0])
+cm = confusion_matrix(y_opt, y_pred_opt_loo)
+sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax3, 
+            xticklabels=['Байкал', 'Надшламовые воды'], yticklabels=['Байкал', 'Надшламовые воды'])
+ax3.set_title('Матрица ошибок (LOO CV)')
+ax3.set_ylabel('Истинный класс')
+ax3.set_xlabel('Предсказанный класс')
+
+# --- 4. Корреляционная тепловая карта (топ признаков) ---
+ax4 = fig.add_subplot(gs[1, 1])
+# Берем топ-8 признаков для чистоты карты
+top_idx_corr = np.argsort(loading_importance)[::-1][:12]
+X_top = X_opt_raw[:, top_idx_corr]
+names_top = [feature_names_opt[i] for i in top_idx_corr]
+
+corr_matrix = np.corrcoef(X_top.T)
+mask = np.triu(np.ones_like(corr_matrix, dtype=bool))
+
+sns.heatmap(corr_matrix, mask=mask, annot=True, fmt='.2f', cmap='coolwarm', 
+            xticklabels=names_top, yticklabels=names_top, ax=ax4,
+            vmin=-1, vmax=1, linewidths=.5)
+ax4.set_title('Корреляция топ-8 оптических параметров', fontsize=12, fontweight='bold')
+plt.setp(ax4.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor", fontsize=8)
+plt.setp(ax4.get_yticklabels(), rotation=0, fontsize=8)
+
+# Общий заголовок
+plt.suptitle('Анализ оптических дескрипторов: Структура и Маркеры', fontsize=16, fontweight='bold', y=1.02)
+
+plt.show()
+
+
 

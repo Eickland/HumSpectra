@@ -213,7 +213,7 @@ def check_file_type(path: str) -> str:
     if ext in ["txt","csv"]:
         file_type = "csv_type"
     
-    elif ext == "xlsx":
+    elif ext == "xlsx" or ext == "xls":
         
         xlsx = pd.ExcelFile(path)
         sheet_num = len(xlsx.sheet_names)
@@ -888,3 +888,15 @@ def split_dataframes_by_class(dataframes: List[pd.DataFrame], type='subclass') -
     
     # Преобразуем словарь в список списков
     return list(class_groups.values())
+
+def delete_series_number(row:str):
+    'Удаляет номера образцов вида _000001 из имени'
+    
+    if '0000' in row:
+        
+        row_list = row.split(sep='_')[:-1]
+        return '_'.join(row_list)
+    
+    else:
+        return row
+

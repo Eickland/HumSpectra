@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="HumSpectra",
-    version="0.5.8",
+    version="0.6.23",
     author="Kirill",
     author_email="mnbv21228@mail.ru",
     description="Обработка спектров уф и флуоресценции",
@@ -26,6 +26,7 @@ setuptools.setup(
         "transliterate",
         "setuptools",
         "openpyxl",
-        "frozendict"
+        "frozendict",
+        "plotly"
     ],
 )
