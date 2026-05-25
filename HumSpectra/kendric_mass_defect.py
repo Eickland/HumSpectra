@@ -13,14 +13,14 @@ class KendrickMassCalculator:
     
     # Точные атомные массы (в Да)
     ATOMIC_MASSES = {
-        'C': 12.0000000,   # Углерод-12 (стандарт)
+        'C': 12.0000000,
         'H': 1.00782503223,
         'O': 15.99491461957,
         'N': 14.00307400443,
         'S': 31.9720711744,
-        'P': 30.97376199842,  # Фосфор (опционально)
-        'Na': 22.98976928,     # Натрий (для аддуктов)
-        'K': 38.96370649,      # Калий
+        'P': 30.97376199842,
+        'Na': 22.98976928,
+        'K': 38.96370649,
     }
     
     def __init__(self):
@@ -188,10 +188,3 @@ def kendrick(self, fragment_formula: str = 'CH2', method: str = 'floor',
         return result
     else:
         return self
-
-
-# Пример использования с вашим классом Spectrum
-def add_kendrick_methods(Spectrum):
-    """Добавляет метод kendrick в класс Spectrum"""
-    Spectrum.kendrick = kendrick
-    return Spectrum
