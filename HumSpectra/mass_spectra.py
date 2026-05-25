@@ -1137,9 +1137,8 @@ def fit_kernel(
     kde_err = pd.DataFrame(data=out, columns=['i','ppm'])
     
     #smooth data
-    new_row = pd.DataFrame([savgol_filter(kde_err['ppm'].to_numpy(), 31, 3)], 
-                       columns=kde_err.columns)
-    kde_err = pd.concat([kde_err, new_row], ignore_index=True)
+    kde_err.loc[len(kde_err)] = [len(kde_err), *savgol_filter(kde_err['ppm'].to_numpy(), 31, 3)]
+
     xmin = min(mass)
     xmax = max(mass)
     
