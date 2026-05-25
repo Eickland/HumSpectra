@@ -1799,7 +1799,7 @@ def interactive_spectrum_plotly(spec: pd.DataFrame,
             x=[mass[i], mass[i]],
             y=[0, intensity[i]],
             mode='lines',
-            line=dict(color='navy', width=1.5, opacity=0.7),
+            line=dict(color='navy', width=1.5),
             showlegend=False,
             hoverinfo='skip'
         ))
