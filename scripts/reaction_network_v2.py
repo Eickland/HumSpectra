@@ -187,6 +187,7 @@ class DifferenceNetwork:
         'OCH3': 31.018390,          # Метоксилирование
         'COOH': 44.997655,          # Карбоксильная группа
         'OH': 17.002740,            # Гидроксильная группа
+        '-2H+O': 13.979264,         # Alcohol to carboxylic acid or primary amine to nitro
     }
     
     def __init__(self, 
