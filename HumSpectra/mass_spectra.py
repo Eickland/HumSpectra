@@ -1137,13 +1137,13 @@ def fit_kernel(
     kde_err = pd.DataFrame(data=out, columns=['i','ppm'])
     
     #smooth data
-    kde_err.loc['ppm'] = savgol_filter(kde_err['ppm'].to_numpy(), 31, 3) #type: ignore
-    
+    kde_err['ppm'] = savgol_filter(kde_err['ppm'].to_numpy(), 31, 3) # type: ignore
+
     xmin = min(mass)
     xmax = max(mass)
     
     kde_err['mass'] = np.linspace(xmin, xmax, 100)
-
+    
     ymin = -err_ppm
     ymax = err_ppm
 
