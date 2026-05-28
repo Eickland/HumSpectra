@@ -610,10 +610,10 @@ class OpticalDataAnalyzer:
         
         Args:
             normalization: метод нормализации
-                - 'max': нормализация по максимуму (0-1)
-                - 'sum': нормализация к сумме = 1 (доли)
+                - 'max': нормализация по максимуму по строкам (0-1)
+                - 'sum': нормализация к сумме = 1 по строкам (доли)
                 - 'none': без нормализации
-                - 'zscore': z-score нормализация
+                - 'zscore': z-score нормализация по строкам
         
         Returns:
             pandas.DataFrame: таблица с долями компонентов
@@ -634,34 +634,26 @@ class OpticalDataAnalyzer:
         
         loadings_df = pd.DataFrame(sample_factor, index=index, columns=columns)
         
-        
-        # Применяем нормализацию
+        # Применяем нормализацию ПО СТРОКАМ
         if normalization == 'max':
-            # Нормализация по максимуму в каждом компоненте
-            loadings_df = loadings_df / loadings_df.abs().max()
+            # Нормализация по максимуму в каждой строке (0-1)
+            loadings_df = loadings_df.div(loadings_df.abs().max(axis=1), axis=0)
         elif normalization == 'sum':
-            # Нормализация к сумме = 1 (доли)
-            loadings_df = loadings_df.div(loadings_df.sum(axis=1), axis=0)
-        elif normalization == 'row_sum':
-            # Нормализация по строкам (сумма по образцу = 1)
+            # Нормализация к сумме = 1 по строкам (доли)
             loadings_df = loadings_df.div(loadings_df.sum(axis=1), axis=0)
         elif normalization == 'zscore':
-            # Z-score нормализация
-            loadings_df = (loadings_df - loadings_df.mean()) / loadings_df.std()
-        elif normalization == 'percentage':
-            loadings_df = loadings_df.abs().div(loadings_df.abs().sum(axis=1), axis=0) * 100
+            # Z-score нормализация по строкам
+            loadings_df = loadings_df.sub(loadings_df.mean(axis=1), axis=0).div(loadings_df.std(axis=1), axis=0)
         elif normalization == 'none':
             # Без нормализации
             pass
         else:
             raise ValueError(f"Неизвестный метод нормализации: {normalization}")
         
-        if self.sample_names is None:
-            
-            raise ValueError('Нулевое к-во имен спектров')
+        # Добавляем классы (этот код не зависит от нормализации)
+        loadings_df["Class"] = [ut.extract_class_from_name(sample) for sample in self.sample_names] # type: ignore
+        loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names] # type: ignore
         
-        loadings_df["Class"] = [ut.extract_class_from_name(sample) for sample in self.sample_names]
-        loadings_df["Subclass"] = [ut.extract_subclass_from_name(sample) for sample in self.sample_names]
         return loadings_df
     
     def get_relative_contributions(self, method='absolute'):
