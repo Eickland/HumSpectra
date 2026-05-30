@@ -1083,6 +1083,10 @@ class ComponentVisualizer(OpticalDataAnalyzer):
         """
         
         loadings_df = self.get_component_loadings(normalization=normalization)
+        loadings_df = loadings_df.replace('Storage', 'Карта', regex=True)
+        loadings_df = loadings_df.replace('Baikal', 'Байкал', regex=False)
+        loadings_df.columns = loadings_df.columns.str.replace('Storage', 'Карта', regex=True)
+        loadings_df.columns = loadings_df.columns.str.replace('Baikal', 'Байкал', regex=False)
         
         if group_by_subclass and group_type in loadings_df.columns:
             # Группируем по подклассам
@@ -1095,13 +1099,10 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             # Создаем фигуру с двумя subplots
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] + 4),dpi=300)
             
-            bar_data = grouped_data.replace('Storage', 'Карта', regex=True)
-            bar_data = bar_data.replace('Baikal', 'Байкал', regex=False)
-            bar_data.columns = bar_data.columns.str.replace('Storage', 'Карта', regex=True)
-            bar_data.columns = bar_data.columns.str.replace('Baikal', 'Байкал', regex=False)
+
             
             # 1. Столбчатая диаграмма для группированных данных
-            bar_data.plot(kind='bar', stacked=True, ax=ax1)
+            grouped_data.plot(kind='bar', stacked=True, ax=ax1)
             ax1.set_ylabel('Доля компонента, %')
             ax1.set_title('Относительные вклады компонентов в подклассы (средние значения)')
             ax1.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
