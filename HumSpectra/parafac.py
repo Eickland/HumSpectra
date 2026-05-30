@@ -1097,6 +1097,8 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             
             bar_data = grouped_data.replace('Storage', 'Карта', regex=True)
             bar_data = bar_data.replace('Baikal', 'Байкал', regex=False)
+            bar_data.columns = bar_data.columns.str.replace('Storage', 'Карта', regex=True)
+            bar_data.columns = bar_data.columns.str.replace('Baikal', 'Байкал', regex=False)
             
             # 1. Столбчатая диаграмма для группированных данных
             bar_data.plot(kind='bar', stacked=True, ax=ax1)
