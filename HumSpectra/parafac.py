@@ -1095,8 +1095,11 @@ class ComponentVisualizer(OpticalDataAnalyzer):
             # Создаем фигуру с двумя subplots
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(figsize[0], figsize[1] + 4),dpi=300)
             
+            bar_data = grouped_data.replace('Storage', 'Карта', regex=True)
+            bar_data = bar_data.replace('Baikal', 'Байкал', regex=False)
+            
             # 1. Столбчатая диаграмма для группированных данных
-            grouped_data.plot(kind='bar', stacked=True, ax=ax1)
+            bar_data.plot(kind='bar', stacked=True, ax=ax1)
             ax1.set_ylabel('Доля компонента, %')
             ax1.set_title('Относительные вклады компонентов в подклассы (средние значения)')
             ax1.legend(title='Компоненты', bbox_to_anchor=(1.05, 1), loc='upper left')
@@ -1121,11 +1124,10 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 for cls in class_order:
                     plot_order.append(f"{comp}_{cls}")
             
-            box_data = melted_data.replace('Storage', 'Карта', regex=True)
-            box_data = box_data.replace('Baikal', 'Байкал', regex=False)
+
             
             # Создаем boxplot с правильным порядком
-            boxplot = sns.boxplot(data=box_data, x='Component_Class', y='Loading', 
+            boxplot = sns.boxplot(data=melted_data, x='Component_Class', y='Loading', 
                                 hue='Component', ax=ax2, order=plot_order, whis=outlier_whis)
             
             ax2.set_ylabel('Доля компонента, %')
