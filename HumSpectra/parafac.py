@@ -1121,8 +1121,11 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 for cls in class_order:
                     plot_order.append(f"{comp}_{cls}")
             
+            box_data = melted_data.replace('Storage', 'Карта', regex=True)
+            box_data = box_data.replace('Baikal', 'Байкал', regex=False)
+            
             # Создаем boxplot с правильным порядком
-            boxplot = sns.boxplot(data=melted_data, x='Component_Class', y='Loading', 
+            boxplot = sns.boxplot(data=box_data, x='Component_Class', y='Loading', 
                                 hue='Component', ax=ax2, order=plot_order, whis=outlier_whis)
             
             ax2.set_ylabel('Доля компонента, %')
