@@ -10,9 +10,9 @@ from matplotlib.axes import Axes
 import warnings
 import os
 
-import HumSpectra.mass_spectra as ms
+import HumSpectra.mass_spectra.mass_spectra as ms
 import HumSpectra.utilits as ut
-import HumSpectra.mass_visualizer as mv
+import HumSpectra.mass_spectra.mass_visualizer as mv
 
 def _copy(func):
     """

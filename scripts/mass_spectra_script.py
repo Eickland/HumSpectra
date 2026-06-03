@@ -1,9 +1,9 @@
 from pyopenms import * # type: ignore
 from pathlib import Path
 import pandas as pd
-import HumSpectra.mass_spectra as ms
-import HumSpectra.mass_visualizer as msv
-import HumSpectra.mass_descriptors as md
+import HumSpectra.mass_spectra.mass_spectra as ms
+import HumSpectra.mass_spectra.mass_visualizer as msv
+import HumSpectra.mass_spectra.mass_descriptors as md
 import HumSpectra.utilits as ut
 import matplotlib.pyplot as plt
 import numpy as np

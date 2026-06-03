@@ -11,9 +11,9 @@ from itertools import combinations
 from contextlib import contextmanager
 from sklearn.svm import SVC
 from scipy import stats
-import HumSpectra.mass_spectra as ms
+import HumSpectra.mass_spectra.mass_spectra as ms
 import HumSpectra.utilits as ut
-import HumSpectra.mass_descriptors as md
+import HumSpectra.mass_spectra.mass_descriptors as md
 import scipy.integrate as scp
 
 import warnings
