@@ -1824,3 +1824,13 @@ def interactive_spectrum_plotly(spec: pd.DataFrame,
     
     return fig
 
+def show_error(self) -> None:
+    """
+    Plot error map from ErrorTable class data
+    """
+
+    fig, ax = plt.subplots(figsize=(4,4), dpi=75)
+    ax.plot(self['mass'], self['ppm'])
+    ax.set_xlabel('m/z, Da')
+    ax.set_ylabel('error, ppm')
+ 

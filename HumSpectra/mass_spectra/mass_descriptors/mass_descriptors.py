@@ -10,9 +10,11 @@ from matplotlib.axes import Axes
 import warnings
 import os
 
-import HumSpectra.mass_spectra.mass_spectra as ms
 import HumSpectra.utilits as ut
-import HumSpectra.mass_spectra.mass_visualizer as mv
+
+import mass_spectra.utilits.utilits as ms_utils
+import mass_spectra.calc_process.calc_process as ms_calc
+import mass_spectra.visual.visual as mv
 
 def _copy(func):
     """
@@ -73,7 +75,7 @@ def cram(self) -> pd.DataFrame:
             return False
         return True
 
-    table = ms.merge_isotopes(self.copy(deep=True))
+    table = ms_utils.merge_isotopes(self.copy(deep=True))
     self['CRAM'] = table.apply(check, axis=1)
 
     return self
@@ -126,7 +128,7 @@ def cai(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
 
     for element in "CONSP":
         if element not in table:
@@ -151,7 +153,7 @@ def dbe_ai(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
 
     for element in "CHONPS":
         if element not in table:
@@ -176,7 +178,7 @@ def dbe(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
 
     for element in "CHON":
         if element not in table:
@@ -201,7 +203,7 @@ def dbe_o(self) -> pd.DataFrame:
     if "DBE" not in self:
         self = dbe(self)
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
     self['DBE-O'] = table['DBE'] - table['O']
 
     return self
@@ -221,7 +223,7 @@ def dbe_oc(self) -> pd.DataFrame:
     if "DBE" not in self:
         self = dbe(self)
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
     self['DBE-OC'] = (table['DBE'] - table['O'])/table['C']
 
     return self
@@ -241,7 +243,7 @@ def hc_oc(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
     self['H/C'] = table['H']/table['C']
     self['O/C'] = table['O']/table['C']
 
@@ -260,7 +262,7 @@ def kendrick(self) -> pd.DataFrame:
     """
 
     if 'calc_mass' not in self:
-        self = calc_mass(self)
+        self = ms_calc.calc_mass(self)
 
     self['Ke'] = self['calc_mass'] * 14/14.01565
     self['KMD'] = np.floor(self['calc_mass'].values.astype('float')) - np.array(self['Ke'].values)
@@ -296,7 +298,7 @@ def nosc(self) -> pd.DataFrame:
     if "assign" not in self:
         raise Exception("Spectrum is not assigned")
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
 
     for element in "CHONS":
         if element not in table:
@@ -334,7 +336,7 @@ def mol_class(self, how: Optional[str] = None) -> pd.DataFrame:
     if 'H/C' not in self or 'O/C' not in self:
         self = hc_oc(self)
 
-    table = ms.merge_isotopes(self)
+    table = ms_utils.merge_isotopes(self)
 
     for element in "CHON":
         if element not in table:
@@ -442,7 +444,7 @@ def get_mol_class(self, how_average: str = "weight", how: Optional[str] = None) 
     Perminova I. V. Pure and Applied Chemistry. 2019. Vol. 91, № 5. P. 851-864
     """
 
-    self = mol_class(ms.drop_unassigned(self),how=how)
+    self = mol_class(ms_utils.drop_unassigned(self),how=how)
     count_density = len(self)
     sum_density = self["intensity"].sum()
 
@@ -527,7 +529,7 @@ def get_dbe_vs_o(self,
     if 'DBE' not in self:
         self = dbe(self)
     
-    self = ms.drop_unassigned(self)
+    self = ms_utils.drop_unassigned(self)
     if olim is None:
         no = list(range(int(self['O'].min())+5, int(self['O'].max())-5))
     else:
@@ -625,7 +627,7 @@ def get_squares_vk(self,
     
     # Ensure H/C and O/C columns exist
     if 'H/C' not in self or 'O/C' not in self:
-        self = ms.drop_unassigned(hc_oc(self))
+        self = ms_utils.drop_unassigned(hc_oc(self))
     
     total_intensity = self['intensity'].sum() if how_average == 'weight' else len(self)
     squares_data = []
@@ -774,7 +776,7 @@ def get_squares_vk_auto(self,
     
     # Ensure H/C and O/C columns exist
     if 'H/C' not in self or 'O/C' not in self:
-        self = ms.drop_unassigned(hc_oc(self))
+        self = ms_utils.drop_unassigned(hc_oc(self))
     
     total_intensity = self['intensity'].sum() if how_average == 'weight' else len(self)
     squares_data = []
@@ -1000,8 +1002,8 @@ def get_mol_metrics(self,
     """
 
     #self = self.calc_all_metrics().drop_unassigned().normalize()
-    self = ms.normalize(
-        ms.drop_unassigned(
+    self = ms_calc.normalize(
+        ms_utils.drop_unassigned(
             calc_all_metrics(self)
             )
             )
@@ -1092,114 +1094,6 @@ def calculate_metrics_for_spectra_list(
     return result_df
 
 @_copy
-def calc_mass(self,debug=False) -> pd.DataFrame:
-    """
-    Calculate mass from assigned brutto formulas and elements exact masses
-
-    Add column "calc_mass" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-    
-    elems = ms.find_elements(self)
-    
-    if debug:
-        print(elems)
-        print(self.loc[:,elems])
-        
-    table = self.loc[:,elems].copy(deep=True)
-    
-    masses = get_elements_masses(elems)
-
-    self["calc_mass"] = table.multiply(masses).sum(axis=1)
-    self["calc_mass"] = np.round(self["calc_mass"], 6)
-    self.loc[self["calc_mass"] == 0, "calc_mass"] = np.nan
-
-    return self
-
-@_copy
-def _calc_sign(self) -> str:
-    """
-    Determine sign from mass and calculated mass
-
-    '-' for negative mode
-    '+' for positive mode
-    '0' for neutral
-
-    Return
-    ------
-    str            
-    """
-
-    self = ms.drop_unassigned(self)
-
-    if "calc_mass" not in self:
-        self = calc_mass(self)
-
-    if "charge" not in self.columns:
-        self["charge"] = 1
-
-    value = (self["calc_mass"]/self["charge"] - self["mass"]).mean()
-    value = np.round(value,4)
-    if value > 1:
-        return '-'
-    elif value > 0.0004 and value < 0.01:
-        return '+'
-    else:
-        return '0'
-
-@_copy
-def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
-    """
-    Calculate relative and absolute error of assigned peaks from measured and calculated masses
-
-    Add columns "abs_error" and "rel_error" to self
-
-    Parameters
-    ----------
-    sign: {'-', '+', '0'}
-        Optional. Default None and get from metatdata or calculated by self. 
-        Mode in which mass spectrum was gotten. 
-        '-' for negative mode
-        '+' for positive mode
-        '0' for neutral
-    
-    Return
-    ------
-    Spectrum
-    """
-
-    if "calc_mass" not in self:
-        self = calc_mass(self)
-
-    if "charge" not in self.columns:
-        self["charge"] = 1
-
-    if sign is None:
-        if 'sign' in self.attrs:
-            sign = self.attrs['sign']
-        else:
-            sign = _calc_sign(self)
-
-    if sign == '-':
-        self["abs_error"] = ((self["mass"] + (- 0.00054858 + 1.007825)) * self["charge"]) - self["calc_mass"] #-electron + proton
-    elif sign == '+':
-        self["abs_error"] = ((self["mass"] + 0.00054858) * self["charge"]) - self["calc_mass"]#+electron
-    elif sign == '0':
-        self["abs_error"] = (self["mass"] * self["charge"]) - self["calc_mass"]
-    else:
-        raise ValueError('Sended sign or sign in attrs is not correct. May be "+","-","0"')
-    
-    self["rel_error"] = self["abs_error"] / self["mass"] * 1e6
-    
-    return self
-
-@_copy
 def brutto(self) -> pd.DataFrame:
     """
     Calculate string with brutto from assign table
@@ -1240,33 +1134,6 @@ def brutto(self) -> pd.DataFrame:
     self['brutto'] = self.apply(build_row, axis=1)
     return self
 
-def get_elements_masses(elems: Sequence[str]) -> np.ndarray :
-    """
-    Get elements masses from list
-
-    Parameters
-    ----------
-    elems: Sequence[str]
-        List of elements. Example: ['C', 'H', 'N', 'C_13', 'O']
-
-    Return
-    ------
-    numpy array
-    """
-    
-    elements = ms.elements_table()    
-    elems_masses = []
-
-    for el in elems:
-        if '_' not in el:
-            temp = elements.loc[elements['element']==el].sort_values(by='abundance',ascending=False).reset_index(drop=True)
-            elems_masses.append(temp.loc[0,'mass'])
-        else:
-            temp = elements.loc[elements['element_isotop']==el].reset_index(drop=True)
-            elems_masses.append(temp.loc[0,'mass'])
-
-    return np.array(elems_masses)
-
 @_copy
 def calc_all_metrics(self) -> pd.DataFrame:
     """
@@ -1277,8 +1144,8 @@ def calc_all_metrics(self) -> pd.DataFrame:
     Spectrum
     """
 
-    self = calc_mass(self)
-    self = calc_error(self)
+    self = ms_calc.calc_mass(self)
+    self = ms_calc.calc_error(self)
     self = dbe(self)
     self = dbe_o(self)
     self = ai(self)

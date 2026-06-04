@@ -4,7 +4,7 @@ from typing import Union, Optional, Dict, Tuple
 from collections import Counter
 import re
 
-import HumSpectra.mass_spectra.mass_descriptors as md
+import HumSpectra.mass_spectra.mass_descriptors.mass_descriptors as md
 
 class KendrickMassCalculator:
     """

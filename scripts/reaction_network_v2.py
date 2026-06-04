@@ -2,8 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as pth
 import seaborn as sns
-import HumSpectra.mass_spectra.mass_descriptors as md
-import HumSpectra.mass_spectra.kendric_mass_defect as kmd
+import HumSpectra.mass_spectra.mass_descriptors.mass_descriptors as md
+import HumSpectra.mass_spectra.kendric.kendric as kmd
 from collections import defaultdict
 import numpy as np
 import time
