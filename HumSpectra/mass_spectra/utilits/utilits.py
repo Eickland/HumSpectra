@@ -50,7 +50,7 @@ def convert_mass_spectra_batch(source_dir, output_base, program_location=
         # Запускаем PowerShell скрипт
         result = subprocess.run([
             'powershell', '-Command', powershell_script
-        ], capture_output=True, text=True, check=True)
+        ], capture_output=True, text=True, check=True, encoding='utf8')
         
         print("✅ Пакетная конвертация завершена успешно!")
         print("📋 Вывод PowerShell:")
