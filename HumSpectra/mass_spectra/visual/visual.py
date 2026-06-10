@@ -970,9 +970,9 @@ def FormulaSpecData(specList, draw=True):
     for i in range(len(specList)):
         spec = specList[i]
 
-        sample_list.append(spec.metadata["name"])
+        sample_list.append(spec.attrs["name"])
 
-        all_formula_list.append(spec.table.dropna().shape[0])
+        all_formula_list.append(spec.dropna().shape[0])
 
         dict = spec.table[["N","S"]].value_counts().to_dict()
 
