@@ -960,13 +960,16 @@ def CalcMetricSpectrum(specList,func="weight",draw=True):
     return data_prev # type: ignore
 
 def FormulaSpecData(specList, draw=True):
+    
     all_formula_list = []
     sample_list = []
     CHON_formula_list = []
     CHOS_formula_list = []
     CHONS_formula_list = []
     dict_list = []
+    
     data = pd.DataFrame()
+    
     for i in range(len(specList)):
         spec = specList[i]
 
@@ -979,29 +982,42 @@ def FormulaSpecData(specList, draw=True):
         result_CHON = [key for key in dict.keys() if key[0] > 0 and key[1] < 1]
         result_CHOS = [key for key in dict.keys() if key[0] < 1 and key[1] > 0]
         result_CHONS = [key for key in dict.keys() if key[0] > 0 and key[1] > 0]
+        
         sum_CHON = []
         sum_CHOS = []
         sum_CHONS = []
+        
         for res in result_CHON:
             sum_CHON.append(dict[res])
+            
         for res in result_CHOS:
             sum_CHOS.append(dict[res])
+            
         for res in result_CHONS:
             sum_CHONS.append(dict[res])
+            
         CHON_formula_list.append(sum(sum_CHON))
         CHOS_formula_list.append(sum(sum_CHOS))
         CHONS_formula_list.append(sum(sum_CHONS))
+        
         dict_list.append(dict)
+        
     data["All formulas"] = all_formula_list
     data["CHON, formulas"] = CHON_formula_list
     data["CHOS, formulas"] = CHOS_formula_list
     data["CHONS, formulas"] = CHONS_formula_list
     data["Dict, {N, S}: count"] = dict_list
     data["Sample name"] = sample_list
+    
     data.set_index("Sample name",inplace=True)
 
     if draw:
-        data.plot(kind='bar', stacked=False, figsize=(10, 8))
+        ax = data.plot(kind='bar', stacked=False, figsize=(10, 8))
+        
+        for container in ax.containers:
+            ax.bar_label(container, label_type='edge', fmt='%d',  # type: ignore
+                        fontsize=9, rotation=0, padding=2)
+            
         plt.xticks(rotation=30)
         plt.tight_layout()
         
