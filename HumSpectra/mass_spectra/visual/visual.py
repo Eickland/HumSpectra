@@ -974,7 +974,7 @@ def FormulaSpecData(specList, draw=True):
 
         all_formula_list.append(spec.dropna().shape[0])
 
-        dict = spec.table[["N","S"]].value_counts().to_dict()
+        dict = spec[["N","S"]].value_counts().to_dict()
 
         result_CHON = [key for key in dict.keys() if key[0] > 0 and key[1] < 1]
         result_CHOS = [key for key in dict.keys() if key[0] < 1 and key[1] > 0]
