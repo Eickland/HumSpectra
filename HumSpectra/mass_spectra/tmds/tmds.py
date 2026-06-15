@@ -68,7 +68,7 @@ def assign_by_tmds_optimize(
     if tmds_spec is None:
         tmds_spec = calc(spec, p=p, C13_filter=C13_filter) #by varifiy p-value we can choose how much mass-diff we will take
         tmds_spec = assign_tmds(tmds_spec,max_num=max_num, brutto_dict=tmds_brutto_dict)
-        tmds_spec = ms_calc.calc_mass(tmds_spec)
+        tmds_spec = ms_utils.calc_mass(tmds_spec)
 
     #prepare tmds table
     tmds = tmds_spec.sort_values(by='intensity', ascending=False).reset_index(drop=True)
@@ -125,7 +125,7 @@ def assign_by_tmds_optimize(
 
     assign_true = pd.concat([assign_true, assign_false], ignore_index=True).sort_values(by='mass').reset_index(drop=True)
     
-    out = ms_calc.calc_mass(assign_true)
+    out = ms_utils.calc_mass(assign_true)
 
     out=out[out['calc_mass'].isnull() | ~out[out['calc_mass'].notnull()].duplicated(subset='calc_mass',keep='first')] 
     spec = out.sort_values(by='mass').reset_index(drop=True)

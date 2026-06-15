@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from ..utilits import utilits as ms_utils
 from ..brutto import brutto as ms_brutto
+from ..decorators import decorators as ms_dec
 
 @staticmethod
 def md_error_map(
@@ -192,7 +193,7 @@ def extrapolate(self, ranges:Optional[Tuple[float, float]] = None) -> pd.DataFra
 
     return err
 
-@ms_utils._copy
+@ms_dec._copy
 def normalize(self, how:str='sum') -> pd.DataFrame:
     """
     Intensity normalize by intensity
@@ -225,38 +226,8 @@ def normalize(self, how:str='sum') -> pd.DataFrame:
 
     return self
 
-@ms_utils._copy
-def calc_mass(self,debug=False) -> pd.DataFrame:
-    """
-    Calculate mass from assigned brutto formulas and elements exact masses
 
-    Add column "calc_mass" to self
-
-    Return
-    ------
-    Spectrum
-    """
-
-    if "assign" not in self:
-        raise Exception("Spectrum is not assigned")
-    
-    elems = ms_utils.find_elements(self)
-    
-    if debug:
-        print(elems)
-        print(self.loc[:,elems])
-        
-    table = self.loc[:,elems].copy(deep=True)
-    
-    masses = get_elements_masses(elems)
-
-    self["calc_mass"] = table.multiply(masses).sum(axis=1)
-    self["calc_mass"] = np.round(self["calc_mass"], 6)
-    self.loc[self["calc_mass"] == 0, "calc_mass"] = np.nan
-
-    return self
-
-@ms_utils._copy
+@ms_dec._copy
 def _calc_sign(self) -> str:
     """
     Determine sign from mass and calculated mass
@@ -273,7 +244,7 @@ def _calc_sign(self) -> str:
     self = ms_utils.drop_unassigned(self)
 
     if "calc_mass" not in self:
-        self = calc_mass(self)
+        self = ms_utils.calc_mass(self)
 
     if "charge" not in self.columns:
         self["charge"] = 1
@@ -287,7 +258,7 @@ def _calc_sign(self) -> str:
     else:
         return '0'
 
-@ms_utils._copy
+@ms_dec._copy
 def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
     """
     Calculate relative and absolute error of assigned peaks from measured and calculated masses
@@ -309,7 +280,7 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
     """
 
     if "calc_mass" not in self:
-        self = calc_mass(self)
+        self = ms_utils.calc_mass(self)
 
     if "charge" not in self.columns:
         self["charge"] = 1
@@ -333,29 +304,3 @@ def calc_error(self, sign: Optional[str] = None) -> pd.DataFrame:
     
     return self
 
-def get_elements_masses(elems: Sequence[str]) -> np.ndarray :
-    """
-    Get elements masses from list
-
-    Parameters
-    ----------
-    elems: Sequence[str]
-        List of elements. Example: ['C', 'H', 'N', 'C_13', 'O']
-
-    Return
-    ------
-    numpy array
-    """
-    
-    elements = ms_brutto.elements_table()    
-    elems_masses = []
-
-    for el in elems:
-        if '_' not in el:
-            temp = elements.loc[elements['element']==el].sort_values(by='abundance',ascending=False).reset_index(drop=True)
-            elems_masses.append(temp.loc[0,'mass'])
-        else:
-            temp = elements.loc[elements['element_isotop']==el].reset_index(drop=True)
-            elems_masses.append(temp.loc[0,'mass'])
-
-    return np.array(elems_masses)

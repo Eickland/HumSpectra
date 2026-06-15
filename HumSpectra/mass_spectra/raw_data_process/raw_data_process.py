@@ -3,7 +3,7 @@ import pandas as pd
 from pyopenms import MSExperiment, MzMLFile
 from typing import Optional
 
-from ..utilits import utilits as ms_utils
+from ..decorators import decorators as ms_dec
 
 def extract_mass_list_percentile(mzml_file, ms_level=1, rt_range=None, 
                                low_percentile:float=99,
@@ -62,7 +62,7 @@ def extract_mass_list_percentile(mzml_file, ms_level=1, rt_range=None,
         'intensity': all_intensities_filtered,
     })
 
-@ms_utils._copy
+@ms_dec._copy
 def noise_filter(self,
                     force: float = 1.5,
                     intensity: Optional[float] = None,
@@ -124,7 +124,7 @@ def noise_filter(self,
 
     return self
 
-@ms_utils._copy
+@ms_dec._copy
 def filter_by_C13(
     self, 
     rel_error: float = 0.5,

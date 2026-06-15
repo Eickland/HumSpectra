@@ -262,7 +262,7 @@ def kendrick(self) -> pd.DataFrame:
     """
 
     if 'calc_mass' not in self:
-        self = ms_calc.calc_mass(self)
+        self = ms_utils.calc_mass(self)
 
     self['Ke'] = self['calc_mass'] * 14/14.01565
     self['KMD'] = np.floor(self['calc_mass'].values.astype('float')) - np.array(self['Ke'].values)
@@ -1144,7 +1144,7 @@ def calc_all_metrics(self) -> pd.DataFrame:
     Spectrum
     """
 
-    self = ms_calc.calc_mass(self)
+    self = ms_utils.calc_mass(self)
     self = ms_calc.calc_error(self)
     self = dbe(self)
     self = dbe_o(self)

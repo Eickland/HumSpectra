@@ -100,7 +100,7 @@ def assign_error(
 
     spectr = copy.deepcopy(spec)
     spectr = ms_assign.assign_optimized(spectr,rel_error=ppm, brutto_dict=brutto_dict, sign=mode)
-    spectr = ms_calc.calc_error(ms_calc.calc_mass(spectr))
+    spectr = ms_calc.calc_error(ms_utils.calc_mass(spectr))
 
     error_table = spectr
     error_table = error_table.loc[:,['mass','rel_error']]

@@ -4,7 +4,7 @@ from typing import Union, Optional, Dict, Tuple
 from collections import Counter
 import re
 
-from ..calc_process import calc_process as ms_calc
+from ..utilits import utilits as ms_utils
 
 class KendrickMassCalculator:
     """
@@ -152,7 +152,7 @@ def kendrick(self, fragment_formula: str = 'CH2', method: str = 'floor',
     
     # Проверяем наличие колонки с массами
     if 'calc_mass' not in self:
-        self = ms_calc.calc_mass(self)
+        self = ms_utils.calc_mass(self)
     
     # Получаем параметры для выбранного фрагмента
     nominal_frag, exact_frag, scale_factor = KendrickMassCalculator.get_kendrick_parameters(fragment_formula)
