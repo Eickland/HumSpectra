@@ -5,6 +5,7 @@ import seaborn as sns
 from matplotlib.axes import Axes
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import re
 
 elenemtal_colors_dict = {
     'CHO' : 'blue',
@@ -1849,4 +1850,129 @@ def show_error(self) -> None:
     ax.plot(self['mass'], self['ppm'])
     ax.set_xlabel('m/z, Da')
     ax.set_ylabel('error, ppm')
- 
+
+def FormulaMolecularClassData(specList, class_list, draw=True, relative=False):
+    """
+    Анализ формул в спектрах по заданным классам On, OnSm и т.д.
+    
+    Parameters:
+    -----------
+    specList : list
+        Список спектров (объекты с атрибутами и данными)
+        Каждый спектр должен иметь колонки: 'O', 'N', 'S' (количество атомов)
+    class_list : list
+        Список классов в виде строк, например: ['O6', 'O10', 'O3S1', 'O4S2', 'O6S1']
+        Поддерживаются форматы:
+        - 'On' - только кислород (например 'O6')
+        - 'OnSm' - кислород и сера (например 'O3S1')
+        - 'OnNm' - кислород и азот (например 'O4N1')
+        - 'OnNmSp' - кислород, азот и сера (например 'O5N1S1')
+    draw : bool
+        Рисовать ли график
+    relative : bool
+        Если True - показывает относительные доли формул (в %)
+        Если False - показывает абсолютные числа формул
+    
+    Returns:
+    --------
+    data : pd.DataFrame
+        DataFrame с распределением формул по классам для каждого образца
+    """
+    
+    # Функция для парсинга строки класса
+    def parse_class(class_str):
+        pattern = r'O(\d+)(?:N(\d+))?(?:S(\d+))?'
+        match = re.match(pattern, class_str)
+        if match:
+            o = int(match.group(1))
+            n = int(match.group(2)) if match.group(2) else 0
+            s = int(match.group(3)) if match.group(3) else 0
+            return {'name': class_str, 'O': o, 'N': n, 'S': s}
+        else:
+            raise ValueError(f"Неверный формат класса: {class_str}. Используйте форматы: O6, O3S1, O4N1, O5N1S1")
+    
+    # Парсим все классы
+    parsed_classes = [parse_class(cls) for cls in class_list]
+    
+    # Инициализация результатов
+    results = {cls['name']: [] for cls in parsed_classes}
+    sample_names = []
+    
+    # Обработка каждого спектра
+    for spec in specList:
+        sample_names.append(spec.attrs["name"])
+        
+        # Для каждого класса подсчитываем формулы
+        for cls in parsed_classes:
+            # Фильтруем по азоту и сере
+            mask = (spec['N'] == cls['N']) & (spec['S'] == cls['S'])
+            
+            # Фильтруем по кислороду
+            if cls['O'] > 0:
+                mask = mask & (spec['O'] == cls['O'])
+            
+            count = spec[mask].shape[0]
+            results[cls['name']].append(count)
+    
+    # Создаем DataFrame
+    data = pd.DataFrame(results)
+    data["Sample name"] = sample_names
+    
+    # Если нужно показать относительные доли
+    if relative:
+        # Суммируем только выбранные классы
+        total_in_classes = data[class_list].sum(axis=1)
+        
+        # Преобразуем в проценты
+        for cls in class_list:
+            data[cls] = (data[cls] / total_in_classes) * 100
+        
+        data["Total in selected classes"] = total_in_classes
+    
+    data.set_index("Sample name", inplace=True)
+    
+    # Рисуем график
+    if draw:
+        fig, ax = plt.subplots(figsize=(12, 6))
+        
+        # Выбираем тип графика в зависимости от количества классов
+        if len(class_list) <= 6:
+            # Grouped bar chart
+            data[class_list].plot(kind='bar', ax=ax)
+            
+            # Добавляем значения над столбцами
+            for container in ax.containers:
+                if relative:
+                    ax.bar_label(container, label_type='edge', fmt='%.1f%%',  # type: ignore
+                                fontsize=8, padding=2)
+                else:
+                    ax.bar_label(container, label_type='edge', fmt='%d',  # type: ignore
+                                fontsize=8, padding=2)
+        else:
+            # Stacked bar chart для большого количества классов
+            data[class_list].plot(kind='bar', stacked=True, ax=ax)
+            
+            # Для stacked добавляем аннотацию с общим числом формул
+            if relative:
+                for i, idx in enumerate(data.index):
+                    total = data.loc[idx, "Total in selected classes"]
+                    ax.text(i, 102, f'total={int(total)}', ha='center',  # type: ignore
+                           fontsize=8, transform=ax.transData)
+        
+        # Настройка оформления
+        plt.xticks(rotation=30, ha='right')
+        
+        if relative:
+            ylabel = "Relative abundance (% of selected classes)"
+            title = f"Relative distribution by selected classes"
+        else:
+            ylabel = "Number of formulas"
+            title = f"Absolute distribution by selected classes"
+        
+        plt.ylabel(ylabel)
+        plt.title(title)
+        plt.legend(title="Classes", bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.grid(axis='y', alpha=0.3)
+        plt.tight_layout()
+        
+    return data
