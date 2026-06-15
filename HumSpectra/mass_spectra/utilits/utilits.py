@@ -560,10 +560,10 @@ def get_elements_masses(elems: Sequence[str]) -> np.ndarray :
 
 def _assign_formula(row):
     
-    if ['S'] not in row:
+    if 'S' not in row:
         row['S'] = 0
         
-    if ['N'] not in row:
+    if 'N' not in row:
         row['N'] = 0
     
     if int(row['S']) > 1 and int(row['N']) >1:
