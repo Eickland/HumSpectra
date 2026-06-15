@@ -11,6 +11,7 @@ from collections import defaultdict
 from scipy import stats
 
 import HumSpectra.utilits as ut
+import HumSpectra.mass_spectra.utilits.utilits as msut
 
 def merge_mass_spectra_fast(
     spectra: List[pd.DataFrame],
@@ -271,17 +272,7 @@ if spectra_list:
 merge_spectra = merge_mass_spectra_fast(spectra_list,spectra_list_name)
 merge_spectra.to_excel(r"C:\Users\Kirill\Desktop\Lab\Process_mass_spectra\process_result\merge_spectra_Me.xlsx")
 
-def _assign_formula(row):
-    
-    if int(row['S']) > 1 and int(row['N']) >1:
-        return 'C'+ str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))+'N'+str(int(row['N']))+ 'S'+str(int(row['S']))
-    
-    elif int(row['S']) > 1:
-        return 'C'+str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))+ 'S'+str(int(row['S']))
-    elif int(row['N']) > 1:
-        return 'C'+str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))+ 'N'+str(int(row['N']))
-    else:        
-        return 'C'+str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))
+
 
 class TimeSeriesVisualizer:
     """Класс для визуализации изменений интенсивностей соединений во времени"""
@@ -301,7 +292,7 @@ class TimeSeriesVisualizer:
         
         # Создаем уникальный идентификатор для каждого соединения
         #self.df['formula_id'] = self.df[formula_cols].astype(str).agg('-'.join, axis=1)
-        self.df['formula_id'] = self.df[formula_cols].apply(lambda x: _assign_formula(x), axis=1)
+        self.df['formula_id'] = self.df[formula_cols].apply(lambda x: msut._assign_formula(x), axis=1)
     
 
         

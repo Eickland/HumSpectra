@@ -558,6 +558,17 @@ def get_elements_masses(elems: Sequence[str]) -> np.ndarray :
 
     return np.array(elems_masses)
 
+def _assign_formula(row):
+    
+    if int(row['S']) > 1 and int(row['N']) >1:
+        return 'C'+ str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))+'N'+str(int(row['N']))+ 'S'+str(int(row['S']))
+    
+    elif int(row['S']) > 1:
+        return 'C'+str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))+ 'S'+str(int(row['S']))
+    elif int(row['N']) > 1:
+        return 'C'+str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))+ 'N'+str(int(row['N']))
+    else:        
+        return 'C'+str(int(row['C']))+'H'+str(int(row['H'])) +'O'+str(int(row['O']))
 
 @ms_dec._copy
 def merge_duplicates(self) -> "pd.DataFrame":
