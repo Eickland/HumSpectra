@@ -3,7 +3,7 @@ import pandas as pd
 from pyopenms import MSExperiment, MzMLFile
 from typing import Optional
 
-import mass_spectra.utilits.utilits as ms_utils
+from ..utilits import utilits as ms_utils
 
 def extract_mass_list_percentile(mzml_file, ms_level=1, rt_range=None, 
                                low_percentile:float=99,

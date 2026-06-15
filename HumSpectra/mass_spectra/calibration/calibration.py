@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 from typing import Optional
 
-import mass_spectra.utilits.utilits as ms_utils
-import mass_spectra.assign.assign as ms_assign
-import mass_spectra.calc_process.calc_process as ms_calc
+from ..utilits import utilits as ms_utils
+from ..assign import assign as ms_assign
+from ..calc_process import calc_process as ms_calc
 
 def recallibrate_optimize(spec: pd.DataFrame, 
                 error_table: Optional[pd.DataFrame] = None, 

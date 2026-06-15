@@ -6,8 +6,8 @@ from typing import Optional, Tuple, Sequence
 from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
 
-import mass_spectra.utilits.utilits as ms_utils
-import mass_spectra.brutto.brutto as ms_brutto
+from ..utilits import utilits as ms_utils
+from ..brutto import brutto as ms_brutto
 
 @staticmethod
 def md_error_map(

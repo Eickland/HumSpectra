@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Any
 
-import mass_spectra.utilits.utilits as ms_util
-import mass_spectra.brutto.brutto as ms_brutto
+from ..utilits import utilits as ms_util
+from ..brutto import brutto as ms_brutto
 
 def filter_by_rules(gdf: pd.DataFrame) -> pd.DataFrame:
     

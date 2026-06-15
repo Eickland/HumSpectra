@@ -12,9 +12,9 @@ import os
 
 import HumSpectra.utilits as ut
 
-import mass_spectra.utilits.utilits as ms_utils
-import mass_spectra.calc_process.calc_process as ms_calc
-import mass_spectra.visual.visual as mv
+from ..utilits import utilits as ms_utils
+from ..calc_process import calc_process as ms_calc
+from ..visual import visual as mv
 
 def _copy(func):
     """

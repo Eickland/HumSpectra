@@ -9,8 +9,8 @@ from collections import defaultdict
 from typing import Sequence, Any, Dict, Tuple, List, Optional
 
 import HumSpectra.utilits as ut
-import mass_spectra.brutto.brutto as ms_brutto
-import mass_spectra.calc_process.calc_process as ms_calc
+from ..brutto import brutto as ms_brutto
+from ..calc_process import calc_process as ms_calc
 
 def convert_mass_spectra_batch(source_dir, output_base, program_location=
                                "C:\\Users\\mnbv2\\AppData\\Local\\Apps\\ProteoWizard 3.0.21229.9668f52 64-bit"):

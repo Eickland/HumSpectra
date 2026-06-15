@@ -4,10 +4,10 @@ import pandas as pd
 from scipy.signal import find_peaks
 from typing import Dict, Optional
 
-import mass_spectra.calc_process.calc_process as ms_calc
-import mass_spectra.utilits.utilits as ms_utils
-import mass_spectra.raw_data_process.raw_data_process as ms_raw
-import mass_spectra.assign.assign as ms_assign
+from ..calc_process import calc_process as ms_calc
+from ..utilits import utilits as ms_utils
+from ..raw_data_process import raw_data_process as ms_raw
+from ..assign import assign as ms_assign
 
 def assign_by_tmds_optimize(
     spec: pd.DataFrame, 

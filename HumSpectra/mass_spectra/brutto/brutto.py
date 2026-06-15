@@ -3,9 +3,9 @@ import pandas as pd
 from functools import lru_cache
 from typing import Dict, Tuple, Optional
 
-import mass_spectra.utilits.utilits as ms_util
-import mass_spectra.assign.assign as ms_assign
-import mass_spectra.calc_process.calc_process as ms_calc
+from ..utilits import utilits as ms_util
+from ..calc_process import calc_process as ms_calc
+from ..assign import assign as ms_assign
 
 def elements_table() -> pd.DataFrame: 
     """
