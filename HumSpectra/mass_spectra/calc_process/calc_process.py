@@ -10,6 +10,8 @@ from ..utilits import utilits as ms_utils
 from ..brutto import brutto as ms_brutto
 from ..decorators import decorators as ms_dec
 
+from scipy.signal import savgol_filter
+
 @staticmethod
 def md_error_map(
     spec: pd.DataFrame, 
