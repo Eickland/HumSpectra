@@ -323,6 +323,9 @@ def convert_mass_spectra_batch(source_dir, output_base, program_location=
     
     # PowerShell скрипт для пакетной обработки (рекурсивный поиск .d папок)
     powershell_script = f'''
+    $OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+    [Console]::InputEncoding = [Text.Encoding]::UTF8
+    chcp 65001
     $msconvertPath = "{program_location}\\msconvert.exe"
     $sourceDir = "{source_dir}"
     $outputBase = "{output_base}"
@@ -335,7 +338,7 @@ def convert_mass_spectra_batch(source_dir, output_base, program_location=
         $outputSubDir = $outputSubDir -replace '\\.d$', ''
         New-Item -ItemType Directory -Path $outputSubDir -Force | Out-Null
         Write-Host "Конвертируем: $($folder.Name) -> $outputSubDir"
-        msconvertPath "$inputPath" -o "$outputSubDir" --mzML --filter "zeroSamples removeExtra" --verbose
+        & $msconvertPath "$inputPath" -o "$outputSubDir" --mzML --filter "zeroSamples removeExtra" --verbose
     }}
     '''
     
