@@ -703,6 +703,104 @@ def get_squares_vk(self,
     
     return out_df.sort_values('square_index').reset_index(drop=True)
 
+def assign_square_indices(self,
+                          n_hc: int = 5,
+                          n_oc: int = 4,
+                          hc_range: Tuple[float, float] = (0, 2.2),
+                          oc_range: Tuple[float, float] = (0, 1),
+                          square_indices: str = 'row_major') -> pd.DataFrame:
+    """
+    Assign square indices to each formula in the spectrum based on Van Krevelen diagram grid.
+    
+    This function uses the same grid division logic as get_squares_vk_auto() but returns
+    the original spectrum with an additional 'square_index' column instead of aggregated data.
+    
+    Parameters
+    ----------
+    n_hc : int, default=5
+        Number of divisions along H/C axis (rows)
+    n_oc : int, default=4
+        Number of divisions along O/C axis (columns)
+    hc_range : Tuple[float, float], default=(0, 2.2)
+        Range for H/C values (min, max)
+    oc_range : Tuple[float, float], default=(0, 1)
+        Range for O/C values (min, max)
+    square_indices : str, default='row_major'
+        How to number squares: 'row_major' (row by row), 'col_major' (column by column),
+        'standard' (original numbering pattern for 5x4 grid)
+    
+    Returns
+    -------
+    pd.DataFrame
+        Original spectrum DataFrame with an additional 'square_index' column.
+        Formulas outside the specified ranges get square_index = -1.
+    
+    Examples
+    --------
+    >>> # Add square indices using same grid as get_squares_vk_auto
+    >>> spectrum_with_squares = spectrum.assign_square_indices(n_hc=5, n_oc=4)
+    >>> 
+    >>> # Now you can use both functions with same parameters
+    >>> squares = spectrum.get_squares_vk_auto(n_hc=5, n_oc=4)
+    >>> spectrum_labeled = spectrum.assign_square_indices(n_hc=5, n_oc=4)
+    """
+    
+    # Validate inputs
+    if n_hc <= 0 or n_oc <= 0:
+        raise ValueError("Number of divisions must be positive")
+    
+    if hc_range[0] >= hc_range[1]:
+        raise ValueError("hc_range[0] must be less than hc_range[1]")
+    
+    if oc_range[0] >= oc_range[1]:
+        raise ValueError("oc_range[0] must be less than oc_range[1]")
+    
+    # Ensure H/C and O/C columns exist
+    if 'H/C' not in self.columns or 'O/C' not in self.columns:
+        self = ms_utils.drop_unassigned(hc_oc(self))
+    
+    # Create a copy to avoid modifying the original
+    result = self.copy()
+    
+    # Generate bins automatically (same logic as get_squares_vk_auto)
+    hc_edges = np.linspace(hc_range[0], hc_range[1], n_hc + 1)
+    oc_edges = np.linspace(oc_range[0], oc_range[1], n_oc + 1)
+    
+    # Create bins as tuples (from high to low for H/C to match original orientation)
+    hc_bins = [(hc_edges[i], hc_edges[i+1]) for i in range(n_hc - 1, -1, -1)]  # Reverse for high to low
+    oc_bins = [(oc_edges[i], oc_edges[i+1]) for i in range(n_oc)]
+    
+    # Initialize square_index column with -1 (outside ranges)
+    result['square_index'] = -1
+    
+    # Assign square indices to each formula
+    for row_idx, (hc_min, hc_max) in enumerate(hc_bins):
+        for col_idx, (oc_min, oc_max) in enumerate(oc_bins):
+            # Calculate square index
+            if square_indices == 'row_major':
+                square_idx = row_idx * n_oc + col_idx + 1
+            elif square_indices == 'col_major':
+                square_idx = col_idx * n_hc + row_idx + 1
+            elif square_indices == 'standard' and n_hc == 5 and n_oc == 4:
+                # Original numbering pattern for 5x4 grid
+                standard_map = {
+                    (0,0):5, (0,1):10, (0,2):15, (0,3):20,
+                    (1,0):4, (1,1):9, (1,2):14, (1,3):19,
+                    (2,0):3, (2,1):8, (2,2):13, (2,3):18,
+                    (3,0):2, (3,1):7, (3,2):12, (3,3):17,
+                    (4,0):1, (4,1):6, (4,2):11, (4,3):16
+                }
+                square_idx = standard_map.get((row_idx, col_idx), row_idx * n_oc + col_idx + 1)
+            else:
+                square_idx = row_idx * n_oc + col_idx + 1
+            
+            # Assign index to formulas in this square
+            mask = ((result['O/C'] >= oc_min) & (result['O/C'] < oc_max) &
+                    (result['H/C'] >= hc_min) & (result['H/C'] < hc_max))
+            result.loc[mask, 'square_index'] = square_idx
+    
+    return result
+
 def get_squares_vk_auto(self,
                         n_hc: int = 5,
                         n_oc: int = 4,
