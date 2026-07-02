@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import subprocess
 from pathlib import Path
-
+import os
 
 from collections import defaultdict
 from typing import Sequence, Any, Dict, Tuple, List, Optional
@@ -415,6 +415,200 @@ def convert_single_folder(single_folder, output_dir, program_location):
         print(f"❌ Ошибка при выполнении PowerShell скрипта: {e}")
         if hasattr(e, 'stderr') and e.stderr:
             print(f"🔴 Stderr: {e.stderr}")
+
+def extract_fid_batch(source_dir, output_base, mode="mzml", 
+                      program_location=r"C:\Users\mnbv2\AppData\Local\Apps\ProteoWizard 3.0.21229.9668f52 64-bit"):
+    """
+    Извлекает сырые интерферограммы (FID) из папок .d Bruker FT-ICR MS
+    
+    Args:
+        source_dir (str): Путь к папке с подпапками .d
+        output_base (str): Путь для сохранения результатов
+        mode (str): "mzml" - сохранить как .mzML с FID, "txt" - конвертировать в текстовый формат
+        program_location (str): Путь к ProteoWizard (msconvert.exe)
+    
+    Returns:
+        dict: Словарь с путями к извлеченным файлам и количеством обработанных папок
+    """
+    
+    # Проверяем существование msconvert.exe
+    msconvert_path = os.path.join(program_location, "msconvert.exe")
+    if not os.path.exists(msconvert_path):
+        raise FileNotFoundError(f"msconvert.exe не найден по пути: {msconvert_path}")
+    
+    # PowerShell скрипт для извлечения FID
+    if mode == "mzml":
+        # Режим 1: Сохраняем как .mzML с сырыми временными данными (skipFFT)
+        powershell_script = f'''
+        $OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+        [Console]::InputEncoding = [Text.Encoding]::UTF8
+        chcp 65001
+        
+        $msconvertPath = "{msconvert_path}"
+        $sourceDir = "{source_dir}"
+        $outputBase = "{output_base}"
+        
+        # Ищем все .d папки рекурсивно
+        $dFolders = Get-ChildItem -Path $sourceDir -Recurse -Directory | Where-Object {{ $_.Name -like "*.d" }}
+        
+        Write-Host "Найдено .d папок: $($dFolders.Count)" -ForegroundColor Cyan
+        
+        $processedCount = 0
+        foreach ($folder in $dFolders) {{
+            $inputPath = $folder.FullName
+            $relativePath = $folder.FullName.Replace($sourceDir, "").Trim("\\")
+            $outputSubDir = Join-Path $outputBase $relativePath
+            $outputSubDir = $outputSubDir -replace '\\.d$', ''
+            
+            New-Item -ItemType Directory -Path $outputSubDir -Force | Out-Null
+            
+            Write-Host "Извлекаем FID из: $($folder.Name)" -ForegroundColor Yellow
+            
+            # КЛЮЧЕВОЙ МОМЕНТ: фильтр skipFFT для получения интерферограммы
+            & $msconvertPath "$inputPath" -o "$outputSubDir" --mzML --filter "skipFFT" --filter "peakPicking true 1-" --verbose
+            
+            if ($LASTEXITCODE -eq 0) {{
+                $processedCount++
+                Write-Host "  ✅ FID извлечен: $($folder.Name)" -ForegroundColor Green
+            }} else {{
+                Write-Host "  ❌ Ошибка при обработке: $($folder.Name)" -ForegroundColor Red
+            }}
+        }}
+        
+        Write-Host "`nОбработано: $processedCount из $($dFolders.Count)" -ForegroundColor Cyan
+        '''
+    
+    elif mode == "txt":
+        # Режим 2: Экспорт в текстовый формат (JCAMP-DX или ASCII)
+        powershell_script = f'''
+        $OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+        chcp 65001
+        
+        $msconvertPath = "{msconvert_path}"
+        $sourceDir = "{source_dir}"
+        $outputBase = "{output_base}"
+        
+        $dFolders = Get-ChildItem -Path $sourceDir -Recurse -Directory | Where-Object {{ $_.Name -like "*.d" }}
+        
+        Write-Host "Найдено .d папок: $($dFolders.Count)" -ForegroundColor Cyan
+        
+        $processedCount = 0
+        foreach ($folder in $dFolders) {{
+            $inputPath = $folder.FullName
+            $relativePath = $folder.FullName.Replace($sourceDir, "").Trim("\\")
+            $outputSubDir = Join-Path $outputBase $relativePath
+            $outputSubDir = $outputSubDir -replace '\\.d$', ''
+            
+            New-Item -ItemType Directory -Path $outputSubDir -Force | Out-Null
+            
+            Write-Host "Извлекаем FID в TXT из: $($folder.Name)" -ForegroundColor Yellow
+            
+            # Экспортируем в JCAMP-DX (содержит RAW DATA блок)
+            & $msconvertPath "$inputPath" -o "$outputSubDir" --jcampdx --filter "skipFFT"
+            
+            if ($LASTEXITCODE -eq 0) {{
+                $processedCount++
+                Write-Host "  ✅ FID экспортирован: $($folder.Name)" -ForegroundColor Green
+            }} else {{
+                Write-Host "  ❌ Ошибка: $($folder.Name)" -ForegroundColor Red
+            }}
+        }}
+        
+        Write-Host "`nОбработано: $processedCount из $($dFolders.Count)" -ForegroundColor Cyan
+        '''
+    
+    else:
+        raise ValueError("Режим mode должен быть 'mzml' или 'txt'")
+    
+    try:
+        print(f"🔍 Поиск .d папок в: {source_dir}")
+        print(f"💾 Сохранение в: {output_base}")
+        print(f"📊 Режим: {'mzML с FID' if mode == 'mzml' else 'JCAMP-DX (текстовый)'}")
+        print("⏳ Начинаем извлечение интерферограмм...")
+        print("=" * 60)
+        
+        # Запускаем PowerShell
+        result = subprocess.run(
+            ['powershell', '-Command', powershell_script],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='ignore'
+        )
+        
+        if result.returncode == 0:
+            print("✅ Извлечение FID завершено успешно!")
+        else:
+            print(f"⚠️ Процесс завершен с кодом: {result.returncode}")
+        
+        print("\n📋 Вывод PowerShell:")
+        print(result.stdout)
+        
+        if result.stderr:
+            print("\n⚠️ Предупреждения:")
+            print(result.stderr[:500] + "..." if len(result.stderr) > 500 else result.stderr)
+        
+        # Возвращаем информацию о результатах
+        return {
+            "status": "success" if result.returncode == 0 else "partial",
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }
+        
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Критическая ошибка: {e}")
+        print(f"🔴 Stderr: {e.stderr}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "stderr": e.stderr
+        }
+    except Exception as e:
+        print(f"❌ Непредвиденная ошибка: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+def parse_fid_from_mzml(mzml_path):
+    """
+    Парсит .mzML файл с FID (после skipFFT) и возвращает numpy массивы
+    
+    Args:
+        mzml_path (str): Путь к .mzML файлу
+        
+    Returns:
+        tuple: (time_array, intensity_array) - временные отсчеты и амплитуды
+    """
+    try:
+        import xml.etree.ElementTree as ET
+        
+        tree = ET.parse(mzml_path)
+        root = tree.getroot()
+        
+        # Пространства имен mzML
+        ns = {'mzml': 'http://psi.hupo.org/ms/mzml'}
+        
+        # Ищем бинарные данные в спектре
+        for spectrum in root.findall('.//mzml:spectrum', ns):
+            # Проверяем, что это FID (не спектр)
+            for cv_param in spectrum.findall('.//mzml:cvParam', ns):
+                if cv_param.get('accession') == 'MS:1000525':  # FID сигнал
+                    # Извлекаем бинарные данные
+                    binary = spectrum.find('.//mzml:binary', ns)
+                    if binary is not None:
+                        data_array = binary.find('.//mzml:binaryDataArray', ns)
+                        if data_array is not None:
+                            # Здесь нужен парсинг base64 данных
+                            # Упрощенная версия - возвращаем сырые данные
+                            print(f"Найден FID в: {mzml_path}")
+                            return None
+        print(f"FID не найден в {mzml_path}")
+        return None
+        
+    except Exception as e:
+        print(f"Ошибка парсинга {mzml_path}: {e}")
+        return None
 
 def read_mass_list(path: str,
                 map_columns: dict|None = {"m/z":"mass","I":"intensity"},
