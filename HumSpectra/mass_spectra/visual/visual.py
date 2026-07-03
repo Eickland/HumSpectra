@@ -68,7 +68,12 @@ def vk(spec: pd.DataFrame,
                xlim=(0.0, 1.0),
                ylim=(0.0, 2.2),
                ylabel='H/C',
-               xlabel='O/C'):
+               xlabel='O/C',
+            density_resolution=200,  # разрешение карты плотности
+            density_bandwidth=None,  # Автоматический подбор, если None
+            show_contours=True,      # Показывать контуры
+            contour_levels=10,       # Количество уровней контуров
+            log_scale_density=False):
     """
     Возвращает диаграмму Ван-Кревелена для подставленного спектра.
     
@@ -131,6 +136,129 @@ def vk(spec: pd.DataFrame,
                        hue="Color value", hue_order=["blue","orange","green","red"], 
                        size="intensity", alpha=0.7, legend=False, 
                        sizes=sizes, ax=ax)
+
+    # Добавляем новый тип для максимально детальной карты
+    elif plot_type == 'ultra_density':
+        """
+        Максимально детальная карта плотности с использованием взвешенного KDE
+        и улучшенной визуализацией
+        """
+        valid_data = spec.dropna(subset=['O/C', 'H/C'])
+        
+        if len(valid_data) > 1:
+            try:
+                # Получаем координаты и веса (интенсивность)
+                x_coords = valid_data['O/C'].to_numpy()
+                y_coords = valid_data['H/C'].to_numpy()
+                weights = valid_data['intensity'].to_numpy() if 'intensity' in valid_data.columns else None
+                
+                # Нормализуем веса
+                if weights is not None:
+                    weights = weights / weights.sum()
+                
+                # Создаем очень плотную сетку
+                x_grid = np.linspace(xlim[0], xlim[1], density_resolution * 2)
+                y_grid = np.linspace(ylim[0], ylim[1], density_resolution * 2)
+                X, Y = np.meshgrid(x_grid, y_grid)
+                
+                # Вычисляем взвешенный KDE
+                from sklearn.neighbors import KernelDensity
+                
+                # Подготовка данных
+                data = np.column_stack([x_coords, y_coords])
+                
+                # Оптимальный bandwidth
+                if density_bandwidth is None:
+                    # Эвристика на основе размаха данных
+                    range_x = xlim[1] - xlim[0]
+                    range_y = ylim[1] - ylim[0]
+                    n = len(data)
+                    bandwidth = min(range_x, range_y) / (n ** (1/6)) * 2
+                    bandwidth = max(0.01, min(bandwidth, 0.05))  # Ограничиваем для детальности
+                else:
+                    bandwidth = density_bandwidth
+                
+                # Создаем и обучаем KDE
+                kde = KernelDensity(bandwidth=bandwidth, kernel='gaussian')
+                if weights is not None:
+                    # В sklearn пока нет прямой поддержки весов, используем повторение
+                    # Упрощенный подход: создаем расширенный датасет с весами
+                    sample_size = min(10000, len(data))
+                    indices = np.random.choice(len(data), size=sample_size, p=weights)
+                    data_weighted = data[indices]
+                    kde.fit(data_weighted)
+                else:
+                    kde.fit(data)
+                
+                # Оцениваем плотность на сетке
+                grid_points = np.column_stack([X.ravel(), Y.ravel()])
+                Z = np.exp(kde.score_samples(grid_points)).reshape(X.shape)
+                
+                # Применяем логарифмическое масштабирование
+                if log_scale_density:
+                    Z_log = np.log1p(Z)
+                    # Нормализуем для визуализации
+                    Z_norm = (Z_log - Z_log.min()) / (Z_log.max() - Z_log.min() + 1e-10)
+                    Z_display = Z_norm
+                else:
+                    Z_norm = (Z - Z.min()) / (Z.max() - Z.min() + 1e-10)
+                    Z_display = Z_norm
+                
+                # Отрисовка с высоким разрешением
+                im = ax.imshow(Z_display, origin='lower', 
+                              extent=[xlim[0], xlim[1], ylim[0], ylim[1]], # type: ignore
+                              cmap=color_palette, aspect='auto', alpha=0.8, 
+                              interpolation='gaussian')  # Гауссовская интерполяция для плавности
+                
+                # Добавляем детальные контуры
+                if show_contours and np.max(Z) > 0:
+                    # Выбираем процентили для контуров
+                    percentiles = np.linspace(10, 90, contour_levels)
+                    contour_values = np.percentile(Z[Z > 0], percentiles)
+                    contour_values = contour_values[contour_values > 0]
+                    if len(contour_values) > 1:
+                        contours = ax.contour(X, Y, Z, levels=contour_values,
+                                             colors='white', alpha=0.4, linewidths=0.5)
+                        # Добавляем подписи к некоторым контурам
+                        if len(contour_values) > 2:
+                            ax.clabel(contours, inline=True, fontsize=8, fmt='%.1f')
+                
+                # Добавляем точки с прозрачностью, пропорциональной плотности
+                if scatter_kde_enable:
+                    # Оцениваем плотность в каждой точке
+                    point_densities = np.exp(kde.score_samples(data))
+                    # Нормализуем для размера точек
+                    point_sizes = 5 + 20 * (point_densities / point_densities.max())
+                    scatter = ax.scatter(x_coords, y_coords,
+                                       c='black', alpha=0.15, s=point_sizes, marker='o')
+                
+                # Добавляем colorbar с понятной шкалой
+                if ax is None or ax == plt.gca():
+                    cbar = plt.colorbar(im, ax=ax, label='Density (log scale)' if log_scale_density else 'Density')
+                    cbar.ax.tick_params(labelsize=8)
+                
+                # Добавляем статистику
+                stats_text = f"Points: {len(valid_data)}\nBandwidth: {bandwidth:.3f}"
+                ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+                       fontsize=8, verticalalignment='top',
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+                
+            except Exception as e:
+                print(f"Ultra density plotting failed: {e}. Using scatter plot instead.")
+                ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                          alpha=0.5, s=20, c='blue')
+        else:
+            # Если точек мало
+            ax.scatter(valid_data['O/C'], valid_data['H/C'],
+                      alpha=0.7, s=30, c='red')
+            ax.text(0.5, 1.1, "Not enough points for density map", 
+                   ha='center', transform=ax.transAxes, color='red')
+        
+        ax.set_title(f"{spec.attrs['name']} - Ultra High Resolution Density Map")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
     
     # Тепловая карта интенсивности
     elif plot_type == 'heatmap':
@@ -410,7 +538,7 @@ def filter_dense_region_advanced(spec: pd.DataFrame,
     if len(valid_data) == 0:
         return spec
     
-    X = valid_data[['O/C', 'H/C']].values
+    X = valid_data[['O/C', 'H/C']].to_numpy()
     
     if method == 'kde':
         from scipy.stats import gaussian_kde
@@ -614,7 +742,7 @@ def plot_spectra_kde_comparison(spectra_list: list,
         
         # Объединяем все данные класса
         combined_data = pd.concat(all_class_data, ignore_index=True)
-        X = combined_data[['O/C', 'H/C']].values
+        X = combined_data[['O/C', 'H/C']].to_numpy()
         
         if len(X) < 2:
             ax.text(0.5, 0.5, f"Not enough data\nfor KDE\n{len(X)} points", 
@@ -760,7 +888,7 @@ def plot_spectra_kde_overlay(spectra_list: list,
             continue
         
         combined_data = pd.concat(all_class_data, ignore_index=True)
-        X = combined_data[['O/C', 'H/C']].values
+        X = combined_data[['O/C', 'H/C']].to_numpy()
         
         if len(X) < 2:
             continue
@@ -1068,8 +1196,8 @@ def plot_mass_intensity_relationship(spectrum_df, mass_col='mass', intensity_col
     """
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))
     
-    mass = spectrum_df[mass_col].values
-    intensity = spectrum_df[intensity_col].values
+    mass = spectrum_df[mass_col].to_numpy()
+    intensity = spectrum_df[intensity_col].to_numpy()
     
     # 1. Scatter plot
     scatter = ax1.scatter(mass, intensity, alpha=0.6, s=30, c=intensity, cmap='viridis')
@@ -1646,7 +1774,7 @@ def plot_class_dist_humic_grouped(spectra_list: list,
     ax.set_axisbelow(True)
     
     # Устанавливаем нижнюю границу y=0
-    max_val = (means_df.values + stds_df.values).max()
+    max_val = (means_df.to_numpy() + stds_df.to_numpy()).max()
     if not np.isnan(max_val):
         ax.set_ylim(0, max_val * 1.2)
     
@@ -1717,7 +1845,7 @@ def plot_stacked_barplot(df, name_col='name', figsize=(12, 6),
     bottom = np.zeros(n_names)
     
     for idx, col in enumerate(numeric_cols):
-        values = df_plot[col].values
+        values = df_plot[col].to_numpy()
         bars = ax.bar(names, values, bottom=bottom, 
                      label=col, color=colors[idx], 
                      edgecolor='white', linewidth=0.5)
