@@ -951,7 +951,7 @@ def spectrum(spec: 'pd.DataFrame',
              title= None,
              normalize: bool = False,
              peak_width: float = 1.0,
-             remove_outliers: bool = True,
+             remove_outliers: bool = False,
              outlier_percentile: float = 99.7,
              **kwargs):
     """
