@@ -1025,7 +1025,6 @@ def extract_square_intensities(
     # Extract values
     square_data_dict = {idx: [] for idx in square_indices}
     name_list = []
-    class_list = []
     
     for spectrum in spectra_list:
         
@@ -1035,7 +1034,6 @@ def extract_square_intensities(
         
         square_map = dict(zip(squares_df['square_index'], squares_df['value']))
         name_list.append(spectrum.attrs['name'])
-        class_list.append(spectrum.attrs['class'])
         
         for idx in square_indices:
             square_data_dict[idx].append(square_map.get(idx, 0.0))
@@ -1059,7 +1057,6 @@ def extract_square_intensities(
     df_squares.attrs['grid_size'] = f'{n_hc}x{n_oc}'
     
     df_squares['sample_name'] = name_list
-    df_squares['class'] = class_list
     
     # Save and plot
     if save_excel and excel_path:
@@ -1162,7 +1159,6 @@ def calculate_metrics_for_spectra_list(
     """
     
     results = []
-    class_list = []
     
     for i, spectrum_df in enumerate(spectra_list):
         sample_name = spectrum_df.attrs.get('name', f'sample_{i}')
@@ -1178,16 +1174,13 @@ def calculate_metrics_for_spectra_list(
         
         # Добавляем имя образца
         sample_metrics['sample_name'] = sample_name
-        results.append(sample_metrics)
-        class_list.append(spectrum_df.attrs['class'])
-    
+        results.append(sample_metrics)    
     # Создаем итоговый DataFrame
     result_df = pd.DataFrame(results)
     
     # Переставляем колонку 'sample_name' на первую позицию
     cols = ['sample_name'] + [col for col in result_df.columns if col != 'sample_name']
     result_df = result_df[cols]
-    result_df['class'] = class_list
     
     return result_df
 
