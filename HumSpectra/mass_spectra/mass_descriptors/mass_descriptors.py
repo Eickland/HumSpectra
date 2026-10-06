@@ -1384,7 +1384,7 @@ def analyze_mass_intervals(
             print(f"Обработка образца: {sample_name} ({idx+1}/{total_samples})")
         
         if 'calc_mass' not in df.columns:
-            raise ValueError(f"В DataFrame образца '{sample_name}' отсутствует колонка 'calc_mass'")
+            df['calc_mass'] = ms_utils.calc_mass(df)
         
         masses = df['calc_mass'].to_numpy()
         
