@@ -688,7 +688,7 @@ def drop_unassigned(self) -> "pd.DataFrame":
     Danger of lose data - with these operation we exclude data that can be usefull
     """
 
-    if "assign" not in self:
+    if "assign" not in self.columns:
         raise Exception("Spectrum is not assigned")
 
     self = self.loc[self["assign"] == True].reset_index(drop=True)
@@ -708,7 +708,7 @@ def calc_mass(self,debug=False) -> pd.DataFrame:
     Spectrum
     """
 
-    if "assign" not in self:
+    if "assign" not in self.columns:
         raise Exception("Spectrum is not assigned")
     
     elems = find_elements(self)
