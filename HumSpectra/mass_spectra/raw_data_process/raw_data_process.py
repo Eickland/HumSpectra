@@ -48,7 +48,7 @@ def extract_mass_list_percentile(mzml_file, ms_level=1, rt_range=None,
             
         mz, intensities = spectrum.get_peaks()
         
-        mask = (intensities >= low_percentile_threshold)
+        mask = (intensities >= low_percentile_threshold) & (intensities < high_percentile_threshold)
         filtered_mz = mz[mask]
         filtered_intensities = intensities[mask]
         
