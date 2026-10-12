@@ -31,6 +31,79 @@ def filter_by_rules(gdf: pd.DataFrame) -> pd.DataFrame:
     
     return data
 
+def filter_bruttos(table: pd.DataFrame,
+                   rules: Optional[dict] = None) -> pd.DataFrame:
+    """
+    Фильтрация таблицы сгенерированных брутто-формул.
+
+    rules (все ключи необязательные):
+      'hc': (min, max)        диапазон H/C
+      'oc': (min, max)        диапазон O/C
+      'nc': (min, max)        диапазон N/C
+      'sc': (min, max)        диапазон S/C
+      'dbe': (min, max)       двойные связи/циклы: C - H/2 + N/2 + 1
+      'elements': {'N': (0, 2), 'S': (0, 1), ...}  диапазоны чисел атомов
+      'mass_dependent': [ {'mass': (550, None), 'hc': (1.0, 2.2), ...}, ... ]
+                          правила, действующие только для формул в диапазоне масс
+      'custom': callable(table) -> bool-маска той же длины
+    Границу можно задать None (без ограничения).
+    """
+    if not rules:
+        return table
+
+    keep = _rules_mask(table, rules)
+
+    for sub in rules.get('mass_dependent', []):
+        lo, hi = sub.get('mass', (None, None))
+        in_range = np.ones(len(table), dtype=bool)
+        if lo is not None:
+            in_range &= table['mass'].to_numpy() >= lo
+        if hi is not None:
+            in_range &= table['mass'].to_numpy() <= hi
+        # вне диапазона масс правило не действует, внутри - обязательно
+        keep &= ~in_range | _rules_mask(table, sub)
+
+    if 'custom' in rules:
+        keep &= np.asarray(rules['custom'](table), dtype=bool)
+
+    return table.loc[keep]          # порядок строк (сортировка по mass) сохраняется
+
+
+def _between(values: np.ndarray, bounds) -> np.ndarray:
+    lo, hi = bounds
+    ok = np.ones(len(values), dtype=bool)
+    if lo is not None:
+        ok &= values >= lo
+    if hi is not None:
+        ok &= values <= hi
+    return ok
+
+
+def _rules_mask(table: pd.DataFrame, rules: dict) -> np.ndarray:
+    n = len(table)
+    keep = np.ones(n, dtype=bool)
+
+    def col(name):
+        return table[name].to_numpy(dtype=float) if name in table.columns else np.zeros(n)
+
+    C = col('C') + col('C_13')       # полный углерод с учетом 13C
+    H, O, N, S = col('H'), col('O'), col('N'), col('S')
+    with np.errstate(divide='ignore', invalid='ignore'):
+        ratios = {'hc': H / C, 'oc': O / C, 'nc': N / C, 'sc': S / C}
+
+    for key, vals in ratios.items():
+        if key in rules:
+            keep &= _between(np.nan_to_num(vals, nan=np.inf), rules[key])   # C=0 -> отбрасывается
+
+    if 'dbe' in rules:
+        keep &= _between(C - H / 2 + N / 2 + 1, rules['dbe'])
+
+    for el, bounds in rules.get('elements', {}).items():
+        if el in table.columns:
+            keep &= _between(col(el), bounds)
+
+    return keep
+
 def assign_optimized(data: pd.DataFrame,
             brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
@@ -43,7 +116,15 @@ def assign_optimized(data: pd.DataFrame,
             intensity_max: Optional[float] = None,
             charge_max: int = 1,
             nitrogen_precision_factor: float = 2.0,
-            sulfur_precision_factor: float = 2.0
+            sulfur_precision_factor: float = 2.0,
+            formula_filter={
+                'hc': (0.3, 2.2),
+                'oc': (0.0, 0.8),
+                'elements': {'N': (0, 1), 'S': (0, 1)},
+                'mass_dependent': [
+                    {'mass': (550, None), 'hc': (1.2, 2.2), 'oc': (0.2, 0.7)},
+                ],
+            },
     ) -> pd.DataFrame:
         """
         Assigning brutto formulas to signal by mass
@@ -94,6 +175,9 @@ def assign_optimized(data: pd.DataFrame,
 
         if generated_bruttos_table is None:
             generated_bruttos_table = ms_brutto.brutto_gen(brutto_dict)
+        generated_bruttos_table = filter_bruttos(generated_bruttos_table, formula_filter)
+        if generated_bruttos_table.empty:
+            raise ValueError('formula_filter отбросил все формулы')
 
         if mass_min is None:
             mass_min = data['mass'].min()

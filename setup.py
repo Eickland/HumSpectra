@@ -27,6 +27,8 @@ setuptools.setup(
         "setuptools",
         "openpyxl",
         "frozendict",
-        "plotly"
+        "plotly",
+        "pyopenms",
+        "statsmodels"
     ],
 )
