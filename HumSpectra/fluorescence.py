@@ -471,7 +471,7 @@ def read_fluo_3d(path: str,
                  debug: bool = False,
                  remove_raman=True,
                  assign_class_type: bool = True,
-                 sheet_name = 0) -> pd.DataFrame:
+                 sheet_name:int|str = 0) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
