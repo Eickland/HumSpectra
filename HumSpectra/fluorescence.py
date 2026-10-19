@@ -470,7 +470,8 @@ def read_fluo_3d(path: str,
                  index_col: int | None = None,  # Изменено на None по умолчанию
                  debug: bool = False,
                  remove_raman=True,
-                 assign_class_type: bool = True) -> pd.DataFrame:
+                 assign_class_type: bool = True,
+                 sheet_name = 0) -> pd.DataFrame:
     """
     :param path: путь к файлу в строчном виде,
             (example: "C:/Users/mnbv2/Desktop/lab/KNP work directory/Флуоресценция/ADOM-SL2-1.csv").
@@ -511,13 +512,13 @@ def read_fluo_3d(path: str,
         # Чтение полных данных с определённым индексом
         if extension == "xlsx":
             if index_col is False:
-                data = pd.read_excel(path)
+                data = pd.read_excel(path,sheet_name=sheet_name)
                 # Удаляем безымянные столбцы если они есть
                 unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
                 if unnamed_columns:
                     data = data.drop(unnamed_columns, axis=1)
             else:
-                data = pd.read_excel(path, index_col=index_col)
+                data = pd.read_excel(path, index_col=index_col,sheet_name=sheet_name)
                 # Удаляем безымянные столбцы если они есть
                 unnamed_columns = [col for col in data.columns if str(col).startswith('Unnamed:')]
                 if unnamed_columns:
