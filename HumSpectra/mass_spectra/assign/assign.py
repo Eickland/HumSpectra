@@ -117,6 +117,8 @@ def assign_optimized(data: pd.DataFrame,
             charge_max: int = 1,
             nitrogen_precision_factor: float = 2.0,
             sulfur_precision_factor: float = 2.0,
+            unique_formulas: bool = True,
+            unique_priority: str = 'error',
             formula_filter={
                 'hc': (0.3, 2.2),
                 'oc': (0.0, 0.8),
@@ -165,6 +167,14 @@ def assign_optimized(data: pd.DataFrame,
             Optional. Default 2.0. Factor by which to increase precision for formulas containing nitrogen
         sulfur_precision_factor: float
             Optional. Default 2.0. Factor by which to increase precision for formulas containing sulfur
+        unique_formulas: bool
+            Optional. Default True. Each brutto formula can be assigned to only one peak.
+            If the best formula of a peak is already taken, the next suitable formula
+            within the error window is used, otherwise the peak stays unassigned.
+        unique_priority: str
+            Optional. Default 'error'. Order in which (peak, formula) pairs are distributed:
+            'error' - pairs with smaller mass error first,
+            'intensity' - more intense peaks choose first (then by error).
 
         Return
         ------
@@ -242,50 +252,78 @@ def assign_optimized(data: pd.DataFrame,
         valid_mask = (target_masses >= mass_min) & (target_masses <= mass_max) & \
             (target_intensities >= intensity_min) & (target_intensities <= intensity_max)
 
+        # Формулы, уже приписанные какому-либо пику (для unique_formulas)
+        used_formulas = np.zeros(len(ref_masses), dtype=bool)
+
         # 2. Основной цикл только по зарядам (их мало!)
         for charge in range(1, charge_max + 1):
             if final_assign.all(): break # Если всё уже приписали, выходим
-            
+
             # Еще не приписанные и входящие в диапазоны
             todo_mask = valid_mask & (~final_assign)
             if not todo_mask.any(): continue
-            
+
             m = (target_masses[todo_mask] + mass_shift) * charge
-            
-            # Векторный поиск ближайших индексов
-            idx = np.searchsorted(ref_masses, m)
-            idx = np.clip(idx, 0, len(ref_masses) - 1)
-            # Проверка соседа слева
-            idx_left = np.clip(idx - 1, 0, len(ref_masses) - 1)
-            dist_right = np.abs(ref_masses[idx] - m)
-            dist_left = np.abs(ref_masses[idx_left] - m)
-            best_idx = np.where(dist_left < dist_right, idx_left, idx)
-            
+            base_limit = (rel_error if rel else abs_error) / charge # type: ignore
+
+            # Все формулы-кандидаты в окне допуска (факторы N/S окно только сужают)
+            tol = m * base_limit * 1e-6 if rel else np.full(len(m), base_limit)
+            lo = np.searchsorted(ref_masses, m - tol, side='left')
+            hi = np.searchsorted(ref_masses, m + tol, side='right')
+            counts = hi - lo
+            if counts.sum() == 0: continue
+
+            # Развертываем пары (пик, формула)
+            peak_ids = np.repeat(np.arange(len(m)), counts)
+            offsets = np.arange(counts.sum()) - np.repeat(np.cumsum(counts) - counts, counts)
+            ref_ids = np.repeat(lo, counts) + offsets
+
             # Расчет ошибок
-            diffs = np.abs(ref_masses[best_idx] - m)
-            if rel:
-                errors = diffs / m * 1e6
-            else:
-                errors = diffs
-            
-            # Применяем факторы точности
-            precision_limit = np.full(len(m), (rel_error if rel else abs_error) / charge) # type: ignore
-            
-            # У ужесточаем лимит для N и S
-            mask_special = has_special[best_idx]
+            diffs = np.abs(ref_masses[ref_ids] - m[peak_ids])
+            errors = diffs / m[peak_ids] * 1e6 if rel else diffs
+
+            # Ужесточаем лимит для N и S
+            precision_limit = np.full(len(ref_ids), base_limit, dtype=float)
             if n_idx != -1:
-                precision_limit = np.where(has_n[best_idx], precision_limit / nitrogen_precision_factor, precision_limit)
+                precision_limit = np.where(has_n[ref_ids], precision_limit / nitrogen_precision_factor, precision_limit)
             if s_idx != -1:
-                precision_limit = np.where(has_s[best_idx], precision_limit / sulfur_precision_factor, precision_limit)
-                
-            # Условие успеха
-            hits = errors <= precision_limit
-            
+                precision_limit = np.where(has_s[ref_ids], precision_limit / sulfur_precision_factor, precision_limit)
+
+            ok = (errors <= precision_limit) & ~used_formulas[ref_ids]
+            peak_ids, ref_ids, errors = peak_ids[ok], ref_ids[ok], errors[ok]
+            if len(peak_ids) == 0: continue
+
+            # Порядок рассмотрения пар: лучшие первыми
+            if unique_priority == 'error':
+                order = np.argsort(errors, kind='stable')
+            elif unique_priority == 'intensity':
+                peak_int = target_intensities[todo_mask][peak_ids]
+                order = np.lexsort((errors, -peak_int))
+            else:
+                raise ValueError('unique_priority must be "error" or "intensity"')
+            peak_ids, ref_ids = peak_ids[order], ref_ids[order]
+
+            if unique_formulas:
+                # Жадное назначение: каждый пик и каждая формула используются не более одного раза,
+                # пик, чья лучшая формула уже занята, берет следующую подходящую
+                peak_taken = np.zeros(len(m), dtype=bool)
+                sel_peaks, sel_refs = [], []
+                for p, r in zip(peak_ids.tolist(), ref_ids.tolist()):
+                    if peak_taken[p] or used_formulas[r]:
+                        continue
+                    peak_taken[p] = True
+                    used_formulas[r] = True
+                    sel_peaks.append(p)
+                    sel_refs.append(r)
+                sel_peaks = np.asarray(sel_peaks, dtype=int)
+                best_ref_indices = np.asarray(sel_refs, dtype=int)
+            else:
+                # Для каждого пика лучшая подходящая формула
+                sel_peaks, first = np.unique(peak_ids, return_index=True)
+                best_ref_indices = ref_ids[first]
+
             # Записываем результат
-            # Получаем индексы исходного массива data, которые "выстрелили"
-            global_indices = np.where(todo_mask)[0][hits]
-            best_ref_indices = best_idx[hits]
-            
+            global_indices = np.where(todo_mask)[0][sel_peaks]
             final_assign[global_indices] = True
             final_charge[global_indices] = charge
             final_elements[global_indices] = ref_elements[best_ref_indices]
