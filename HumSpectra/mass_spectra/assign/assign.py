@@ -1,4 +1,5 @@
 import copy
+import math
 import pandas as pd
 import numpy as np
 from typing import Optional, Any
@@ -104,6 +105,81 @@ def _rules_mask(table: pd.DataFrame, rules: dict) -> np.ndarray:
 
     return keep
 
+def _select_pairs(peak_ids: np.ndarray,
+                  ref_ids: np.ndarray,
+                  unique_formulas: bool) -> np.ndarray:
+    """
+    Выбор пар (пик, формула) из списка, отсортированного от лучших к худшим.
+    Возвращает индексы выбранных пар.
+    """
+    if not unique_formulas:
+        # Для каждого пика лучшая подходящая формула
+        return np.unique(peak_ids, return_index=True)[1]
+
+    # Жадное назначение: каждый пик и каждая формула используются не более одного раза,
+    # пик, чья лучшая формула уже занята, берет следующую подходящую
+    peak_taken, ref_taken, chosen = set(), set(), []
+    for i, (p, r) in enumerate(zip(peak_ids.tolist(), ref_ids.tolist())):
+        if p in peak_taken or r in ref_taken:
+            continue
+        peak_taken.add(p)
+        ref_taken.add(r)
+        chosen.append(i)
+    return np.asarray(chosen, dtype=int)
+
+
+def _isotope_params(elems: list, ref_elements: np.ndarray) -> Optional[dict]:
+    """
+    Для формул с минорными изотопами (колонки вида 'C_13', 'S_34') рассчитывает:
+      is_iso - формула содержит минорный изотоп
+      delta  - разница масс с моноизотопной формулой
+      ratio  - ожидаемое отношение интенсивностей изотоп/моноизотоп
+      parent - состав моноизотопной формулы (изотоп перенесен в основной элемент)
+    None, если изотопных колонок нет.
+    """
+    table = ms_util.elements_table()
+    n = len(ref_elements)
+    is_iso = np.zeros(n, dtype=bool)
+    delta = np.zeros(n)
+    ratio = np.ones(n)
+    parent = ref_elements.copy()
+
+    for j, el in enumerate(elems):
+        if '_' not in el:
+            continue
+        base = el.split('_')[0]
+        if base not in elems:
+            continue
+        el_table = table.loc[table['element'] == base].sort_values(by='abundance', ascending=False)
+        main = el_table.iloc[0]
+        minor = table.loc[table['element_isotop'] == el].iloc[0]
+        if minor['element_isotop'] == main['element_isotop']:
+            continue
+
+        j_base = elems.index(base)
+        k = ref_elements[:, j].astype(int)
+        total = ref_elements[:, j_base].astype(int) + k
+        is_iso |= k > 0
+        delta += k * (minor['mass'] - main['mass'])
+        binom = np.array([math.comb(t, i) for t, i in zip(total.tolist(), k.tolist())], dtype=float)
+        ratio *= binom * (minor['abundance'] / main['abundance']) ** k
+        parent[:, j_base] += k
+        parent[:, j] = 0
+
+    if not is_iso.any():
+        return None
+    return {'is_iso': is_iso, 'delta': delta, 'ratio': ratio, 'parent': parent}
+
+
+def _nearest_peak(sorted_masses: np.ndarray, m: np.ndarray) -> np.ndarray:
+    """Индекс ближайшего пика в отсортированном массиве масс"""
+    idx = np.searchsorted(sorted_masses, m)
+    idx_right = np.clip(idx, 0, len(sorted_masses) - 1)
+    idx_left = np.clip(idx - 1, 0, len(sorted_masses) - 1)
+    left_closer = np.abs(sorted_masses[idx_left] - m) < np.abs(sorted_masses[idx_right] - m)
+    return np.where(left_closer, idx_left, idx_right)
+
+
 def assign_optimized(data: pd.DataFrame,
             brutto_dict: Any|None = None,
             generated_bruttos_table: Optional[pd.DataFrame] = None,
@@ -119,6 +195,9 @@ def assign_optimized(data: pd.DataFrame,
             sulfur_precision_factor: float = 2.0,
             unique_formulas: bool = True,
             unique_priority: str = 'error',
+            isotope_filter: bool = False,
+            iso_rel_error: Optional[float] = None,
+            isotope_intensity_tolerance: Optional[float] = 3.0,
             formula_filter={
                 'hc': (0.3, 2.2),
                 'oc': (0.0, 0.8),
@@ -175,6 +254,19 @@ def assign_optimized(data: pd.DataFrame,
             Optional. Default 'error'. Order in which (peak, formula) pairs are distributed:
             'error' - pairs with smaller mass error first,
             'intensity' - more intense peaks choose first (then by error).
+        isotope_filter: bool
+            Optional. Default False. Formula with minor isotope (C_13, S_34, ...) is accepted
+            only if spectrum has monoisotopic peak (same charge) assigned to the matching
+            monoisotopic formula, e.g. for C_13 peak at mass - 1.003355, for S_34 at mass - 1.995796.
+            Rejected peaks fall back to other candidate formulas.
+        iso_rel_error: float
+            Optional. Default None (equal to rel_error). Ppm error when searching monoisotopic peak.
+            In abs_error mode abs_error is used.
+        isotope_intensity_tolerance: float
+            Optional. Default 3.0. Observed intensity ratio isotope/monoisotope must lie within
+            [expected / tolerance, expected * tolerance], expected ratio calculated from natural
+            abundance (about 1.1% per C atom for 13C, 4.5% per S atom for 34S).
+            None - don't check intensities.
 
         Return
         ------
@@ -255,6 +347,14 @@ def assign_optimized(data: pd.DataFrame,
         # Формулы, уже приписанные какому-либо пику (для unique_formulas)
         used_formulas = np.zeros(len(ref_masses), dtype=bool)
 
+        # Подготовка изотопного фильтра
+        iso = _isotope_params(elems, ref_elements) if isotope_filter else None
+        if iso is not None:
+            if iso_rel_error is None:
+                iso_rel_error = rel_error
+            sort_idx = np.argsort(target_masses, kind='stable')
+            sorted_masses = target_masses[sort_idx]
+
         # 2. Основной цикл только по зарядам (их мало!)
         for charge in range(1, charge_max + 1):
             if final_assign.all(): break # Если всё уже приписали, выходим
@@ -290,7 +390,30 @@ def assign_optimized(data: pd.DataFrame,
                 precision_limit = np.where(has_s[ref_ids], precision_limit / sulfur_precision_factor, precision_limit)
 
             ok = (errors <= precision_limit) & ~used_formulas[ref_ids]
+
+            # Изотопный фильтр: формула с C_13/S_34/... допустима, только если в спектре
+            # есть моноизотопный пик и соотношение интенсивностей правдоподобно
+            parent_peaks = np.full(len(ref_ids), -1)
+            if iso is not None:
+                todo_global = np.where(todo_mask)[0]
+                cand = ok & iso['is_iso'][ref_ids]
+                if cand.any():
+                    own = todo_global[peak_ids[cand]]
+                    parent_m = target_masses[own] - iso['delta'][ref_ids[cand]] / charge
+                    q = _nearest_peak(sorted_masses, parent_m)
+                    tol_iso = parent_m * iso_rel_error * 1e-6 if rel else abs_error / charge # type: ignore
+                    q_global = sort_idx[q]
+                    found = (np.abs(sorted_masses[q] - parent_m) <= tol_iso) & (q_global != own)
+                    if isotope_intensity_tolerance is not None:
+                        ratio = target_intensities[own] / target_intensities[q_global]
+                        expected = iso['ratio'][ref_ids[cand]]
+                        found &= (ratio >= expected / isotope_intensity_tolerance) & \
+                                 (ratio <= expected * isotope_intensity_tolerance)
+                    parent_peaks[np.where(cand)[0]] = np.where(found, q_global, -1)
+                    ok[np.where(cand)[0][~found]] = False
+
             peak_ids, ref_ids, errors = peak_ids[ok], ref_ids[ok], errors[ok]
+            parent_peaks = parent_peaks[ok]
             if len(peak_ids) == 0: continue
 
             # Порядок рассмотрения пар: лучшие первыми
@@ -301,26 +424,32 @@ def assign_optimized(data: pd.DataFrame,
                 order = np.lexsort((errors, -peak_int))
             else:
                 raise ValueError('unique_priority must be "error" or "intensity"')
-            peak_ids, ref_ids = peak_ids[order], ref_ids[order]
+            peak_ids, ref_ids, parent_peaks = peak_ids[order], ref_ids[order], parent_peaks[order]
 
-            if unique_formulas:
-                # Жадное назначение: каждый пик и каждая формула используются не более одного раза,
-                # пик, чья лучшая формула уже занята, берет следующую подходящую
-                peak_taken = np.zeros(len(m), dtype=bool)
-                sel_peaks, sel_refs = [], []
-                for p, r in zip(peak_ids.tolist(), ref_ids.tolist()):
-                    if peak_taken[p] or used_formulas[r]:
-                        continue
-                    peak_taken[p] = True
-                    used_formulas[r] = True
-                    sel_peaks.append(p)
-                    sel_refs.append(r)
-                sel_peaks = np.asarray(sel_peaks, dtype=int)
-                best_ref_indices = np.asarray(sel_refs, dtype=int)
-            else:
-                # Для каждого пика лучшая подходящая формула
-                sel_peaks, first = np.unique(peak_ids, return_index=True)
-                best_ref_indices = ref_ids[first]
+            # Назначение; при изотопном фильтре повторяем, пока моноизотопный пик не получит
+            # соответствующую формулу (иначе изотопная пара отбрасывается и пик ищет другую)
+            while True:
+                chosen = _select_pairs(peak_ids, ref_ids, unique_formulas)
+                if iso is None:
+                    break
+                chosen_iso = chosen[parent_peaks[chosen] >= 0]
+                if len(chosen_iso) == 0:
+                    break
+                todo_global = np.where(todo_mask)[0]
+                ref_of_peak = np.full(len(data), -1)
+                ref_of_peak[todo_global[peak_ids[chosen]]] = ref_ids[chosen]
+                parent_ref = ref_of_peak[parent_peaks[chosen_iso]]
+                consistent = (parent_ref >= 0) & np.all(
+                    ref_elements[np.maximum(parent_ref, 0)] == iso['parent'][ref_ids[chosen_iso]], axis=1)
+                if consistent.all():
+                    break
+                drop = np.ones(len(peak_ids), dtype=bool)
+                drop[chosen_iso[~consistent]] = False
+                peak_ids, ref_ids, parent_peaks = peak_ids[drop], ref_ids[drop], parent_peaks[drop]
+
+            sel_peaks = peak_ids[chosen]
+            best_ref_indices = ref_ids[chosen]
+            used_formulas[best_ref_indices] = True
 
             # Записываем результат
             global_indices = np.where(todo_mask)[0][sel_peaks]

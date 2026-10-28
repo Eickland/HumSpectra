@@ -148,31 +148,70 @@ def filter_by_C13(
     """
     
     self = self.sort_values(by='mass').reset_index(drop=True)
-    
-    flags = np.zeros(self.shape[0], dtype=bool)
-    masses = self["mass"].values
-    
-    C13_C12 = 1.003355  # C13 - C12 mass difference
 
-    
-    for index, row in self.iterrows():
-        mass = row["mass"] + C13_C12
-        error = mass * rel_error * 0.000001
-
-        idx = np.searchsorted(masses, mass, side='left')
-        
-        if idx > 0 and (idx == len(masses) or np.fabs(mass - masses[idx - 1]) < np.fabs(mass - masses[idx])):
-            idx -= 1
-        
-        if np.fabs(masses[idx] - mass)  <= error:
-            flags[index] = True
-    
-    self['C13_peak'] = flags
+    self['C13_peak'] = _isotope_peak_found(self["mass"].to_numpy(), C13_C12, rel_error)
 
     if remove:
         self = self.loc[(self['C13_peak'] == True) & (self['assign'] == True)].reset_index(drop=True)
         self.attrs['filter_C13'] = True
-        
+
 
     return self
+
+@ms_dec._copy
+def filter_by_S34(
+    self,
+    rel_error: float = 0.5,
+    remove: bool = False,
+) -> pd.DataFrame:
+    """
+    Check if peaks have the same brutto with S34 isotope (+1.995796 Da)
+
+    Parameters
+    ----------
+    rel_error: float
+        Optional. Default 0.5.
+        Allowable ppm error when checking S34 isotope peak
+    remove: bool
+        Optional, default False.
+        Drop unassigned peaks and sulfur-containing peaks without S34 isotope.
+        Peaks without sulfur are kept.
+
+    Return
+    ------
+    pd.DataFrame
+    """
+
+    self = self.sort_values(by='mass').reset_index(drop=True)
+
+    self['S34_peak'] = _isotope_peak_found(self["mass"].to_numpy(), S34_S32, rel_error)
+
+    if remove:
+        has_s = self['S'] > 0 if 'S' in self else False
+        self = self.loc[(self['assign'] == True) & (~has_s | self['S34_peak'])].reset_index(drop=True)
+        self.attrs['filter_S34'] = True
+
+    return self
+
+C13_C12 = 1.003355  # C13 - C12 mass difference
+S34_S32 = 1.995796  # S34 - S32 mass difference
+
+
+def _isotope_peak_found(masses: np.ndarray,
+                        delta: float,
+                        rel_error: float) -> np.ndarray:
+    """
+    For each peak check if there is peak at mass + delta within rel_error ppm.
+    masses should be sorted.
+    """
+    if len(masses) == 0:
+        return np.zeros(0, dtype=bool)
+
+    target = masses + delta
+    idx = np.searchsorted(masses, target, side='left')
+    idx_right = np.clip(idx, 0, len(masses) - 1)
+    idx_left = np.clip(idx - 1, 0, len(masses) - 1)
+    dist = np.minimum(np.abs(masses[idx_right] - target), np.abs(masses[idx_left] - target))
+
+    return dist <= target * rel_error * 1e-6
 
