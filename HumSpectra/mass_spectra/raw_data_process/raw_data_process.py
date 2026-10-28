@@ -5,63 +5,56 @@ from typing import Optional
 
 from ..decorators import decorators as ms_dec
 
-def extract_mass_list_percentile(mzml_file, ms_level=1, rt_range=None, 
-                               low_percentile:float=99,
-                               high_percentile:float=99.9):
+def _looks_centroided(peaks, max_rel_step=2e-6):
+    """Профиль: соседние точки через ~3e-7 m/z относительных; центроиды — гораздо реже."""
+    steps = [np.median(np.diff(mz) / mz[:-1]) for mz, _ in peaks if len(mz) > 10]
+    return bool(steps) and float(np.median(steps)) > max_rel_step
+
+
+def extract_mass_list(mzml_file, ms_level=1, rt_range=None,
+                      low_percentile: float = 99, high_percentile: float | None = None,
+                      centroid_rel_floor: float = 0.0, centroided: bool | None = None):
     """
-    Порог как процентиль от распределения интенсивностей
+    Центроиды: берём все пики (порог шума уже применён при центроидировании),
+               при желании отрезаем всё ниже centroid_rel_floor * max.
+    Профиль:   старое поведение — порог по процентилю.
+               Верхний процентиль по умолчанию выключен: он вырезает вершины сильных пиков.
     """
     exp = MSExperiment()
     MzMLFile().load(mzml_file, exp)
-    
-    # Сбор всех интенсивностей
-    all_intensities = []
-    for spectrum in exp:
-        if spectrum.getMSLevel() == ms_level:
-            if rt_range and not (rt_range[0] <= spectrum.getRT() <= rt_range[1]):
-                continue
-            mz, intensities = spectrum.get_peaks()
-            all_intensities.extend(intensities)
-    
-    if not all_intensities:
-        return pd.DataFrame()
-    
-    # Порог по процентилю
-    low_percentile_threshold = np.percentile(all_intensities, low_percentile)
-    high_percentile_threshold = np.percentile(all_intensities, high_percentile)
-    
-    print(f"{low_percentile}-й процентиль интенсивности: {low_percentile_threshold:.2f}")
-    print(f"{high_percentile}-й процентиль интенсивности: {high_percentile_threshold:.2f}")
-    print(f"Всего точек до фильтрации: {len(all_intensities)}")
-    
-    # Извлечение с порогом по процентилю
-    all_mz = []
-    all_intensities_filtered = []
-    
-    for spectrum in exp:
-        if spectrum.getMSLevel() != ms_level:
-            continue
-            
-        rt = spectrum.getRT()
-        if rt_range and not (rt_range[0] <= rt <= rt_range[1]):
-            continue
-            
-        mz, intensities = spectrum.get_peaks()
-        
-        mask = (intensities >= low_percentile_threshold) & (intensities < high_percentile_threshold)
-        filtered_mz = mz[mask]
-        filtered_intensities = intensities[mask]
-        
-        all_mz.extend(filtered_mz)
-        all_intensities_filtered.extend(filtered_intensities)
-    
-    print(f"Точек после фильтрации: {len(all_mz)}")
-    
-    return pd.DataFrame({
-        'mass': all_mz,
-        'intensity': all_intensities_filtered,
-    })
 
+    spectra = [s for s in exp
+               if s.getMSLevel() == ms_level
+               and (not rt_range or rt_range[0] <= s.getRT() <= rt_range[1])]
+    if not spectra:
+        return pd.DataFrame(columns=["mass", "intensity"])
+
+    peaks = [s.get_peaks() for s in spectra]
+    if centroided is None:
+        centroided = _looks_centroided(peaks)
+    all_I = np.concatenate([np.asarray(I, float) for _, I in peaks])
+
+    if centroided:
+        if len(spectra) > 1:
+            print(f"ВНИМАНИЕ: {len(spectra)} центроидных сканов — пики будут продублированы; "
+                  "усредняйте профиль до центроидирования")
+        lo, hi = centroid_rel_floor * all_I.max(), np.inf
+        print(f"Режим: центроиды, порог {lo:.3g} ({centroid_rel_floor:g} от максимума)")
+    else:
+        lo = np.percentile(all_I, low_percentile)
+        hi = np.percentile(all_I, high_percentile) if high_percentile is not None else np.inf
+        print(f"Режим: профиль, {low_percentile}-й процентиль {lo:.3g}"
+              + (f", верхний {high_percentile}-й {hi:.3g}" if np.isfinite(hi) else ""))
+
+    mz_out, I_out = [], []
+    for mz, I in peaks:
+        mask = (I >= lo) & (I < hi)
+        mz_out.append(mz[mask])
+        I_out.append(I[mask])
+
+    df = pd.DataFrame({"mass": np.concatenate(mz_out), "intensity": np.concatenate(I_out)})
+    print(f"Пиков до фильтрации: {len(all_I)}, после: {len(df)}")
+    return df
 @ms_dec._copy
 def noise_filter(self,
                     force: float = 1.5,
