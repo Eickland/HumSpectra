@@ -338,7 +338,7 @@ def convert_mass_spectra_batch(source_dir, output_base, program_location=
         $outputSubDir = $outputSubDir -replace '\\.d$', ''
         New-Item -ItemType Directory -Path $outputSubDir -Force | Out-Null
         Write-Host "Конвертируем: $($folder.Name) -> $outputSubDir"
-        & $msconvertPath "$inputPath" -o "$outputSubDir" --mzML --filter "zeroSamples removeExtra" --verbose
+        & $msconvertPath "$inputPath" -o "$outputSubDir" --mzML ` --filter "peakPicking vendor msLevel=1-" ` --verbose
     }}
     '''
     
