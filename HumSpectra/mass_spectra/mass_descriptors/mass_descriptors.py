@@ -106,7 +106,7 @@ def ai(self) -> pd.DataFrame:
 
     self["AI"] = self["DBE_AI"] / self["CAI"]
 
-    clear  = self["AI"].values[np.isfinite(self["AI"].values.astype('float'))].astype('float')
+    clear  = self["AI"].values[np.isfinite(self["AI"].values.astype('float'))].astype('float') # type: ignore
     self['AI'] = self['AI'].replace(-np.inf, np.min(clear))
     self['AI'] = self['AI'].replace(np.inf, np.max(clear))
     self['AI'] = self['AI'].replace(np.nan, np.mean(clear))
