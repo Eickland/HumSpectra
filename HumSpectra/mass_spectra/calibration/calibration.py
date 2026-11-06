@@ -11,7 +11,9 @@ def recallibrate_optimize(spec: pd.DataFrame,
                 error_table: Optional[pd.DataFrame] = None, 
                 how: str = 'assign',
                 mode: str = '-',
-                draw: bool = True) -> pd.DataFrame:
+                draw: bool = True,
+                etalon=None,
+                **etalon_kwargs) -> pd.DataFrame:
     '''
     Recallibrate spectrum
 
@@ -25,16 +27,21 @@ def recallibrate_optimize(spec: pd.DataFrame,
     error_table: ErrorTable object
         Optional. If None - calculate for spec. 
         ErrorTable object contain table error in ppm for mass, default 100 string            
-    how: {'assign', 'mdm', filename} 
+    how: {'assign', 'mdm', 'etalon', filename} 
         Optional. Default 'assign'.
         If error_table is None we can choose how to recalculate.
         'assign' - by assign error, default.
         'mdm' - by calculation mass-difference map.
-        filename - path to etalon spectrum, treated and saved by nomspectra
+        'etalon' - by etalon spectrum(s) passed in `etalon` (see etalon_error).
+        filename - path to etalon spectrum (assigned spectrum saved to csv)
     mode: str
         Optional. Default '-' negative mode. May be +, - or 0
     draw: bool
         Plot error (fit of KDM)
+    etalon: pd.DataFrame | list[pd.DataFrame] | str | list[str]
+        Optional. Etalon spectrum(s) for how='etalon', e.g. assigned SRFA spectra
+    **etalon_kwargs
+        Optional. Passed to etalon_error (ppm, periodic, period, frac ...)
 
     Returns
     -------
@@ -48,9 +55,12 @@ def recallibrate_optimize(spec: pd.DataFrame,
             error_table = assign_error(spec, show_map=draw, mode=mode)
         elif how == 'mdm':
             error_table = massdiff_error(spec, show_map=draw)
+        elif how == 'etalon':
+            if etalon is None:
+                raise ValueError("how='etalon' требует etalon=")
+            error_table = etalon_error(spec=spec, etalon=etalon, sign=mode, show_map=draw, **etalon_kwargs)
         else:
-            etalon = ms_utils.read_mass_list(how)
-            error_table = etalon_error(spec=spec, etalon=etalon, show_map=draw)
+            error_table = etalon_error(spec=spec, etalon=how, sign=mode, show_map=draw, **etalon_kwargs)
         pass
 
     # Извлекаем массивы для быстрой работы
@@ -62,12 +72,18 @@ def recallibrate_optimize(spec: pd.DataFrame,
     # Это найдет точное значение ppm для каждой массы из spec.
     # По умолчанию np.interp экстраполирует крайние значения.
     interp_ppm = np.interp(spec_masses, err_masses, err_ppm)
+    # если таблица построена моделью (etalon_error) — поправка считается точно по модели:
+    # периодическая ошибка меняется на масштабе долей дальтона
+    if callable(error_table.attrs.get('model')):
+        interp_ppm = -error_table.attrs['model'](spec_masses)
 
     # 2. Векторизованный пересчет всей колонки масс за одну операцию
     # Формула: mass = mass + (mass * ppm / 1,000,000)
     spec['mass'] = spec_masses * (1 + interp_ppm / 1e6)
 
     spec.attrs['recallibrate'] = how
+    if 'report' in error_table.attrs:
+        spec.attrs['calibration'] = error_table.attrs['report']
     return spec
 
 @staticmethod
@@ -152,79 +168,336 @@ def massdiff_error( spec: pd.DataFrame,
 
 @staticmethod
 def etalon_error(spec: pd.DataFrame,
-                etalon: pd.DataFrame,
-                quart: float = 0.9,
-                ppm: float = 3,
-                show_map: bool = True): 
+                 etalon,
+                 quart: float = 0.9,
+                 ppm: float = 1.5,
+                 show_map: bool = True,
+                 sign: str = '-',
+                 use_formulas: bool = True,
+                 min_count: Optional[int] = None,
+                 min_peaks: int = 300,
+                 max_shift_ppm: float = 5.0,
+                 frac='auto',
+                 periodic='auto',
+                 period: Optional[float] = None,
+                 period_range: tuple = (2e-6, 1e-4),
+                 harmonics: int = 2,
+                 taper_da: float = 50.0,
+                 min_calibrants_periodic: int = 250,
+                 grid_step: float = 0.02) -> pd.DataFrame:
     '''
     Recallibrate by etalon
 
+    Ошибка масс спектра относительно эталона (например, SRFA, снятого в той же серии).
+
+    1. Эталон — теоретические m/z формул, приписанных в эталонном спектре (если в нём есть
+       колонка 'assign'); можно передать список эталонов, тогда берутся формулы, найденные
+       не менее чем в min_count из них (по умолчанию — во всех). Без разметки
+       (или use_formulas=False) используются измеренные массы пиков эталона.
+    2. Калибранты — пики спектра интенсивнее квантиля quart (не меньше min_peaks самых
+       сильных), сопоставленные с БЛИЖАЙШЕЙ массой эталона.
+    3. Грубая модель: прямая err = a + b·(m − 400)/100, |a| <= max_shift_ppm, — преобразованием
+       Хафа (ловит сдвиги больше окна приписывания); затем окно сужается до ±ppm вокруг модели.
+    4. Модель ошибки = гладкий тренд (робастный LOWESS, ширина frac) + периодическая ошибка
+       по 1/m (т.е. по частоте ICR) с периодом period и harmonics гармониками, амплитуды
+       которых плавно меняются с массой. Период ищется по остаткам в period_range;
+       ширина тренда и нужность периодики выбираются 5-кратной перекрёстной проверкой
+       (периодика принимается, если уменьшает ошибку хотя бы на 5 %; при числе калибрантов
+       меньше min_calibrants_periodic периодика не ищется — ложные периоды).
+       Если период прибора известен, его надёжнее задать: period=1.4405e-5.
+       За пределами диапазона калибрантов тренд держится постоянным, периодика затухает
+       (гауссово, taper_da Да).
+
+    Отличия от прежней версии: ближайшая (а не первая попавшаяся) масса эталона; эталон по
+    формулам, а не по измеренным (содержащим собственную ошибку) массам; кривая ошибки
+    не растягивается на весь диапазон масс спектра (раньше KDE по калибрантам 250–550 Да
+    раскладывалась на 200–1000 Да, а сплайн давал ложные волны до ±3 ppm); сдвиги
+    больше окна; периодическая частотная ошибка.
+
     Parameters
     ----------
-    spec: pd.DataFrame object
-        Initial mass spectrum for recallibrate
-    etalon: pd.DataFrame object
-        Etalon mass spectrum
+    spec: pd.DataFrame
+        Mass spectrum (mass, intensity) for recallibration
+    etalon: pd.DataFrame | list[pd.DataFrame] | str | list[str]
+        Etalon spectrum(s): assigned spectrum (assign_optimized) or path(s) to it
     quart: float
-        Optionaly. by default it is 0.9. 
-        Usualy it is enough for good callibration
-        Quartile, which will be taken for calc recallibrate error
+        Optional. Default 0.9. Intensity quantile for calibrant peaks
     ppm: float
-        Optionaly. Default 3.
-        permissible relative error in ppm for seak peak in etalon
+        Optional. Default 1.5. Final window (ppm) around the coarse model
     show_map: bool
-        Optional. Default True. Show process 
+        Optional. Default True. Plot error before/after
+    sign: str
+        Optional. Default '-'. Ion mode for theoretical m/z of etalon formulas
+    use_formulas: bool
+        Optional. Default True. Use theoretical masses of assigned formulas
+    min_count: int
+        Optional. In how many etalons a formula must be found (default — all)
+    min_peaks: int
+        Optional. Default 300. Minimum number of strongest peaks used
+    max_shift_ppm: float
+        Optional. Default 5. Maximum expected shift
+    frac: float | 'auto'
+        Optional. LOWESS span of trend (part of calibrants); 'auto' — cross-validation
+    periodic: 'auto' | bool
+        Optional. Periodic error in 1/m: 'auto' — by cross-validation
+    period: float
+        Optional. Period in 1/m (1/Da); None — search in period_range.
+        On our FT-ICR series it was 1.4405e-5
+    harmonics: int
+        Optional. Default 2. Number of harmonics of periodic error
+    taper_da: float
+        Optional. Default 50. Periodic term decay outside calibrant range, Da
+    min_calibrants_periodic: int
+        Optional. Default 250. Fewer calibrants — periodic term is not searched
+        (unless period is given explicitly)
+    grid_step: float
+        Optional. Default 0.02 Da. Step of returned error table
 
     Return
     ------
-    ErrorTable
+    ErrorTable: pd.DataFrame (mass, ppm) — correction in ppm, mass_new = mass·(1 + ppm·1e-6).
+    attrs['model'] — callable: ошибка (ppm, измерено − эталон) от m/z;
+    attrs['report'] — dict (n_calibrants, frac, period, period_r2, mad_before, mad_after, ...);
+    attrs['calibrants'] — pd.DataFrame калибрантов (mass, ppm, fit, weight)
     '''
+    ets = etalon if isinstance(etalon, (list, tuple)) else [etalon]
+    ets = [ms_utils.read_mass_list(e, sep=None) if isinstance(e, str) else e for e in ets]
+    if use_formulas and all('assign' in e for e in ets):
+        ref = etalon_reference(ets, sign=sign, min_count=min_count)
+    else:
+        ref = np.unique(np.concatenate([e['mass'].to_numpy() for e in ets]))
+    if len(ref) < 10:
+        raise ValueError('etalon_error: в эталоне слишком мало масс')
 
-    et = etalon['mass'].to_numpy()  # Используем numpy array вместо list
-    df = spec.copy()  # Простое копирование вместо deepcopy
+    df = spec[['mass', 'intensity']]
+    top = df[df['intensity'] > df['intensity'].quantile(quart)]
+    if len(top) < min_peaks:
+        top = df.nlargest(min(min_peaks, len(df)), 'intensity')
+    peaks = top.sort_values('intensity', ascending=False)['mass'].to_numpy()
+    _, e_all = _nearest_ref(ref, peaks)
 
-    # Фильтрация по квантилю
-    treshold = df['intensity'].quantile(quart)
-    df_filtered = df[df['intensity'] > treshold].copy()
-    
-    # Векторизованное вычисление границ
-    min_masses = df_filtered['mass'].to_numpy() * (1 - ppm / 1000000)
-    max_masses = df_filtered['mass'].to_numpy() * (1 + ppm / 1000000)
-    
-    # Преобразуем etalon в отсортированный numpy array для бинарного поиска
-    et_sorted = np.sort(et)
-    
-    # Функция для поиска ближайшего эталонного значения в пределах ppm
-    def find_closest_etalon(mass, min_mass, max_mass):
-        # Бинарный поиск в отсортированном массиве
-        idx = np.searchsorted(et_sorted, min_mass)
-        if idx < len(et_sorted) and et_sorted[idx] <= max_mass:
-            return et_sorted[idx]
-        return 0
-    
-    # Векторизованное применение функции
-    df_filtered['cal'] = np.vectorize(find_closest_etalon, otypes=[float])(
-        df_filtered['mass'].values, min_masses, max_masses
-    )
-    
-    # Альтернативный вариант с использованием broadcasting (быстрее для больших данных)
-    # df_filtered['cal'] = 0
-    # for i, (min_m, max_m) in enumerate(zip(min_masses, max_masses)):
-    #     mask = (et_sorted >= min_m) & (et_sorted <= max_m)
-    #     if np.any(mask):
-    #         df_filtered.iloc[i, df_filtered.columns.get_loc('cal')] = et_sorted[mask][0]
+    # 1. грубая линейная модель; побеждает прямая с наибольшим числом совпадений в ±1.5·ppm
+    cands = _coarse_lines(peaks[:min(400, len(peaks))], ref, max_shift_ppm, max_slope=2.0)
+    a0, b0 = max(cands, key=lambda c: np.sum(np.abs(e_all - (c[0] + c[1] * (peaks - 400.0) / 100.0)) <= 1.5 * ppm))[:2]
+    model = lambda m: a0 + b0 * (np.asarray(m) - 400.0) / 100.0
+    # 2. сужение окна, широкий тренд без периодики
+    for tol in (1.5 * ppm, ppm):
+        ok = np.abs(e_all - model(peaks)) <= tol
+        if ok.sum() < 20:
+            raise RuntimeError(f'etalon_error: найдено лишь {ok.sum()} калибрантов')
+        x, y = peaks[ok], e_all[ok]
+        model, _ = _fit_error_model(x, y, 0.5, None, harmonics, taper_da, iters=2)
 
-    # Фильтрация и вычисления
-    df_calibrated = df_filtered[df_filtered['cal'] > 0].copy()
-    df_calibrated['dif'] = df_calibrated['cal'] - df_calibrated['mass']
-    df_calibrated['ppm'] = df_calibrated['dif'] / df_calibrated['mass'] * 1000000
-    
-    error_table = df_calibrated[['mass', 'ppm']].dropna()
-    
-    kdm = ms_calc.kernel_density_map(df_error=error_table)
-    err = ms_calc.fit_kernel(f=kdm, show_map=show_map, mass=spec['mass'].to_numpy())
+    # 3. периодическая ошибка по 1/m
+    P_found, r2 = None, 0.0
+    if periodic == 'auto' and period is None and len(x) < min_calibrants_periodic:
+        periodic = False
+    if periodic:
+        o = np.argsort(x)
+        P_found, r2 = (period, np.nan) if period is not None else \
+            _find_period(x[o], y[o] - model(x[o]), period_range)
+    fracs = [0.2, 0.35, 0.5, 0.75, 1.0] if frac == 'auto' else [frac]
+    if periodic == 'auto':
+        per_opts = [None, P_found]
+    else:
+        per_opts = [P_found] if periodic else [None]
+    if len(fracs) * len(per_opts) > 1:
+        scores = {(f, p): _cv_error_model(x, y, f, p, harmonics, taper_da) for f in fracs for p in per_opts}
+        f_best, p_best = min(scores, key=scores.get)
+        if p_best is not None and periodic == 'auto':
+            f_np = min((k for k in scores if k[1] is None), key=scores.get)
+            if scores[(f_best, p_best)] > 0.95 * scores[f_np]:
+                f_best, p_best = f_np
+    else:
+        scores, f_best, p_best = {}, fracs[0], per_opts[0]
+
+    # 4. финальные калибранты в окне вокруг полной модели
+    mod, _ = _fit_error_model(x, y, f_best, p_best, harmonics, taper_da)
+    ok = np.abs(e_all - mod(peaks)) <= ppm
+    x, y = peaks[ok], e_all[ok]
+    mod, w = _fit_error_model(x, y, f_best, p_best, harmonics, taper_da)
+
+    grid = np.arange(spec['mass'].min(), spec['mass'].max() + grid_step, grid_step)
+    err = pd.DataFrame({'mass': grid, 'ppm': -mod(grid)})
+    res = y - mod(x)
+    mad = lambda v: float(1.4826 * np.median(np.abs(v - np.median(v))))
+    o = np.argsort(x)
+    err.attrs['model'] = mod
+    err.attrs['report'] = dict(n_ref=int(len(ref)), n_calibrants=int(len(x)), frac=f_best,
+                               period=None if p_best is None else float(p_best),
+                               period_found=None if P_found is None else float(P_found),
+                               period_r2=float(r2), cv={f'{k[0]}/{"P" if k[1] else "-"}': round(v, 4)
+                                                       for k, v in scores.items()},
+                               shift_median=float(np.median(y)), mad_before=mad(y), mad_after=mad(res),
+                               mass_min=float(x.min()), mass_max=float(x.max()))
+    err.attrs['calibrants'] = pd.DataFrame({'mass': x[o], 'ppm': y[o], 'fit': mod(x[o]), 'weight': w})
+
+    if show_map:
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(1, 2, figsize=(10, 3.5), sharex=True)
+        g = (grid >= x.min() - 2 * taper_da) & (grid <= x.max() + 2 * taper_da)
+        ax[0].scatter(x, y, s=4, alpha=0.5)
+        ax[0].plot(grid[g], mod(grid[g]), 'r-', lw=0.6)
+        ax[0].set_title(f"{spec.attrs.get('name', '')}: ошибка до калибровки")
+        ax[1].scatter(x, res, s=4, alpha=0.5, c='C2')
+        ax[1].axhline(0, c='k', lw=0.5)
+        ax[1].set_title(f"после: MAD {mad(y):.2f} → {mad(res):.2f} ppm")
+        for a in ax:
+            a.set_xlabel('m/z'); a.set_ylabel('ppm')
+        fig.tight_layout()
 
     return err
+
+
+_ION_SHIFTS = {'-': 1.007825 - 0.00054858, '+': 0.00054858, '0': 0.0}
+
+
+def etalon_reference(etalon, sign: str = '-', min_count: Optional[int] = None) -> np.ndarray:
+    '''
+    Теоретические m/z ионов формул, приписанных в эталонном спектре (или спектрах).
+
+    Parameters
+    ----------
+    etalon: pd.DataFrame | list[pd.DataFrame]
+        Приписанный спектр(ы) (assign_optimized)
+    sign: str
+        Optional. Default '-'
+    min_count: int
+        Optional. В скольких эталонах должна встретиться формула (по умолчанию — во всех)
+
+    Return
+    ------
+    np.ndarray, отсортированный
+    '''
+    ets = etalon if isinstance(etalon, (list, tuple)) else [etalon]
+    parts = []
+    for et in ets:
+        a = ms_utils.calc_mass(ms_utils.drop_unassigned(et))
+        ch = a['charge'].to_numpy() if 'charge' in a else np.ones(len(a))
+        parts.append(np.unique(np.round(a['calc_mass'].to_numpy() / ch - _ION_SHIFTS[sign], 6)))
+    v, c = np.unique(np.concatenate(parts), return_counts=True)
+    return v[c >= (len(ets) if min_count is None else min_count)]
+
+
+def _nearest_ref(ref: np.ndarray, x: np.ndarray):
+    '''Ближайшая масса эталона: (индекс, ошибка ppm = (x − ref)/ref·1e6)'''
+    i = np.clip(np.searchsorted(ref, x), 1, len(ref) - 1)
+    j = np.where(np.abs(ref[i - 1] - x) < np.abs(ref[i] - x), i - 1, i)
+    return j, (x - ref[j]) / ref[j] * 1e6
+
+
+def _lowess(x: np.ndarray, y: np.ndarray, pts: np.ndarray, frac: float,
+            w: Optional[np.ndarray] = None) -> np.ndarray:
+    '''Локально-линейная регрессия с трикуб-весами (доля frac ближайших точек) в точках pts'''
+    n = len(x)
+    k = min(n, max(int(np.ceil(frac * n)), 15))
+    w = np.ones(n) if w is None else w
+    out = np.empty(len(pts))
+    for g, p in enumerate(pts):
+        d = np.abs(x - p)
+        idx = np.argpartition(d, k - 1)[:k]
+        h = d[idx].max() * 1.0001 + 1e-9
+        ww = (1 - (d[idx] / h) ** 3) ** 3 * w[idx]
+        sw = ww.sum()
+        if sw <= 0:
+            out[g] = np.median(y)
+            continue
+        xm, ym = np.sum(ww * x[idx]) / sw, np.sum(ww * y[idx]) / sw
+        sxx = np.sum(ww * (x[idx] - xm) ** 2)
+        b = np.sum(ww * (x[idx] - xm) * (y[idx] - ym)) / sxx if sxx > 0 else 0.0
+        out[g] = ym + b * (p - xm)
+    return out
+
+
+def _harmonics(m, period: float, H: int) -> np.ndarray:
+    ph = 2 * np.pi / (period * np.asarray(m, float))
+    return np.vstack([f(h * ph) for h in range(1, H + 1) for f in (np.cos, np.sin)]).T
+
+
+def _local_harmonic_coefs(x, r, w, period, H, knots, amp_frac=0.3):
+    '''Коэффициенты гармоник в узлах knots — локальный взвешенный МНК (трикуб по массе)'''
+    X = _harmonics(x, period, H)
+    n = len(x)
+    k = min(n, max(int(np.ceil(amp_frac * n)), 30))
+    out = np.zeros((len(knots), 2 * H))
+    for g, p in enumerate(knots):
+        d = np.abs(x - p)
+        idx = np.argpartition(d, k - 1)[:k]
+        h = d[idx].max() * 1.0001 + 1e-9
+        ww = np.sqrt((1 - (d[idx] / h) ** 3) ** 3 * w[idx])[:, None]
+        out[g], *_ = np.linalg.lstsq(X[idx] * ww, r[idx] * ww[:, 0], rcond=None)
+    return out
+
+
+class _ErrorModel:
+    '''Ошибка (ppm, измерено − эталон) как функция m/z: тренд + периодика по 1/m'''
+
+    def __init__(self, x, trend, period, coef, knots, H, taper):
+        self.x, self.trend, self.period, self.coef = x, trend, period, coef
+        self.knots, self.H, self.taper = knots, H, taper
+        self.xmin, self.xmax = x.min(), x.max()
+
+    def trend_at(self, m):
+        return np.interp(m, self.x, self.trend)
+
+    def periodic_at(self, m):
+        m = np.asarray(m, float)
+        if self.period is None:
+            return np.zeros_like(m)
+        C = np.vstack([np.interp(m, self.knots, self.coef[:, j]) for j in range(self.coef.shape[1])]).T
+        p = np.sum(_harmonics(m, self.period, self.H) * C, axis=1)
+        out = np.maximum(self.xmin - m, 0) + np.maximum(m - self.xmax, 0)
+        return p * np.exp(-(out / self.taper) ** 2)
+
+    def __call__(self, m):
+        return self.trend_at(m) + self.periodic_at(m)
+
+
+def _fit_error_model(x, y, frac, period, H, taper, iters=4):
+    '''Backfitting тренда и периодики, робастные (бисквадратные) веса'''
+    o = np.argsort(x)
+    x, y = x[o], y[o]
+    knots = np.linspace(x.min(), x.max(), 40)
+    w = np.ones(len(x))
+    per = np.zeros(len(x))
+    coef = None
+    for _ in range(iters):
+        tr = _lowess(x, y - per, x, frac, w)
+        if period is not None:
+            coef = _local_harmonic_coefs(x, y - tr, w, period, H, knots)
+            C = np.vstack([np.interp(x, knots, coef[:, j]) for j in range(coef.shape[1])]).T
+            per = np.sum(_harmonics(x, period, H) * C, axis=1)
+        r = y - tr - per
+        s = 6 * np.median(np.abs(r)) + 1e-9
+        w = np.clip(1 - (r / s) ** 2, 0, None) ** 2
+    trend = _lowess(x, y - per, x, frac, w)
+    return _ErrorModel(x, trend, period, coef, knots, H, taper), w
+
+
+def _find_period(x, r, period_range, n=6000):
+    '''Период синусоиды по 1/m, лучше всего описывающей остатки r: (период, R²)'''
+    def r2_of(P):
+        ph = 2 * np.pi / (P * x)
+        X = np.vstack([np.cos(ph), np.sin(ph), np.ones_like(x)]).T
+        b, *_ = np.linalg.lstsq(X, r, rcond=None)
+        return 1 - np.sum((r - X @ b) ** 2) / np.sum((r - r.mean()) ** 2)
+    Ps = np.geomspace(period_range[0], period_range[1], n)
+    r2 = np.array([r2_of(P) for P in Ps])
+    P0 = Ps[int(np.argmax(r2))]
+    fine = np.linspace(P0 * 0.995, P0 * 1.005, 201)
+    r2f = np.array([r2_of(P) for P in fine])
+    return float(fine[int(np.argmax(r2f))]), float(r2f.max())
+
+
+def _cv_error_model(x, y, frac, period, H, taper, k=5):
+    '''Медиана |ошибки| на отложенных калибрантах (k-кратная перекрёстная проверка)'''
+    fold = np.random.default_rng(0).integers(0, k, len(x))
+    res = []
+    for f in range(k):
+        tr, te = fold != f, fold == f
+        mod, _ = _fit_error_model(x[tr], y[tr], frac, period, H, taper, iters=3)
+        res.append(np.abs(y[te] - mod(x[te])))
+    return float(np.median(np.concatenate(res)))
 
 
 # ============================================================================

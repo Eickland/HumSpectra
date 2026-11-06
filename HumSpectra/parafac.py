@@ -13,6 +13,24 @@ import seaborn as sns
 import HumSpectra.fluorescence as fl
 import HumSpectra.utilits as ut
 from HumSpectra.sample import SampleCollection, Sample
+from scipy.optimize import linear_sum_assignment
+
+# Порог коэффициента Такера, при котором компоненты считаются совпадающими
+# (Lorenzo-Seva & ten Berge, 2006; используется в drEEM для split-half)
+TCC_THRESHOLD = 0.95
+
+
+def tucker_congruence(A, B) -> np.ndarray:
+    """
+    Матрица коэффициентов Такера между столбцами A и B:
+    TCC = Σ a·b / sqrt(Σa² · Σb²)  (косинус угла между профилями, без центрирования).
+    A: (n_points, r1), B: (n_points, r2)  ->  (r1, r2)
+    """
+    A = np.asarray(A, dtype=float)
+    B = np.asarray(B, dtype=float)
+    num = A.T @ B
+    den = np.sqrt(np.outer((A ** 2).sum(axis=0), (B ** 2).sum(axis=0)))
+    return num / np.where(den == 0, np.nan, den)
 
 class EEMDataLoader:
     def __init__(self):
@@ -404,11 +422,11 @@ class OpticalDataAnalyzer:
     def __init__(self, n_components=3):
         self.n_components = n_components
         
-    def fit_parafac(self, X, excitation_wavelengths=None, emission_wavelengths=None, sample_names=None, 
-                    init='svd', n_iter_max=2000, tol=1e-8):
+    def fit_parafac(self, X, excitation_wavelengths=None, emission_wavelengths=None, sample_names=None,
+                    init='svd', n_iter_max=2000, tol=1e-8, split_half=True, split_half_n=3):
         """
         PARAFAC разложение с реальными длинами волн
-        
+
         Args:
             X: 3D тензор (образцы × испускание × возбуждение)
             excitation_wavelengths: массив длин волн возбуждения
@@ -417,11 +435,17 @@ class OpticalDataAnalyzer:
             init: метод инициализации ('svd', 'random')
             n_iter_max: максимальное количество итераций
             tol: точность сходимости
+            split_half: выполнять split-half валидацию (коэффициент Такера между половинами).
+                        Требует 2 дополнительные подгонки на каждое разбиение.
+            split_half_n: число случайных разбиений на половины
         """
         self.excitation_wavelengths = excitation_wavelengths
         self.emission_wavelengths = emission_wavelengths
         self.sample_names = sample_names
         self.X = X
+        self.split_half = split_half
+        self.split_half_n = split_half_n
+        self._fit_params = {'init': init, 'n_iter_max': n_iter_max, 'tol': tol}
         
         # Предобработка данных для DOM анализа
         X_processed = self._preprocess_data(X)
@@ -547,9 +571,91 @@ class OpticalDataAnalyzer:
                 print(f"Core Consistency: {core_consistency:.2f}%")
             
             self.explained_variance = explained_variance
-            
+
+            # --- Коэффициент Такера между компонентами одной модели ---
+            sim = self.component_similarity()
+            self.tcc_between_components = sim
+            print("\nКоэффициент Такера между компонентами (испускание):")
+            print(sim['emission'].round(3).to_string())
+            print("\nКоэффициент Такера между компонентами (возбуждение):")
+            print(sim['excitation'].round(3).to_string())
+            both = np.minimum(sim['emission'].values, sim['excitation'].values)
+            for i, j in zip(*np.triu_indices(self.n_components, k=1)):
+                if both[i, j] >= TCC_THRESHOLD:
+                    print(f"⚠️ Компоненты {i + 1} и {j + 1} почти совпадают по обоим спектрам "
+                          f"(TCC ≥ {TCC_THRESHOLD}) - возможно, компонентов слишком много")
+
+            # --- Split-half валидация ---
+            if getattr(self, 'split_half', False):
+                sh = self.split_half_validation(self.X, n_splits=self.split_half_n, **self._fit_params)
+                self.split_half_results = sh
+                print("\n=== SPLIT-HALF ВАЛИДАЦИЯ (коэффициент Такера, половина A vs B) ===")
+                summary = sh.groupby('Компонент')[['TCC em (A vs B)', 'TCC ex (A vs B)']].agg(['min', 'mean'])
+                print(summary.round(3).to_string())
+                validated = sh.groupby('Компонент')['Валидирован'].all()
+                print(f"Валидировано компонентов: {int(validated.sum())} из {self.n_components} "
+                      f"(TCC ≥ {TCC_THRESHOLD} по испусканию и возбуждению во всех разбиениях)")
+
         except Exception as e:
             print(f"Не удалось рассчитать дополнительные метрики: {e}")
+
+    def component_similarity(self) -> dict:
+        """
+        Коэффициент Такера между компонентами ОДНОЙ модели по спектрам испускания и возбуждения.
+        Значения > 0.95 у пары компонент по обоим спектрам означают, что модель,
+        вероятно, разбила один флуорофор на два.
+        """
+        names = [f'C{i + 1}' for i in range(self.n_components)]
+        em = pd.DataFrame(tucker_congruence(self.factors[1], self.factors[1]), index=names, columns=names)
+        ex = pd.DataFrame(tucker_congruence(self.factors[2], self.factors[2]), index=names, columns=names)
+        return {'emission': em, 'excitation': ex}
+
+    def split_half_validation(self, X, n_splits=3, init='svd', n_iter_max=2000, tol=1e-8,
+                              random_state=42) -> pd.DataFrame:
+        """
+        Split-half валидация (как в drEEM).
+        Образцы случайно делятся на две половины, на каждой строится своя модель.
+        Компоненты каждой половины сопоставляются с компонентами полной модели
+        (венгерский алгоритм по произведению TCC испускания и возбуждения),
+        затем считается коэффициент Такера между половинами для каждого компонента.
+        Компонент валидирован, если TCC ≥ TCC_THRESHOLD и по испусканию, и по возбуждению.
+        """
+        Xp = np.asarray(self._preprocess_data(X))
+        n = Xp.shape[0]
+        rng = np.random.default_rng(random_state)
+        full_em, full_ex = self.factors[1], self.factors[2]
+
+        def fit_and_align(X_half):
+            cp, _ = non_negative_parafac_hals(tl.tensor(X_half), rank=self.n_components, init=init,
+                                              tol=tol, n_iter_max=n_iter_max, verbose=False,
+                                              return_errors=True)
+            factors = [np.asarray(f) for f in cp[1]]
+            tcc_em = tucker_congruence(full_em, factors[1])
+            tcc_ex = tucker_congruence(full_ex, factors[2])
+            # row = компонент полной модели, col = компонент половины
+            row, col = linear_sum_assignment(-(np.nan_to_num(tcc_em) * np.nan_to_num(tcc_ex)))
+            order = col[np.argsort(row)]
+            aligned = [f[:, order] for f in factors]
+            return aligned, tcc_em[np.arange(len(order)), order], tcc_ex[np.arange(len(order)), order]
+
+        rows = []
+        for s in range(n_splits):
+            idx = rng.permutation(n)
+            half_a, half_b = np.sort(idx[: n // 2]), np.sort(idx[n // 2:])
+            fa, em_a, ex_a = fit_and_align(Xp[half_a])
+            fb, em_b, ex_b = fit_and_align(Xp[half_b])
+            em_ab = np.diag(tucker_congruence(fa[1], fb[1]))
+            ex_ab = np.diag(tucker_congruence(fa[2], fb[2]))
+            for c in range(self.n_components):
+                rows.append({
+                    'Разбиение': s + 1, 'Компонент': c + 1,
+                    'TCC em (A vs B)': em_ab[c], 'TCC ex (A vs B)': ex_ab[c],
+                    'TCC em (A vs полная)': em_a[c], 'TCC ex (A vs полная)': ex_a[c],
+                    'TCC em (B vs полная)': em_b[c], 'TCC ex (B vs полная)': ex_b[c],
+                })
+        df = pd.DataFrame(rows)
+        df['Валидирован'] = (df[['TCC em (A vs B)', 'TCC ex (A vs B)']] >= TCC_THRESHOLD).all(axis=1)
+        return df.round(4)
 
     def _calculate_core_consistency(self, X, reconstructed):
         """
@@ -1268,4 +1374,3 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 plt.colorbar(im, ax=axes[i])
             
             return fig
-    
