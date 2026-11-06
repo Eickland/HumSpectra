@@ -1406,9 +1406,9 @@ class ComponentVisualizer(OpticalDataAnalyzer):
                 im = axes[i].contourf(X, Y, component_eem, levels=50, cmap='viridis')
                 axes[i].contour(X, Y, component_eem, levels=10, colors='black', linewidths=0.3)
                 
-                axes[i].set_title(f'Component {i+1}')
-                axes[i].set_xlabel('Excitation (nm)')
-                axes[i].set_ylabel('Emission (nm)')
+                axes[i].set_title(f'Компонент {i+1}')
+                axes[i].set_xlabel('Возбуждение (nm)')
+                axes[i].set_ylabel('Испускание (nm)')
                 
                 plt.colorbar(im, ax=axes[i])
             
