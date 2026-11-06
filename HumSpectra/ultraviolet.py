@@ -282,9 +282,9 @@ def calc_e2_e3(data: DataFrame,
             raise ValueError("Ошибка проверки статуса калибровки")
     
     series = pd.Series(data.index, index=data.index)
-    index_265 = series.sub(265).abs().idxmin()
+    index_250 = series.sub(250).abs().idxmin()
     index_365 = series.sub(365).abs().idxmin()
-    uv_param = data.loc[index_265] / data.loc[index_365]
+    uv_param = data.loc[index_250] / data.loc[index_365]
     uv_param = float(uv_param.iloc[0].item())
 
     return uv_param
