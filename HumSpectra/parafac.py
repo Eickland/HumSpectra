@@ -566,9 +566,18 @@ class OpticalDataAnalyzer:
             print(f"Объясненная дисперсия: {explained_variance:.2f}%")
             
             # Core Consistency (опционально)
-            core_consistency = self._calculate_core_consistency(X, reconstructed)
+            core_consistency = self._calculate_core_consistency(X)
+            self.core_consistency = core_consistency
             if core_consistency is not None:
-                print(f"Core Consistency: {core_consistency:.2f}%")
+                if self.n_components == 1:
+                    verdict = "(для 1 компонента всегда 100%)"
+                elif core_consistency >= 90:
+                    verdict = "✅ модель адекватна"
+                elif core_consistency >= 50:
+                    verdict = "⚠️ сомнительно: возможно, компонентов слишком много"
+                else:
+                    verdict = "❌ модель неадекватна: компонентов слишком много или данные не трилинейны"
+                print(f"Core Consistency (CORCONDIA): {core_consistency:.2f}%  {verdict}")
             
             self.explained_variance = explained_variance
 
@@ -657,15 +666,45 @@ class OpticalDataAnalyzer:
         df['Валидирован'] = (df[['TCC em (A vs B)', 'TCC ex (A vs B)']] >= TCC_THRESHOLD).all(axis=1)
         return df.round(4)
 
-    def _calculate_core_consistency(self, X, reconstructed):
+    def _calculate_core_consistency(self, X, reconstructed=None):
         """
-        Расчет Core Consistency для проверки модели
+        Core Consistency Diagnostic (CORCONDIA), Bro & Kiers, 2003.
+
+        При фиксированных нагрузках PARAFAC (A - образцы, B - испускание, C - возбуждение)
+        методом наименьших квадратов находится ядро Такера G:
+            G = X ×₁ A⁺ ×₂ B⁺ ×₃ C⁺      (A⁺ - псевдообратная матрица)
+        Если модель PARAFAC адекватна, G близко к супердиагональному ядру T
+        (единицы на диагонали g_rrr, нули вне её). Мера близости:
+            CC = 100 · (1 - Σ(G - T)² / R),   R - число компонентов (= Σ T²)
+
+        Интерпретация (Bro & Kiers): ~100% - модель адекватна; 50-90% - сомнительно
+        (часть компонентов взаимодействует или лишняя); < 50% (вплоть до отрицательных) -
+        компонентов слишком много или структура данных не трилинейная.
+        Для 1 компонента CC всегда 100% и смысла не имеет.
+
+        Параметр reconstructed оставлен для обратной совместимости и не используется.
         """
         try:
-            # Упрощенная версия расчета core consistency
-            correlation = np.corrcoef(X.flatten(), reconstructed.flatten())[0, 1]
-            return correlation * 100
-        except:
+            X = np.asarray(X, dtype=float)
+            weights, factors = self.parafac_result
+            A, B, C = (np.asarray(f, dtype=float) for f in factors)
+            # веса CP переносим в моду образцов, чтобы X ≈ Σ_r a_r ∘ b_r ∘ c_r
+            A = A * np.asarray(weights, dtype=float)
+            R = A.shape[1]
+
+            # G = X ×1 A⁺ ×2 B⁺ ×3 C⁺  (последовательно, чтобы не держать большой промежуточный тензор)
+            G = np.tensordot(np.linalg.pinv(A), X, axes=(1, 0))          # (R, J, K)
+            G = np.tensordot(np.linalg.pinv(B), G, axes=(1, 1))          # (R, R, K) - оси: b, a, k
+            G = np.tensordot(np.linalg.pinv(C), G, axes=(1, 2))          # (R, R, R) - оси: c, b, a
+            G = np.transpose(G, (2, 1, 0))                               # -> (a, b, c)
+
+            T = np.zeros((R, R, R))
+            T[np.arange(R), np.arange(R), np.arange(R)] = 1.0
+
+            self.core_tensor = G
+            return float(100.0 * (1.0 - np.sum((G - T) ** 2) / R))
+        except Exception as e:
+            print(f"Не удалось рассчитать CORCONDIA: {e}")
             return None
 
     def reconstruct_sample(self, sample_idx):
